@@ -1,0 +1,25 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          blue: '#005596',
+          dark: '#003366',
+        },
+        sidebar: '#fcfcfc',
+        bg: '#f3f4f6',
+      },
+      fontFamily: {
+        sans: ['"Helvetica Neue"', 'Helvetica', 'Arial', '"PingFang SC"', '"Microsoft YaHei"', 'sans-serif'],
+        serif: ['"PingFang SC"', '"Microsoft YaHei"', '"SimHei"', '"STHeiti"', '"Heiti SC"', '"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
+      },
+    },
+  },
+  plugins: [],
+}

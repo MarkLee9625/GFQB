@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    // 添加更严格的类型检查，但放宽一些选项以避免破坏现有代码
+    "strict": true,
+    "noImplicitAny": false, // 放宽：允许隐式any类型
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": false, // 放宽：不强制属性初始化
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": false, // 放宽：catch变量可以是any
+    "alwaysStrict": true,
+    "noUnusedLocals": false, // 放宽：允许未使用的局部变量
+    "noUnusedParameters": false, // 放宽：允许未使用的参数
+    "exactOptionalPropertyTypes": false, // 放宽：不强制精确可选属性类型
+    "noImplicitReturns": false, // 放宽：允许隐式返回
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false, // 放宽：不强制检查索引访问
+    "noImplicitOverride": false, // 放宽：不强制显式override
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    // 现有配置
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  }
+}

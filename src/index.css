@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-blue: #005596;
+  --color-brand-dark: #003366;
+  --color-sidebar: #fcfcfc;
+  --color-bg: #f3f4f6;
+
+  --font-family-sans: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-family-serif: "PingFang SC", "Microsoft YaHei", "SimHei", "STHeiti", "Heiti SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* 自定义滚动条调整，这些用工具类难以实现 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 编辑器区域样式优化 */
+.editor-area {
+  min-height: 400px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* 确保编辑器内容区域填充高度 */
+.sws-prose {
+  height: 100%;
+}
+
+/* 全局打印样式优化 */
+@media print {
+
+  /* 基础打印重置 */
+  @page {
+    margin: 1.5cm;
+    size: auto;
+  }
+
+  /* 强制所有容器高度自适应并显示溢出内容 */
+  html,
+  body,
+  #root,
+  .flex,
+  .flex-col,
+  .flex-1,
+  [class*="overflow-y-auto"],
+  [class*="overflow-hidden"],
+  main,
+  article {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    float: none !important;
+    position: relative !important;
+  }
+
+  /* 隐藏非打印元素 */
+  .toolbar,
+  .sidebar,
+  .fab-nav,
+  .top-controls,
+  .navigation-capsule,
+  .pdf-expand-btn,
+  [role="toolbar"],
+  [aria-label="工具栏"],
+  button,
+  nav,
+  aside {
+    display: none !important;
+  }
+
+  /* 打印内容容器优化 */
+  .max-w-\[850px\] {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    min-height: auto !important;
+  }
+
+  /* 确保文字颜色和背景 */
+  body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-family: inherit;
+  }
+
+  /* 避免组件被截断 */
+  .sws-prose p,
+  .sws-prose h1,
+  .sws-prose h2,
+  .sws-prose h3,
+  .sws-prose img {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* 强制图片可见（应对懒加载占位符） */
+  img {
+    display: block !important;
+    max-width: 100% !important;
+  }
+
+  /* PDF 预览容器优化 */
+  .pdf-viewer-container {
+    height: auto !important;
+    min-height: auto !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+}
