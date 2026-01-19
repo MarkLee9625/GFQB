@@ -3,7 +3,7 @@ export type MediaType = 'image' | 'video' | 'audio' | 'pdf';
 export type ArticleCategory = '封面' | '封底' | string;
 export type UploadType = 'cover' | 'back';
 export type NavigationDirection = 'prev' | 'next';
-export type ExportType = 'reader' | 'project';
+export type ExportType = 'reader' | 'project' | 'printable';
 
 export interface Article {
   id: number;

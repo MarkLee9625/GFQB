@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Article, CONSTANTS } from '../types';
 import { Icon } from './Icons';
-import { fileToDataURL, compressImage, convertPdfToImages } from '../services/db';
+import { useBlobManager } from '../hooks/useBlobManager';
+import { fileToDataURL, compressImage } from '../src/utils/fileHelpers';
 import { generateArticleMeta, generateTitleOnly } from '../services/aiService';
-import { extractAbstractFromPdf } from '../services/pdfExtractor';
+import { extractAbstractFromPdf, convertPdfToImages } from '../src/services/pdf';
 
 interface EditorProps {
   isOpen: boolean;
@@ -17,6 +18,9 @@ interface EditorProps {
 export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onClose, onSave, onManageCats }) => {
   const [formData, setFormData] = useState<Partial<Article>>({});
   const contentRef = useRef<HTMLDivElement>(null);
+  const blobManager = useBlobManager();
+  // 建立 Blob URL 到 Data URL 的映射，用于存盘时还原，避免编辑器过重
+  const blobToDataMap = useRef<Map<string, string>>(new Map());
   const objectUrlsRef = useRef<string[]>([]);
   const lastRangeRef = useRef<Range | null>(null);
   const [tempPdf, setTempPdf] = useState<{ name: string, data: string } | null>(null);
@@ -345,22 +349,52 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     }
   };
 
-  const insertHtml = (html: string) => {
-    // [修改] 不要在这里调用 saveSelection()，否则会覆盖掉 onBlur 保存的正确位置
+  const insertHtml = (htmlOrNode: string | Node) => {
+    if (!contentRef.current) return;
 
     // 确保编辑器获得焦点
-    if (contentRef.current && document.activeElement !== contentRef.current) {
+    if (document.activeElement !== contentRef.current) {
       contentRef.current.focus();
     }
 
-    // [关键] 恢复到点击上传按钮那一刻的光标位置
+    // 恢复之前的选区
     restoreSelection();
 
-    // 执行插入
-    execCmd('insertHTML', html);
+    if (typeof htmlOrNode === 'string') {
+      // 尝试原生的 execCommand
+      const success = document.execCommand('insertHTML', false, htmlOrNode);
+      if (!success) {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          const fragment = range.createContextualFragment(htmlOrNode);
+          range.insertNode(fragment);
+        }
+      }
+    } else {
+      // 直接插入 DOM 节点
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(htmlOrNode);
 
-    // 插入完成后，更新当前光标位置
+        // 移动光标到元素后
+        const newRange = document.createRange();
+        newRange.setStartAfter(htmlOrNode);
+        newRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
+      } else {
+        contentRef.current.appendChild(htmlOrNode);
+      }
+    }
+
+    // 插入完成后，更新并保存新光标位置
     saveSelection();
+
+    // 重要：移除 setFormData 指令，防止 React 渲染擦除刚才插入的 DOM
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>, type: 'img' | 'video' | 'audio' | 'pdf') => {
@@ -424,18 +458,46 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
             setIsProcessing(true);
             try {
               const images = await convertPdfToImages(file);
+              console.log(`[Editor] PDF 转换完成，准备分页插入 (${images.length} 页)...`);
 
-              // 生成连续的图片 HTML 块，每页一个容器
-              const html = images.map((imgSrc, index) =>
-                `<div class="media-container pdf-page-container" contenteditable="false">
-                    <img src="${imgSrc}" class="pdf-page-image" alt="PDF Page ${index + 1}" />
-                  </div><p><br/></p>`
-              ).join('');
+              for (let i = 0; i < images.length; i++) {
+                const dataUrl = images[i];
+                // 使用 Blob 管理器转换为轻量级 URL
+                const blobUrl = blobManager.getBlobUrl(dataUrl);
+                if (blobUrl) {
+                  blobToDataMap.current.set(blobUrl, dataUrl); // 记录映射
 
-              insertHtml(html);
+                  // 手动构造 DOM 以确保稳定性（不使用大字符串）
+                  const container = document.createElement('div');
+                  container.className = 'media-container pdf-page-container';
+                  container.contentEditable = 'false';
+
+                  const img = document.createElement('img');
+                  img.src = blobUrl;
+                  img.className = 'pdf-page-image';
+                  img.alt = `PDF Page ${i + 1}`;
+
+                  container.appendChild(img);
+                  insertHtml(container);
+
+                  // 插入一个换行段落
+                  const p = document.createElement('p');
+                  p.innerHTML = '<br>';
+                  insertHtml(p);
+
+                  console.log(`[Editor] 第 ${i + 1} 页已安全挂载`);
+                }
+              }
+
+              console.log('[Editor] PDF 所有页面已成功流式插入');
+
+              // [关键修复] 插入完成后立即同步状态，防止 setIsProcessing(false) 导致的重绘根据旧状态擦除 DOM
+              if (contentRef.current) {
+                setFormData(prev => ({ ...prev, content: contentRef.current.innerHTML }));
+              }
             } catch (err) {
-              console.error(err);
-              alert("PDF 转换失败，请检查文件是否加密或损坏。");
+              console.error('[Editor] PDF 转换流程异常:', err);
+              alert(`PDF 转换失败: ${err instanceof Error ? err.message : '未知错误'}\n\n请尝试刷新页面重试。`);
             } finally {
               setIsProcessing(false);
             }
@@ -466,9 +528,36 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
   const handleSave = () => {
     if (!formData.title) return alert("请输入标题");
+
+    // 存盘前克隆 DOM 进行“数据还原” (将临时 Blob URL 换回持久 DataURL)
+    let finalContent = contentRef.current?.innerHTML || '';
+
+    if (blobToDataMap.current.size > 0) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(finalContent, 'text/html');
+      const imgs = doc.querySelectorAll('img');
+      let replacedCount = 0;
+
+      imgs.forEach(img => {
+        const src = img.getAttribute('src');
+        if (src && src.startsWith('blob:')) {
+          const dataUrl = blobToDataMap.current.get(src);
+          if (dataUrl) {
+            img.setAttribute('src', dataUrl);
+            replacedCount++;
+          }
+        }
+      });
+
+      if (replacedCount > 0) {
+        finalContent = doc.body.innerHTML;
+        console.log(`[Editor] 存盘还原：已将 ${replacedCount} 个临时链接恢复为持久数据`);
+      }
+    }
+
     onSave({
       ...formData,
-      content: contentRef.current?.innerHTML || '',
+      content: finalContent,
       pdfData: tempPdf?.data
     });
   };
@@ -510,7 +599,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
             <div className="p-8 pb-4 flex items-center gap-2">
               <input
                 className="flex-1 bg-transparent text-3xl font-bold border-none placeholder:text-gray-300 focus:outline-none focus:ring-0 leading-tight"
-                value={formData.title}
+                value={formData.title || ''}
                 onChange={e => setFormData({ ...formData, title: e.target.value })}
                 placeholder="在这里输入引人入胜的标题..."
               />

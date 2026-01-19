@@ -9,6 +9,7 @@ interface ExportOptionsModalProps {
     useAlternateDesign: boolean;
     includeImages: boolean;
     optimizeForPrint: boolean;
+    exportType: 'reader' | 'printable';
   }) => void;
 }
 
@@ -21,6 +22,7 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   const [selectedDesign, setSelectedDesign] = useState<'original' | 'magazine'>(currentUseAlternateDesign ? 'magazine' : 'original');
   const [includeImages, setIncludeImages] = useState(true);
   const [optimizeForPrint, setOptimizeForPrint] = useState(false);
+  const [exportType, setExportType] = useState<'reader' | 'printable'>('reader');
 
   if (!isOpen) {
     return null;
@@ -30,7 +32,8 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
     onConfirm({
       useAlternateDesign: selectedDesign === 'magazine',
       includeImages,
-      optimizeForPrint,
+      optimizeForPrint: exportType === 'printable' || optimizeForPrint,
+      exportType,
     });
     onClose();
   };
@@ -40,19 +43,48 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
       <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
         <div className="p-6 border-b flex justify-between items-center">
           <h2 className="text-xl font-bold text-gray-900">导出阅读版选项</h2>
-          <button 
+          <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100"
           >
             <Icon name="x" className="w-5 h-5" />
           </button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-6">
-            {/* 封面封底风格选择 */}
+            {/* 导出版本类型选择 */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-3">封面封底风格</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">导出版本</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setExportType('reader')}
+                  className={`p-4 border-2 rounded-lg flex flex-col items-center transition-all ${exportType === 'reader' ? 'border-brand-blue bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                >
+                  <div className="w-10 h-10 mb-2 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                    <Icon name="layout" className="w-6 h-6" />
+                  </div>
+                  <span className="text-sm font-medium">交互阅读版</span>
+                  <span className="text-xs text-gray-500 mt-1 text-center">适合屏幕观看<br />具备导航和目录</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportType('printable')}
+                  className={`p-4 border-2 rounded-lg flex flex-col items-center transition-all ${exportType === 'printable' ? 'border-brand-blue bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                >
+                  <div className="w-10 h-10 mb-2 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <Icon name="printer" className="w-6 h-6" />
+                  </div>
+                  <span className="text-sm font-medium">打印专用版</span>
+                  <span className="text-xs text-gray-500 mt-1 text-center">适合 A4 打印<br />线性排版，零缺失</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 封面封底风格选择 - 仅在阅读版或需要时显示 */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">视觉风格</h3>
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
@@ -81,12 +113,12 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
 
             {/* 其他选项 */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800">导出选项</h3>
-              
+              <h3 className="text-lg font-semibold text-gray-800">导出细节</h3>
+
               <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                 <div>
-                  <div className="font-medium text-gray-800">包含图片</div>
-                  <div className="text-sm text-gray-500">导出文章中的图片和封面封底图片</div>
+                  <div className="font-medium text-gray-800">包含图片数据</div>
+                  <div className="text-sm text-gray-500">将所有媒体内容嵌入文件</div>
                 </div>
                 <input
                   type="checkbox"
@@ -96,18 +128,20 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
                 />
               </label>
 
-              <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                <div>
-                  <div className="font-medium text-gray-800">优化打印</div>
-                  <div className="text-sm text-gray-500">调整布局和颜色以便打印</div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={optimizeForPrint}
-                  onChange={(e) => setOptimizeForPrint(e.target.checked)}
-                  className="w-5 h-5 text-brand-blue rounded focus:ring-brand-blue"
-                />
-              </label>
+              {exportType === 'reader' && (
+                <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                  <div>
+                    <div className="font-medium text-gray-800">包含打印适配</div>
+                    <div className="text-sm text-gray-500">在阅读器中启用打印样式支持</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={optimizeForPrint}
+                    onChange={(e) => setOptimizeForPrint(e.target.checked)}
+                    className="w-5 h-5 text-brand-blue rounded focus:ring-brand-blue"
+                  />
+                </label>
+              )}
             </div>
 
             {/* 预览说明 */}
@@ -122,7 +156,7 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
             </div>
           </div>
         </div>
-        
+
         <div className="p-6 border-t bg-gray-50 flex justify-between items-center">
           <button
             onClick={onClose}

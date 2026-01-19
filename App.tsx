@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Article, CONSTANTS } from './types';
-import { db, compressImage, fileToDataURL } from './services/db';
+import { db } from './services/db';
+import { compressImage, fileToDataURL } from './src/utils/fileHelpers';
 import { Icon } from './components/Icons';
 import { PaperView } from './components/PaperView';
 import { Editor } from './components/Editor';
@@ -15,7 +16,8 @@ import ExportOptionsModal from './components/ExportOptionsModal';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor';
 import { useJournal } from './hooks/useJournal';
 import { fetchWechatArticle } from './services/wechatImporter';
-import { generateReaderHTML } from './services/exportService';
+import { generateReaderHTML, generatePrintableHTML } from './src/services/export';
+import MainLayout from './src/components/Layout/MainLayout';
 
 const AppContent: React.FC = () => {
   // 使用 useJournal 管理文章状态
@@ -76,6 +78,45 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       try {
+        // 0. Check for Embedded Reader Data (Priority)
+        // @ts-ignore
+        if (window.__SWS_DATA_ARTICLES_B64__) {
+          try {
+            // @ts-ignore
+            const b64Data = window.__SWS_DATA_ARTICLES_B64__;
+            const decoded = decodeURIComponent(escape(atob(b64Data)));
+            const jsonData = JSON.parse(decoded);
+
+            if (Array.isArray(jsonData)) {
+              console.log("📚 Reader Mode: Data loaded from embedded source");
+              setArticlesAction(jsonData);
+
+              // Initialize Reader UI State
+              setIsEditMode(false);
+              setIsSidebarHidden(true); // Default hide sidebar for immersive reading
+              setIsImmersive(false); // Can interpret this as needed, maybe default to normal or immersive
+
+              // Load Config if available
+              // @ts-ignore
+              if (window.__SWS_DATA_CONFIG_B64__) {
+                // @ts-ignore
+                const b64Config = window.__SWS_DATA_CONFIG_B64__;
+                const cfg = JSON.parse(decodeURIComponent(escape(atob(b64Config))));
+                if (cfg.logo) setLogo(cfg.logo);
+                if (cfg.sidebarMeta) setSidebarMeta(cfg.sidebarMeta);
+                if (cfg.alternateDesign) setUseAlternateDesign(cfg.alternateDesign);
+              }
+
+              // Set initial article (likely cover)
+              if (jsonData.length > 0) setCurrentId(jsonData[0].id);
+              return; // SKIP DB Load if running as Reader
+            }
+          } catch (e) {
+            console.error("Reader Mode Init Error", e);
+          }
+        }
+
+        // 1. Normal DB Init
         await db.init();
         const storedData = await db.load(CONSTANTS.KEY);
         if (storedData) {
@@ -444,13 +485,28 @@ const AppContent: React.FC = () => {
 
 
   // 新的导出函数，接收选项参数
-  const handleExportWithOptions = async (options: { useAlternateDesign: boolean; includeImages: boolean; optimizeForPrint: boolean }) => {
+  const handleExportWithOptions = async (options: {
+    useAlternateDesign: boolean;
+    includeImages: boolean;
+    optimizeForPrint: boolean;
+    exportType: 'reader' | 'printable';
+  }) => {
     try {
-      const htmlContent = await generateReaderHTML(articles, options, { logo, sidebarMeta });
+      let htmlContent: string;
+      let fileName: string;
+
+      if (options.exportType === 'printable') {
+        htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
+        fileName = `SWS_Printable_${new Date().toISOString().slice(0, 10)}.html`;
+      } else {
+        htmlContent = await generateReaderHTML(articles, options, { logo, sidebarMeta });
+        fileName = `SWS_Reader_${new Date().toISOString().slice(0, 10)}.html`;
+      }
+
       const url = createExportBlob(htmlContent);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `SWS_Reader_${new Date().toISOString().slice(0, 10)}.html`;
+      a.download = fileName;
       a.click();
     } catch (error) {
       console.error('导出失败:', error);
@@ -495,43 +551,30 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className={`flex h-full w-full ${isSidebarHidden ? 'sidebar-hidden' : ''} ${isImmersive ? 'immersive-mode' : ''}`}>
-
-      {/* Loading Overlay */}
-      <LoadingOverlay isLoading={loading} />
-
-      {/* Floating Menu Button */}
-      {(isImmersive || isSidebarHidden) && (
-        <button
-          onClick={() => setIsSidebarHidden(false)}
-          className="fixed top-5 left-5 z-[50] bg-white/90 backdrop-blur border border-gray-200 rounded-full w-[44px] h-[44px] flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
-        >
-          <Icon name="menu" className="w-5 h-5 text-gray-600" />
-        </button>
-      )}
-
-      {/* Sidebar */}
-      <Sidebar
-        articles={articles}
-        currentId={currentId}
-        logo={logo}
-        sidebarMeta={sidebarMeta}
-        searchQuery={searchQuery}
-        isEditMode={isEditMode}
-        isSidebarHidden={isSidebarHidden}
-        onSelectArticle={handleSelectArticle}
-        onToggleSidebar={() => setIsSidebarHidden(true)}
-        onSearchChange={setSearchQuery}
-        onSidebarMetaChange={setSidebarMeta}
-        onLogoUpload={() => logoInputRef.current?.click()}
-        onToggleEditMode={() => setIsEditMode(!isEditMode)}
-        onReorder={reorderArticles}
-      />
-
-      {/* Main Content */}
-      <div className={`flex-1 flex flex-col relative transition-[margin] duration-300 w-full overflow-hidden ${isSidebarHidden ? 'ml-0' : ''}`}>
-
-        {/* Toolbar - Only hidden in ACTUAL Fullscreen Mode (Browser F11/API), visible on Cover/Back pages now */}
+    <MainLayout
+      isLoading={loading}
+      isSidebarHidden={isSidebarHidden}
+      isImmersive={isImmersive}
+      onFloatMenuClick={() => setIsSidebarHidden(false)}
+      sidebar={
+        <Sidebar
+          articles={articles}
+          currentId={currentId}
+          logo={logo}
+          sidebarMeta={sidebarMeta}
+          searchQuery={searchQuery}
+          isEditMode={isEditMode}
+          isSidebarHidden={isSidebarHidden}
+          onSelectArticle={handleSelectArticle}
+          onToggleSidebar={() => setIsSidebarHidden(true)}
+          onSearchChange={setSearchQuery}
+          onSidebarMetaChange={setSidebarMeta}
+          onLogoUpload={() => logoInputRef.current?.click()}
+          onToggleEditMode={() => setIsEditMode(!isEditMode)}
+          onReorder={reorderArticles}
+        />
+      }
+      toolbar={
         <Toolbar
           currentId={currentId}
           isFullscreen={isFullscreen}
@@ -545,105 +588,92 @@ const AppContent: React.FC = () => {
           onExportReader={() => handleExport(true)}
           onExportProject={() => handleExport(false)}
         />
+      }
+      content={
+        !currentArticle ? (
+          <div className="text-center text-gray-300 mt-[200px]">
+            <p>请选择左侧文档</p>
+          </div>
+        ) : (
+          <div className={`w-full transition-all duration-300 origin-top ${isImmersive ? 'max-w-full min-h-screen m-0 p-0 flex items-center justify-center' : 'max-w-[850px] mx-auto bg-white min-h-[1000px] p-[80px_100px] shadow-sm mb-[40px]'}`}>
+            <PaperView
+              article={currentArticle}
+              logo={logo}
+              isEditMode={isEditMode}
+              onUpdate={updateArticle}
+              onImageUpload={(type) => {
+                uploadTypeRef.current = type;
+                coverInputRef.current?.click();
+              }}
+              onNext={() => handleNavigate('next')}
+              useAlternateDesign={useAlternateDesign}
+              setUseAlternateDesign={setUseAlternateDesign}
+            />
 
-        {/* Content Area */}
-        {/* 
-            FIX: Removed 'flex justify-center' from this container.
-            Using 'flex' on a scroll container causes issues where overflowing content
-            doesn't expand the container height correctly, leading to "cut off" backgrounds.
-            Switched to standard block flow with 'mx-auto' on the child for centering.
-        */}
-        <div className="flex-1 overflow-y-auto p-[40px] relative scroll-smooth overscroll-none scrollbar-thin">
-          {!currentArticle ? (
-            <div className="text-center text-gray-300 mt-[200px]">
-              <p>请选择左侧文档</p>
-            </div>
-          ) : (
-            <div className={`w-full transition-all duration-300 origin-top ${isImmersive ? 'max-w-full min-h-screen m-0 p-0 flex items-center justify-center' : 'max-w-[850px] mx-auto bg-white min-h-[1000px] p-[80px_100px] shadow-sm mb-[40px]'}`}>
-              <PaperView
-                article={currentArticle}
-                logo={logo}
-                isEditMode={isEditMode}
-                onUpdate={updateArticle}
-                onImageUpload={(type) => {
-                  uploadTypeRef.current = type;
-                  coverInputRef.current?.click();
-                }}
-                onNext={() => handleNavigate('next')}
-                useAlternateDesign={useAlternateDesign}
-                setUseAlternateDesign={setUseAlternateDesign}
-              />
+            {(() => {
+              const idx = sortedArticles.findIndex(a => a.id === currentId);
+              const prevArt = idx > 0 ? sortedArticles[idx - 1] : null;
+              const nextArt = idx > -1 && idx < sortedArticles.length - 1 ? sortedArticles[idx + 1] : null;
+              const isSpecial = currentArticle?.category === '封面' || currentArticle?.category === '封底';
 
-              {/* Navigation Capsule - Moved inside scroll area, at the bottom of article */}
-              {(() => {
-                const idx = sortedArticles.findIndex(a => a.id === currentId);
-                const prevArt = idx > 0 ? sortedArticles[idx - 1] : null;
-                const nextArt = idx > -1 && idx < sortedArticles.length - 1 ? sortedArticles[idx + 1] : null;
-                const isSpecial = currentArticle?.category === '封面' || currentArticle?.category === '封底';
-
-                return (
-                  <NavigationCapsule
-                    onPrev={() => handleNavigate('prev')}
-                    onNext={() => handleNavigate('next')}
-                    onShowShortcutsHelp={() => setShowShortcutsHelp(true)}
-                    prevTitle={prevArt?.title}
-                    nextTitle={nextArt?.title}
-                    isSpecialPage={isSpecial}
-                  />
-                );
-              })()}
-            </div>
-          )}
-        </div>
-
-      </div>
-
-      {/* Keyboard Shortcuts Help Modal */}
-      <KeyboardShortcutsHelpModal
-        isOpen={showShortcutsHelp}
-        currentArticleTitle={currentArticle?.title || '无'}
-        onClose={() => setShowShortcutsHelp(false)}
-      />
-
-      {/* Modals & Inputs */}
-      <Editor
-        isOpen={isEditorOpen}
-        article={currentId ? (articles.find(a => a.id === currentId) || {}) : {}}
-        categories={categories}
-        onClose={() => setIsEditorOpen(false)}
-        onSave={handleSaveArticle}
-        onManageCats={() => setIsCatManagerOpen(true)}
-      />
-
-      {/* Category Manager Modal */}
-      <CategoryManagerModal
-        isOpen={isCatManagerOpen}
-        categories={categories}
-        onClose={() => setIsCatManagerOpen(false)}
-        onUpdateCategories={setCategories}
-        onRenameCategory={handleRenameCategory}
-      />
-
-      {/* Export Options Modal */}
-      <ExportOptionsModal
-        isOpen={isExportOptionsModalOpen}
-        currentUseAlternateDesign={useAlternateDesign}
-        onClose={() => setIsExportOptionsModalOpen(false)}
-        onConfirm={(options) => {
-          handleExportWithOptions(options);
-          setIsExportOptionsModalOpen(false);
-        }}
-      />
-
-      {/* Hidden Inputs */}
-      <input type="file" ref={importInputRef} className="hidden" accept=".html,.json" onChange={handleImport} />
-      <input type="file" ref={logoInputRef} className="hidden" accept="image/*" onChange={(e) => {
-        const f = e.target.files?.[0];
-        if (f) compressImage(f).then(setLogo);
-      }} />
-      <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
-
-    </div>
+              return (
+                <NavigationCapsule
+                  onPrev={() => handleNavigate('prev')}
+                  onNext={() => handleNavigate('next')}
+                  onShowShortcutsHelp={() => setShowShortcutsHelp(true)}
+                  prevTitle={prevArt?.title}
+                  nextTitle={nextArt?.title}
+                  isSpecialPage={isSpecial}
+                />
+              );
+            })()}
+          </div>
+        )
+      }
+      modals={
+        <>
+          <KeyboardShortcutsHelpModal
+            isOpen={showShortcutsHelp}
+            currentArticleTitle={currentArticle?.title || '无'}
+            onClose={() => setShowShortcutsHelp(false)}
+          />
+          <Editor
+            isOpen={isEditorOpen}
+            article={currentId ? (articles.find(a => a.id === currentId) || {}) : {}}
+            categories={categories}
+            onClose={() => setIsEditorOpen(false)}
+            onSave={handleSaveArticle}
+            onManageCats={() => setIsCatManagerOpen(true)}
+          />
+          <CategoryManagerModal
+            isOpen={isCatManagerOpen}
+            categories={categories}
+            onClose={() => setIsCatManagerOpen(false)}
+            onUpdateCategories={setCategories}
+            onRenameCategory={handleRenameCategory}
+          />
+          <ExportOptionsModal
+            isOpen={isExportOptionsModalOpen}
+            currentUseAlternateDesign={useAlternateDesign}
+            onClose={() => setIsExportOptionsModalOpen(false)}
+            onConfirm={(options) => {
+              handleExportWithOptions(options);
+              setIsExportOptionsModalOpen(false);
+            }}
+          />
+        </>
+      }
+      hiddenInputs={
+        <>
+          <input type="file" ref={importInputRef} className="hidden" accept=".html,.json" onChange={handleImport} />
+          <input type="file" ref={logoInputRef} className="hidden" accept="image/*" onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) compressImage(f).then(setLogo);
+          }} />
+          <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+        </>
+      }
+    />
   );
 };
 

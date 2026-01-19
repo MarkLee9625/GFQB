@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
     // 优化构建目标以支持 PDF.js 的 Top-level Await
     build: {
       target: 'esnext',
-      minify: 'esbuild',
+      minify: false, // Disable minification to avoid build crash
       sourcemap: false,
       rollupOptions: {
         output: {
@@ -54,6 +54,7 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
+    base: './', // Ensure relative paths for offline/single-file usage
     esbuild: {
       target: 'esnext'
     }

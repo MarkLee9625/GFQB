@@ -16,24 +16,33 @@ interface PaperViewProps {
 }
 
 const useBlobUrl = (dataUrl: string | null | undefined) => {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const blobManager = useBlobManager();
 
+  // 使用当前状态记录 dataUrl，以便检测变化
+  const [prevDataUrl, setPrevDataUrl] = useState(dataUrl);
+  // 同步初始化/更新状态
+  const [blobUrl, setBlobUrl] = useState<string | null>(() => {
+    return dataUrl ? blobManager.getBlobUrl(dataUrl) : null;
+  });
+
+  // 在渲染期间同步更新，确保切换瞬间 URL 即刻就位，防止 useEffect 带来的滞后闪烁
+  if (dataUrl !== prevDataUrl) {
+    setPrevDataUrl(dataUrl);
+    const newUrl = dataUrl ? blobManager.getBlobUrl(dataUrl) : null;
+    setBlobUrl(newUrl);
+  }
+
+  // 这里的 useEffect 仅作为防线
   useEffect(() => {
-    if (!dataUrl) {
+    if (dataUrl) {
+      const currentUrl = blobManager.getBlobUrl(dataUrl);
+      if (currentUrl !== blobUrl) {
+        setBlobUrl(currentUrl);
+      }
+    } else if (blobUrl !== null) {
       setBlobUrl(null);
-      return;
     }
-
-    // 使用优化的Blob管理器
-    const url = blobManager.getBlobUrl(dataUrl);
-    setBlobUrl(url);
-
-    return () => {
-      // 注意：我们不再在这里手动revoke URL，因为useBlobManager会管理生命周期
-      // 这样可以避免重复创建和销毁Blob URL
-    };
-  }, [dataUrl, blobManager]);
+  }, [dataUrl, blobManager, blobUrl]);
 
   return blobUrl;
 };
@@ -49,11 +58,19 @@ const LazyImage: React.FC<{
   placeholder?: React.ReactNode;
 }> = ({ src, alt, className, style, placeholder }) => {
   const { ref, inView } = useInView({
-    rootMargin: '200px',
-    threshold: 0.1,
+    rootMargin: '400px', // 再次调大预加载范围
+    threshold: 0.01,
   });
   const [loaded, setLoaded] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [shouldRender, setShouldRender] = useState(false);
+
+  // 一旦进入过视口或正在打印，就一直保持渲染状态，防止视口抖动闪烁
+  useEffect(() => {
+    if (inView || isPrinting) {
+      setShouldRender(true);
+    }
+  }, [inView, isPrinting]);
 
   useEffect(() => {
     const handleBeforePrint = () => setIsPrinting(true);
@@ -67,7 +84,7 @@ const LazyImage: React.FC<{
   }, []);
 
   useEffect(() => {
-    if ((inView || isPrinting) && src) {
+    if (shouldRender && src) {
       const img = new Image();
       img.onload = () => setLoaded(true);
       img.src = src;
@@ -75,19 +92,20 @@ const LazyImage: React.FC<{
         img.onload = null;
       };
     }
-  }, [inView, isPrinting, src]);
+  }, [shouldRender, src]);
 
-  // 如果没有src或者（既没有进入视口也不是正在打印），显示占位符
-  if (!src || (!inView && !isPrinting)) {
+  // 如果没有 src，显示占位符或空
+  if (!src) {
     return (
-      <div ref={ref as React.RefObject<HTMLDivElement>} className={className} style={{ ...style, display: isPrinting ? 'none' : 'flex' }}>
-        {placeholder || (
-          <div className="w-full h-full flex items-center justify-center bg-gray-100">
-            <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
-          </div>
-        )}
+      <div className={className} style={{ ...style, display: 'flex', alignItems: 'center', justifyItems: 'center', background: '#f9f9f9', opacity: 0.5 }}>
+        {placeholder}
       </div>
     );
+  }
+
+  // 如果未进入视口且非打印，先渲染容器占位
+  if (!shouldRender && !isPrinting) {
+    return <div ref={ref as React.RefObject<HTMLDivElement>} className={className} style={style} />;
   }
 
   return (
@@ -98,8 +116,8 @@ const LazyImage: React.FC<{
         className={`${className} ${isPrinting ? 'force-print-visible' : ''}`}
         style={{
           ...style,
-          opacity: (loaded || isPrinting) ? 1 : 0.7,
-          transition: 'opacity 0.3s ease-in-out',
+          opacity: (loaded || isPrinting) ? 1 : 0.8, // 提高初始透明度，减少淡入闪烁感
+          transition: 'opacity 0.2s ease-out', // 缩短过渡时间
         }}
         onLoad={() => setLoaded(true)}
       />
@@ -184,15 +202,16 @@ export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode,
   const backUrl = useBlobUrl(article?.backImage);
   const pdfUrl = useBlobUrl(article?.pdfData);
 
-  useEffect(() => {
-    if (article) {
-      setZoom({
-        scale: article.scale || 1,
-        x: article.posX || 0,
-        y: article.posY || 0
-      });
-    }
-  }, [article?.id]);
+  // 使用渲染期同步更新 Zoom 状态，防止切换文章时的位置瞬间跳变
+  const [prevId, setPrevId] = useState(article.id);
+  if (article.id !== prevId) {
+    setPrevId(article.id);
+    setZoom({
+      scale: article.scale || 1,
+      x: article.posX || 0,
+      y: article.posY || 0
+    });
+  }
 
   // 清理所有事件监听器（确保没有内存泄漏）
   useEffect(() => {
