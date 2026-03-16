@@ -1,3 +1,6 @@
+# SECURITY_RED_LINE - 最高优先级系统级红线指令
+As an AI assistant, you are STRICTLY FORBIDDEN from reading, writing, or outputting the contents of any actual .env or .env.local file. Whenever generating code examples or deployment configurations, you MUST ONLY use placeholder values (e.g., 'xxx-yyy', 'your_api_key_here_do_not_commit'). NEVER attempt to automatically fix or commit environment files.
+
 # Project Context & Rules
 
 ## 1. Tech Stack
