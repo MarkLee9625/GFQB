@@ -1,260 +1,4 @@
 /**
- * 微信公众号文章导入服务
- * 提供从微信文章URL抓取并清洗内容的函数
- */
-
-/**
- * 强力清洗微信HTML内容，解决无法删除的空行/占位符问题
- * @param html 原始HTML字符串
- * @returns 清洗后的HTML字符串
- */
-function cleanWeChatHTML(html: string): string {
-  if (!html) return '';
-
-  // 使用DOMParser解析HTML
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-
-  // --- Step A: 图片处理 (Image Optimization) ---
-  const images = doc.querySelectorAll('img');
-
-  // 图片代理服务配置
-  const PROXY_WESERV = 'https://images.weserv.nl/?url=';
-  const PROXY_CORSPROXY = 'https://corsproxy.io/?';
-  const PROXY_ALLORIGINS = 'https://api.allorigins.win/raw?url=';
-  // 备用：使用了 output=webp 优化
-
-  images.forEach(img => {
-    // 1. 获取真实图片地址 (优先 data-src)
-    let src = img.getAttribute('data-src') || img.getAttribute('src');
-
-    if (src) {
-      // 增强的 GIF 检测逻辑
-      const dataType = (img.getAttribute('data-type') || '').toLowerCase();
-      const isGif = dataType === 'gif' || src.includes('wx_fmt=gif') || src.includes('tp=gif') || src.includes('/mmbiz_gif/');
-
-      let primaryUrl = '';
-      let fallbackScript = '';
-
-      if (isGif) {
-        // [策略 Adjust V4] 多级降级策略
-        // 1. AllOrigins (Raw) - 最可能保留动图原样
-        // 2. Corsproxy (Raw) - 备用原始代理
-        // 3. Weserv (Processed) - 兜底，带强制参数
-
-        const url1 = `${PROXY_ALLORIGINS}${encodeURIComponent(src)}`;
-        const url2 = `${PROXY_CORSPROXY}${encodeURIComponent(src)}`;
-        const timestamp = Date.now();
-        const url3 = `${PROXY_WESERV}${encodeURIComponent(src)}&output=gif&n=-1&t=${timestamp}`;
-
-        primaryUrl = url1;
-
-        // 链式 fallback: url1 -> url2 -> url3
-        fallbackScript = `
-          if (this.src.indexOf('api.allorigins.win') > -1) {
-            this.src = '${url2}';
-          } else if (this.src.indexOf('corsproxy.io') > -1) {
-            this.src = '${url3}';
-            this.onerror = null;
-          }
-        `;
-      } else {
-        // [策略 Default] 对于静态图，优先使用 Weserv 转 WebP (极速、省流)
-        primaryUrl = `${PROXY_WESERV}${encodeURIComponent(src)}&output=webp`;
-
-        // 静态图回退：如果 Weserv 挂了，试着用 CORS 代理拿原图
-        fallbackScript = `
-          if (this.src.startsWith('${PROXY_WESERV}')) {
-            this.src = '${PROXY_CORSPROXY}' + encodeURIComponent('${src}');
-            this.onerror = null;
-          }
-        `;
-      }
-
-      img.src = primaryUrl;
-      img.setAttribute('onerror', fallbackScript.replace(/\s+/g, ' '));
-      img.removeAttribute('data-src');
-    }
-
-    // 2. 移除无关属性
-    img.removeAttribute('data-w');
-    img.removeAttribute('data-type');
-    img.removeAttribute('data-ratio');
-    img.removeAttribute('class');
-    img.removeAttribute('style'); // 清除内联样式
-    img.removeAttribute('crossorigin');
-
-    // 3. 确保显示正常
-    img.style.maxWidth = '100%';
-    img.style.height = 'auto';
-    img.style.display = 'block';
-    img.style.margin = '20px auto';
-    img.style.borderRadius = '4px';
-
-    // 标记为保留
-    img.setAttribute('data-sws-keep', 'true');
-  });
-
-
-
-  // --- Step B: 结构扁平化 ---
-  const sections = doc.querySelectorAll('section');
-  sections.forEach(section => {
-    while (section.firstChild) {
-      section.parentNode?.insertBefore(section.firstChild, section);
-    }
-    section.remove();
-  });
-
-  // --- Step C: 全局清洗 ---
-  const allElements = doc.querySelectorAll('*');
-  allElements.forEach(el => {
-    if (el.tagName.toLowerCase() === 'img') return;
-
-    el.removeAttribute('id');
-    el.removeAttribute('class');
-    el.removeAttribute('style');
-    el.removeAttribute('width');
-    el.removeAttribute('height');
-
-    Array.from(el.attributes).forEach(attr => {
-      if (attr.name.startsWith('data-') || attr.name.startsWith('wx-')) {
-        el.removeAttribute(attr.name);
-      }
-    });
-  });
-
-  // 移除垃圾标签
-  const problematicTags = ['iframe', 'script', 'style', 'link', 'meta', 'noscript', 'wx-open-launch-weapp'];
-  problematicTags.forEach(tagName => {
-    doc.querySelectorAll(tagName).forEach(el => el.remove());
-  });
-
-  // --- Step D: 空内容清洗 ---
-  const spacingTags = ['p', 'div', 'span', 'strong', 'em'];
-  spacingTags.forEach(tagName => {
-    doc.querySelectorAll(tagName).forEach(el => {
-      const hasContent = el.textContent?.trim().length;
-      const hasImage = el.querySelector('img');
-      const isImage = el.tagName.toLowerCase() === 'img';
-
-      if (!isImage && !hasImage && !hasContent) {
-        el.remove();
-      }
-    });
-  });
-
-  // --- Step E: 智能底部干扰内容清洗 (Smart Footer Noise Removal) ---
-  const footerKeywords = ['扫描二维码', '关注公众号', '点分享', '点收藏', '点点赞', '点在看', '长按识别二维码', '预览时标签不可点', '喜欢作者'];
-
-  // 1. 查找 "END" 标记，如果找到，移除其后所有内容
-  // 微信通常用 section 或 p 包裹 END
-  const potentialEndNodes = doc.querySelectorAll('p, section, div, span');
-  for (const el of Array.from(potentialEndNodes)) {
-    const text = el.textContent?.trim() || '';
-    // 匹配常见的 END 样式，包括 "END" 及其两侧的横线装饰
-    const isEndMarker = /^(end|the end|完|全文完)$/i.test(text) ||
-      /^-{3,}$/.test(text) ||
-      (text === 'END');
-
-    if (isEndMarker) {
-      // 找到 END 了，往上找一层，确认它不是文章中间的某个单词
-      // 通常 END 是独立的
-      if (text.length < 10) {
-        console.log('Found END marker, truncating...', text);
-
-        // 找到包含 END 的最顶层块级元素 (在 js_content 下的直接子元素，或接近顶层的 section)
-        let container = el;
-        let depth = 0;
-        while (container.parentElement && container.parentElement.id !== 'js_content' && container.parentElement !== doc.body && depth < 5) {
-          // 如果父级包含太多文字，则 END 可能是内嵌的，停止上溯
-          if ((container.parentElement.textContent || '').length > 50) break;
-          container = container.parentElement;
-          depth++;
-        }
-
-        // 移除该容器及其之后的所有兄弟节点
-        let next = container.nextElementSibling;
-        while (next) {
-          const toRemove = next;
-          next = next.nextElementSibling;
-          toRemove.remove();
-        }
-        container.remove(); // 移除 END 本身
-        break; // 停止处理，已经截断了
-      }
-    }
-  }
-
-  // 2. 针对残留的底部关键词（如果 END 没抓到，或者这些在 END 之前）
-  // 重新查询，因为 DOM 变了
-  const remainingNodes = doc.querySelectorAll('p, div, span, strong, section, fieldset');
-  remainingNodes.forEach(el => {
-    const text = el.textContent?.trim() || '';
-    if (!text) return;
-
-    if (footerKeywords.some(kw => text.includes(kw)) && text.length < 100) {
-      // 这是一个包含底部关键词的短元素
-      // 往上找包裹它的容器 (通常微信文章用 section 包裹每一段)
-      let container = el;
-      let depth = 0;
-      // 尝试找到包裹这个 footer 元素的独立 section
-      while (container.parentElement &&
-        container.parentElement.tagName.toLowerCase() !== 'body' &&
-        container.parentElement.id !== 'js_content' &&
-        depth < 3) {
-
-        // 如果父容器包含太多文字（比如>200字），可能误删了正文，停止上溯
-        if ((container.parentElement.textContent || '').length > 200) break;
-
-        container = container.parentElement;
-        depth++;
-      }
-
-      // 移除容器
-      container.remove();
-    }
-  });
-
-  // 3. 针对特定的图片二维码结构 (通常是图片后面紧跟 "关注" 文字)
-  // 如果上面的关键词逻辑没删掉图片（因为图片和文字是兄弟节点，且在不同 section），这里补刀
-  const footerImages = doc.querySelectorAll('img');
-  footerImages.forEach(img => {
-    // 检查图片后面是否有 "关注"、"二维码" 等字样
-    let next = img.nextSibling;
-    let siblingsChecked = 0;
-    while (next && siblingsChecked < 3) { // 检查后3个节点
-      const nextText = next.textContent?.trim() || '';
-      if (footerKeywords.some(kw => nextText.includes(kw))) {
-        // 命中！移除图片和这个文字节点
-        img.remove();
-        // 如果 next 是元素，也移除
-        if (next instanceof Element) next.remove();
-        else next.parentNode?.removeChild(next);
-        break;
-      }
-      next = next.nextSibling;
-      siblingsChecked++;
-    }
-  });
-
-  // 移除指定选择器
-  const footerSelectors = ['.rich_media_tool', '#js_toobar3', '.reward_area', '#js_pc_qr_code', '#js_view_source', '.qr_code_pc_outer'];
-  footerSelectors.forEach(sel => {
-    doc.querySelectorAll(sel).forEach(el => el.remove());
-  });
-
-  let htmlOutput = doc.body.innerHTML;
-
-  // 1. 移除包含空格、nbsp、br 的空段落
-  htmlOutput = htmlOutput.replace(/<p[^>]*>(\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, '');
-  htmlOutput = htmlOutput.replace(/(<br\s*\/?>\s*)+/gi, '<br>');
-  htmlOutput = htmlOutput.replace(/>\s+</g, '><');
-
-  return htmlOutput;
-}
-
-/**
  * 抓取结果接口
  */
 export interface WechatArticleResult {
@@ -265,127 +9,390 @@ export interface WechatArticleResult {
 }
 
 /**
- * 抓取并清洗微信公众号文章
- * @param url 微信文章URL
- * @returns Promise<WechatArticleResult>
+ * 进度回调函数类型
  */
-export async function fetchWechatArticle(url: string): Promise<WechatArticleResult> {
-  // 备选代理服务列表，依次尝试
-  const proxyServices = [
-    `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+export type ImportProgressCallback = (stage: string, details: string) => void;
+
+/**
+ * 下载图片并转换为 Base64 格式
+ * 使用代理服务器绕过跨域限制
+ */
+async function downloadImageAsBase64(url: string): Promise<string> {
+  // 尝试多个代理服务器
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=webp&q=85`
   ];
 
-  let lastError: Error | null = null;
-
-  for (const proxyUrl of proxyServices) {
+  for (const proxyUrl of proxies) {
     try {
-      console.log(`尝试使用代理: ${proxyUrl}`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90秒超时
+      const timeout = setTimeout(() => controller.abort(), 15000); // 15秒超时
 
       const response = await fetch(proxyUrl, {
-        signal: controller.signal
-      }).finally(() => clearTimeout(timeoutId));
+        signal: controller.signal,
+        mode: 'cors'
+      });
+      clearTimeout(timeout);
 
-      if (!response.ok) {
-        throw new Error(`HTTP错误: ${response.status}`);
+      if (!response.ok) continue;
+
+      const blob = await response.blob();
+
+      // 检查文件大小（限制5MB）
+      if (blob.size > 5 * 1024 * 1024) {
+        console.warn(`[WechatImporter] Image too large (${(blob.size / 1024 / 1024).toFixed(2)}MB):`, url);
+        throw new Error('Image size exceeds 5MB');
       }
 
-      let htmlContent: string;
-      if (proxyUrl.includes('api.allorigins.win')) {
-        const data = await response.json();
-        htmlContent = data.contents;
-      } else {
-        htmlContent = await response.text();
-      }
-
-      if (!htmlContent || htmlContent.length < 500) {
-        throw new Error('抓取到的内容过短或被拦截');
-      }
-
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlContent, 'text/html');
-
-      // 1. 提取标题
-      const titleSelectors = ['#activity-name', '.rich_media_title', 'title', 'h1', 'h2'];
-      let title = '未命名文章';
-      for (const selector of titleSelectors) {
-        const element = doc.querySelector(selector);
-        if (element?.textContent?.trim()) {
-          title = element.textContent.trim();
-          break;
-        }
-      }
-
-      // 2. 提取作者/公众号
-      let author = '';
-      const authorSelectors = ['#js_name', '.profile_nickname', '.rich_media_meta_nickname', '.account_nickname'];
-      for (const selector of authorSelectors) {
-        const element = doc.querySelector(selector);
-        if (element?.textContent?.trim()) {
-          author = element.textContent.trim();
-          break;
-        }
-      }
-
-      // 3. 提取时间
-      let date = '';
-      const scripts = Array.from(doc.querySelectorAll('script')).map(s => s.textContent).join('\n');
-      const timeMatch = scripts.match(/var\s+ct\s*=\s*"(\d+)"/);
-      if (timeMatch && timeMatch[1]) {
-        const timestamp = parseInt(timeMatch[1], 10) * 1000;
-        if (!isNaN(timestamp)) {
-          date = new Date(timestamp).toISOString().slice(0, 10);
-        }
-      }
-      if (!date) {
-        const pubTimeEl = doc.getElementById('publish_time');
-        if (pubTimeEl?.textContent) date = pubTimeEl.textContent.trim();
-      }
-      if (!date) {
-        date = new Date().toISOString().slice(0, 10);
-      }
-
-      // 4. 提取正文
-      const contentSelectors = ['#js_content', '#img-content', '.rich_media_content', '.article-content', 'article'];
-      let contentBox: HTMLElement | null = null;
-      for (const selector of contentSelectors) {
-        contentBox = doc.querySelector(selector) as HTMLElement;
-        if (contentBox) break;
-      }
-
-      if (!contentBox) {
-        contentBox = doc.body;
-        const unrelatedSelectors = ['header', 'nav', 'footer', '.header', '.nav', '.footer', '.ad', '.advertisement', '.share', '.comment', '#js_pc_qr_code'];
-        unrelatedSelectors.forEach(selector => {
-          contentBox!.querySelectorAll(selector).forEach(el => el.remove());
-        });
-      }
-
-      const contentClone = contentBox!.cloneNode(true) as HTMLElement;
-
-      // 应用强力清洗
-      const cleanedContent = cleanWeChatHTML(contentClone.innerHTML);
-
-      if (cleanedContent.length < 50) {
-        throw new Error('清洗后内容过短');
-      }
-
-      return {
-        title,
-        content: cleanedContent,
-        author,
-        date
-      };
-
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('FileReader failed'));
+        reader.readAsDataURL(blob);
+      });
     } catch (err) {
-      console.warn(`代理 ${proxyUrl} 失败:`, err);
-      lastError = err as Error;
+      console.warn(`[WechatImporter] Proxy failed for image:`, proxyUrl.substring(0, 50), err);
       continue;
     }
   }
 
-  throw lastError || new Error('无法抓取文章，请检查链接或稍后重试');
+  // 所有代理都失败，返回原始URL作为降级
+  console.warn(`[WechatImporter] All proxies failed for image, using original URL:`, url);
+  return url;
+}
+
+/**
+ * 强力清洗微信HTML内容，解决无法删除的空行/占位符问题
+ * @param html 原始HTML内容
+ * @param onProgress 进度回调（可选）
+ */
+async function cleanWeChatHTML(html: string, onProgress?: ImportProgressCallback): Promise<string> {
+  if (!html) return '';
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // --- Step A: 图片处理与 Base64 转换 ---
+  const images = doc.querySelectorAll('img');
+  const totalImages = images.length;
+
+  if (totalImages > 0) {
+    onProgress?.('downloading_images', `正在下载 ${totalImages} 张图片...`);
+  }
+
+  const imagePromises = Array.from(images).map(async (img, index) => {
+    try {
+      // 优先获取真实地址
+      const src = img.getAttribute('data-src') || img.getAttribute('src');
+      if (!src) return;
+
+      // 记录原始地址
+      img.setAttribute('data-original-src', src);
+      img.removeAttribute('data-src');
+
+      // 下载并转换为 Base64
+      onProgress?.('downloading_images', `正在下载图片 ${index + 1}/${totalImages}...`);
+      const base64 = await downloadImageAsBase64(src);
+      img.src = base64;
+
+      // 移除无关干扰属性
+      ['data-w', 'data-type', 'data-ratio', 'class', 'style', 'crossorigin'].forEach(attr => {
+        img.removeAttribute(attr);
+      });
+
+      // 规范化样式
+      Object.assign(img.style, {
+        maxWidth: '100%',
+        height: 'auto',
+        display: 'block',
+        margin: '20px auto',
+        borderRadius: '4px'
+      });
+      img.setAttribute('data-sws-keep', 'true');
+    } catch (err) {
+      console.warn('[WechatImporter] Image processing failed:', img.src, err);
+      // 失败时保留原始URL
+    }
+  });
+
+  // 等待所有图片下载完成
+  await Promise.all(imagePromises);
+
+  // --- Step B: 结构清洗与扁平化 ---
+  // 移除 section 包裹，防止样式污染
+  doc.querySelectorAll('section').forEach(section => {
+    while (section.firstChild) {
+      section.parentNode?.insertBefore(section.firstChild, section);
+    }
+    section.remove();
+  });
+
+  // 移除非法/垃圾标签
+  const unwantedTags = ['iframe', 'script', 'style', 'link', 'meta', 'noscript', 'wx-open-launch-weapp'];
+  unwantedTags.forEach(tag => doc.querySelectorAll(tag).forEach(el => el.remove()));
+
+  // 移除所有元素的无用属性
+  doc.querySelectorAll('*').forEach(el => {
+    if (el.tagName.toLowerCase() === 'img') return;
+    ['id', 'class', 'style', 'width', 'height'].forEach(attr => el.removeAttribute(attr));
+
+    Array.from(el.attributes).forEach(attr => {
+      if (attr.name.startsWith('data-') || attr.name.startsWith('wx-')) {
+        el.removeAttribute(attr.name);
+      }
+    });
+  });
+
+  // --- Step C: 智能截断 (截掉广告、版权信息) ---
+  const footerKeywords = ['扫描二维码', '关注公众号', '点击上方', '点分享', '点收藏', '点在看', '长按识别', '喜欢作者'];
+  const endMarkers = /^(end|the end|完|全文完|—END—|END)$/i;
+
+  const nodes = Array.from(doc.querySelectorAll('p, div, span, strong, section'));
+  const totalNodes = nodes.length;
+
+  for (let i = 0; i < totalNodes; i++) {
+    const el = nodes[i];
+    const text = el.textContent?.trim() || '';
+
+    // 1. END 标记检测 (仅在文章后 40% 范围内检测，防止误杀)
+    if (i > totalNodes * 0.6 && endMarkers.test(text) && text.length < 15) {
+      console.log('[WechatImporter] Detect END marker:', text);
+      // 移除该节点及其之后的所有内容
+      while (el.nextSibling) el.nextSibling.remove();
+      el.remove();
+      break;
+    }
+
+    // 2. 关键词底部清理
+    if (footerKeywords.some(kw => text.includes(kw)) && text.length < 100) {
+      // 如果是后部的短文本包含关键词，则认为可能是广告
+      if (i > totalNodes * 0.7) {
+        el.remove();
+      }
+    }
+  }
+
+  // --- Step D: 移除空标签 ---
+  doc.querySelectorAll('p, div, span').forEach(el => {
+    if (el.tagName.toLowerCase() === 'img') return;
+    if (!el.textContent?.trim() && !el.querySelector('img')) {
+      el.remove();
+    }
+  });
+
+  let output = doc.body.innerHTML;
+  // 清理多余换行
+  output = output.replace(/<p[^>]*>(\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, '');
+  output = output.replace(/(<br\s*\/?>\s*)+/gi, '<br>');
+
+  return output;
+}
+
+/**
+ * 代理服务器配置接口
+ */
+interface ProxyConfig {
+  name: string;
+  url: string;
+  healthCheckUrl?: string;
+}
+
+/**
+ * 测试代理服务器健康状态
+ */
+async function testProxyHealth(proxy: ProxyConfig): Promise<boolean> {
+  if (!proxy.healthCheckUrl) return true; // 没有健康检查URL，默认认为可用
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch(proxy.healthCheckUrl, {
+      signal: controller.signal,
+      mode: 'no-cors' // 健康检查可能会有CORS问题，使用no-cors模式
+    });
+    clearTimeout(timeout);
+    return true; // 只要请求成功就认为可用
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 并发获取内容（Race Strategy + 健康检测）
+ */
+async function fetchHtmlWithProxies(url: string, onProgress?: ImportProgressCallback): Promise<string> {
+  const proxies: ProxyConfig[] = [
+    {
+      name: 'AllOrigins (推荐)',
+      url: `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+      healthCheckUrl: 'https://api.allorigins.win/info'
+    },
+    {
+      name: 'CorsProxy',
+      url: `https://corsproxy.io/?${encodeURIComponent(url)}`
+    },
+    {
+      name: 'CodeTabs',
+      url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    }
+  ];
+
+  // 错误收集器
+  const errors: { proxy: string; error: string }[] = [];
+
+  // 包装每个请求
+  const fetchTasks = proxies.map(async (proxy) => {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 25000); // 单个代理 25s 超时
+
+      onProgress?.('fetching', `正在通过 ${proxy.name} 获取文章...`);
+
+      const res = await fetch(proxy.url, { signal: controller.signal });
+      clearTimeout(tid);
+
+      if (!res.ok) {
+        const errorMsg = `HTTP ${res.status} ${res.statusText}`;
+        errors.push({ proxy: proxy.name, error: errorMsg });
+        throw new Error(errorMsg);
+      }
+
+      let html = '';
+      if (proxy.name.includes('AllOrigins')) {
+        const json = await res.json();
+        html = json.contents;
+      } else {
+        html = await res.text();
+      }
+
+      // 内容长度验证（降低阈值到200）
+      if (!html || html.length < 200) {
+        const errorMsg = `Content too short (${html?.length || 0} chars)`;
+        errors.push({ proxy: proxy.name, error: errorMsg });
+        throw new Error(errorMsg);
+      }
+
+      // 内容格式验证
+      if (!html.includes('rich_media_content') && !html.includes('js_content')) {
+        const errorMsg = 'Invalid WeChat article format';
+        errors.push({ proxy: proxy.name, error: errorMsg });
+        throw new Error(errorMsg);
+      }
+
+      console.log(`[WechatImporter] ✅ ${proxy.name} 成功获取文章`);
+      return html;
+    } catch (e: any) {
+      const errorMsg = e.message || 'Unknown error';
+      if (!errors.find(err => err.proxy === proxy.name)) {
+        errors.push({ proxy: proxy.name, error: errorMsg });
+      }
+      console.warn(`[WechatImporter] ❌ ${proxy.name} 失败:`, errorMsg);
+      throw e;
+    }
+  });
+
+  // 使用 Promise.any 获得第一个成功的结果
+  try {
+    onProgress?.('fetching', '正在通过全球加速网络获取文章...');
+    return await Promise.any(fetchTasks);
+  } catch (err) {
+    // 生成详细的错误报告
+    const errorReport = errors.map(e => `  • ${e.proxy}: ${e.error}`).join('\n');
+
+    const detailedError = `所有代理均响应失败，请检查：
+
+【失败详情】
+${errorReport}
+
+【可能原因】
+1. 链接格式不正确（请确认是微信公众号文章链接）
+2. 文章已被删除或设置为私密
+3. 网络连接不稳定
+4. 代理服务器临时故障
+
+【建议操作】
+• 复制正确的微信文章链接（应包含 mp.weixin.qq.com）
+• 检查网络连接是否正常
+• 稍后重试`;
+
+    throw new Error(detailedError);
+  }
+}
+
+/**
+ * 抓取并清洗微信公众号文章
+ */
+export async function fetchWechatArticle(url: string, onProgress?: ImportProgressCallback): Promise<WechatArticleResult> {
+  try {
+    const htmlContent = await fetchHtmlWithProxies(url, onProgress);
+
+    onProgress?.('parsing', '正在解析文章结构...');
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+
+    // 1. 提取标题
+    const title = doc.querySelector('#activity-name, .rich_media_title, title')?.textContent?.trim() || '未命名文章';
+
+    // 2. 提取作者/公众号
+    const author = doc.querySelector('#js_name, .profile_nickname, .rich_media_meta_nickname')?.textContent?.trim() || '';
+
+    // 3. 提取时间（多种fallback方案）
+    let date = '';
+    const scripts = Array.from(doc.querySelectorAll('script')).map(s => s.textContent).join('\n');
+    const fullHtml = doc.documentElement.innerHTML;
+
+    // 多种时间提取模式
+    const timePatterns = [
+      /var\s+ct\s*=\s*"(\d+)"/,                    // 旧版微信 (ct变量)
+      /var\s+createTime\s*=\s*['"](\d+)['"]/,     // 新版微信 (createTime变量)
+      /publish_time['"]?\s*[:=]\s*['"]?(\d+)/,    // publish_time属性
+      /"pubtime"\s*:\s*(\d+)/,                     // JSON格式的pubtime
+    ];
+
+    for (const pattern of timePatterns) {
+      const match = scripts.match(pattern) || fullHtml.match(pattern);
+      if (match?.[1]) {
+        const timestamp = parseInt(match[1], 10);
+        // 验证时间戳合法性（应该在2010年之后且不超过当前时间）
+        const minValidTimestamp = 1262304000; // 2010-01-01
+        const maxValidTimestamp = Math.floor(Date.now() / 1000) + 86400; // 当前时间+1天
+
+        if (timestamp >= minValidTimestamp && timestamp <= maxValidTimestamp) {
+          date = new Date(timestamp * 1000).toISOString().slice(0, 10);
+          console.log(`[WechatImporter] ✅ 成功提取时间: ${date} (来源: ${pattern.source.substring(0, 20)}...)`);
+          break;
+        } else {
+          console.warn(`[WechatImporter] ⚠️ 时间戳不合法: ${timestamp}`);
+        }
+      }
+    }
+
+    // 最后的fallback：使用DOM元素或当前日期
+    if (!date) {
+      const publishTimeEl = doc.getElementById('publish_time');
+      if (publishTimeEl?.textContent?.trim()) {
+        date = publishTimeEl.textContent.trim();
+      } else {
+        date = new Date().toISOString().slice(0, 10);
+        console.warn('[WechatImporter] ⚠️ 未能提取文章时间，使用当前日期');
+      }
+    }
+
+    // 4. 提取正文内容框
+    const contentBox = doc.querySelector('#js_content, .rich_media_content');
+    if (!contentBox) {
+      throw new Error('未能识别到微信正文区域 (js_content)');
+    }
+
+    onProgress?.('cleaning', '正在移除广告与冗余标签...');
+    const cleanedContent = await cleanWeChatHTML(contentBox.innerHTML, onProgress);
+
+    onProgress?.('complete', '抓取完成！');
+    return { title, content: cleanedContent, author, date };
+  } catch (err: any) {
+    console.error('[WechatImporter] Error:', err);
+    throw err;
+  }
 }

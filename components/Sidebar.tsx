@@ -78,7 +78,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div
-      className={`w-[300px] bg-sidebar flex flex-col shrink-0 border-r border-gray-200 z-[60] transition-transform duration-300 ${isSidebarHidden ? '-translate-x-full absolute h-full shadow-2xl' : 'translate-x-0'}`}
+      className={`no-print w-[300px] bg-sidebar flex flex-col shrink-0 border-r border-gray-200 z-[60] transition-transform duration-300 ${isSidebarHidden ? '-translate-x-full absolute h-full shadow-2xl' : 'translate-x-0'}`}
     >
       <div className="p-[45px_30px_20px_30px] flex flex-col gap-2 relative">
         <div className="relative">

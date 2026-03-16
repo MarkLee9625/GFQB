@@ -480,16 +480,18 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
                   container.appendChild(img);
                   insertHtml(container);
 
-                  // 插入一个换行段落
-                  const p = document.createElement('p');
-                  p.innerHTML = '<br>';
-                  insertHtml(p);
 
                   console.log(`[Editor] 第 ${i + 1} 页已安全挂载`);
                 }
               }
 
               console.log('[Editor] PDF 所有页面已成功流式插入');
+
+              // [关键修复] 在所有 PDF 页面插入后，仅在最末尾追加一个空段落用作光标落脚点
+              // 解决之前每页后都插入 <p><br></p> 导致的打印分页断层问题
+              const emptyParagraph = document.createElement('p');
+              emptyParagraph.innerHTML = '<br>';
+              insertHtml(emptyParagraph);
 
               // [关键修复] 插入完成后立即同步状态，防止 setIsProcessing(false) 导致的重绘根据旧状态擦除 DOM
               if (contentRef.current) {
@@ -868,7 +870,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
                 </div>
                 <textarea
                   className="w-full h-[180px] bg-gray-50/50 border border-gray-100 rounded-xl p-4 text-[13px] leading-relaxed text-gray-600 focus:bg-white focus:border-brand-blue outline-none transition-all resize-none placeholder:text-gray-300"
-                  placeholder={formData.pdfData ? "摘要/导读：建议重点总结 PDF 的核心内容及效益... 将展示在阅读器顶部。" : "点击上方按钮生成摘要，或者在这里手动输入... 摘要将展示在导出版的标题正下方。建议重点描述：为什么要开展此项工法？能带来哪些效益？"}
+                  placeholder={formData.pdfData ? "摘要：建议重点总结 PDF 的核心内容及效益... 将展示在阅读器顶部。" : "点击上方按钮生成摘要，或者在这里手动输入... 摘要将展示在导出版的标题正下方。建议重点描述：为什么要开展此项工法？能带来哪些效益？"}
                   value={formData.abstract || ''}
                   onChange={e => setFormData({ ...formData, abstract: e.target.value })}
                 />

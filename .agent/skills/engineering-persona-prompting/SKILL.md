@@ -26,5 +26,11 @@ description: 指导如何编写和优化 AI 提示词，使其生成的文案符
 - **How** (用了什么具体的技术方案？)
 - **Benefits** (解决了什么问题？提高了多少效率？)
 
+## 结构化输出规范 (Structured Output)
+确保 AI 提示词明确要求返回纯 JSON 格式数据，并确保键名（如 `title`, `abstract`, `keywords`）一致。
+例如提示词结尾必需包含：
+> 请务必严格按以下 JSON 格式返回，不要包含任何 Markdown 标记或额外文字：
+> {"title": "...", "abstract": "...", "keywords": ["..."]}
+
 ## 维护位置
 主要通过 `services/aiService.ts` 中的 `prompt` 模板进行维护。

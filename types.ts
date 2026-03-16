@@ -159,20 +159,40 @@ export const CONSTANTS = {
         display: none !important;
     }
 
-    /* PDF 转图片专用样式 */
+  /* PDF 转图片专用样式 - 打印排版增强 (绝对像素级控制) */
     .pdf-page-image {
-        width: 100%;
-        height: auto;
-        display: block;
-        margin: 0 auto !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        border-radius: 4px;
-        page-break-inside: avoid; /* 打印关键 */
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        display: block !important;
+        box-sizing: border-box !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
     
     .pdf-page-container {
-        margin-bottom: 20px !important; /* 保持页面间距 */
-        page-break-inside: avoid;
+        width: 210mm !important;
+        height: 297mm !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        border: none !important;
+        background: white !important;
+        box-sizing: border-box !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
   `,
   COMPANY_INFO: {

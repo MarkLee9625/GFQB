@@ -166,7 +166,7 @@ export const convertPdfToImages = async (
 ): Promise<string[]> => {
     const {
         scale = 3.0,
-        quality = 0.92,
+        quality = 0.98,
         format = 'jpeg',
         onProgress
     } = options;

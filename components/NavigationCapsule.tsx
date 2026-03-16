@@ -21,7 +21,7 @@ const NavigationCapsule: React.FC<NavigationCapsuleProps> = ({
   return (
     <>
       {/* Bottom Navigation Bar */}
-      <div className={`w-full max-w-[850px] mx-auto mt-12 mb-20 px-4 md:px-0 transition-all duration-300 ${isSpecialPage ? 'hidden' : 'block'}`}>
+      <div className={`no-print w-full max-w-[850px] mx-auto mt-12 mb-20 px-4 md:px-0 transition-all duration-300 ${isSpecialPage ? 'hidden' : 'block'}`}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Previous Article Card */}
           <div
@@ -54,7 +54,7 @@ const NavigationCapsule: React.FC<NavigationCapsuleProps> = ({
       </div>
 
       {/* Keyboard Shortcut Help Button - Discreetly in bottom right */}
-      <div className="fixed bottom-6 right-6 z-[90]">
+      <div className="no-print fixed bottom-6 right-6 z-[90]">
         <button
           onClick={onShowShortcutsHelp}
           className="w-10 h-10 rounded-full flex items-center justify-center bg-white/60 backdrop-blur-sm border border-gray-100/50 text-gray-400 hover:bg-white hover:text-brand-blue shadow-md transition-all hover:shadow-lg group"

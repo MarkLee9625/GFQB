@@ -15,7 +15,7 @@ description: 指导如何集成和扩展 AI 功能（基于项目的 aiService�
 
 ## 现有架构 (基于 `services/aiService.ts`)
 
-项目通常包含一个核心的 `aiService` 单例或模块。在开发前，请先阅读 `src/services/aiService.ts` 了解当前的 API 封装。
+项目通常包含一个核心的 `aiService` 单例或模块。在开发前，请先阅读 `services/aiService.ts` 了解当前的 API 封装。
 
 ## 开发步骤
 
@@ -24,35 +24,37 @@ description: 指导如何集成和扩展 AI 功能（基于项目的 aiService�
 在 `aiService.ts` 中添加新的方法，而不是在组件中直接调用 fetch。
 
 ```typescript
-// src/services/aiService.ts
+// services/aiService.ts
 
-// ... existing code ...
+export interface AIResult {
+    title: string;
+    abstract: string;
+    keywords: string[];
+}
 
 /**
  * 这是一个新功能的示例方法
  * @param content 用户输入的内容
- * @returns AI 生成的结果
+ * @returns 包含 title、abstract 和 keywords 的结构化数据
  */
-public async generateNewFeature(content: string): Promise<string> {
-  // 1. 构造 Prompt
-  const prompt = `
-    你是一个某种领域的专家。请基于以下内容完成任务：
-    ${content}
-    
-    输出要求：
-    - 简洁明了
-    - 使用 Markdown 格式
-  `;
+export async function generateNewFeature(content: string): Promise<AIResult> {
+    const prompt = `你是一个技术专家。请基于以下内容完成任务：\n${content}\n\n请严格返回如下 JSON 格式：{"title":"...", "abstract":"...", "keywords":["..."]}`;
 
-  try {
-    // 2. 调用底层 API (假设 model 是已初始化的 Gemini 模型实例)
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error("AI Generation failed:", error);
-    throw new Error("AI 服务暂时不可用，请稍后重试。");
-  }
+    try {
+        // 调用统一的 AI 请求逻辑 (参考 generateArticleMeta)
+        const response = await fetch(`${API_URL}?key=${API_KEY}`, {
+            method: 'POST',
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await response.json();
+        
+        let text = data.candidates[0].content.parts[0].text;
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(text) as AIResult;
+    } catch (error) {
+        console.error("AI 生成失败:", error);
+        throw new Error("AI 服务暂时不可用。");
+    }
 }
 ```
 
@@ -64,7 +66,7 @@ AI 操作通常是异步且耗时的，必须处理 Loading 状态和错误反�
 // 在组件中使用
 
 const [loading, setLoading] = useState(false);
-const [result, setResult] = useState<string | null>(null);
+const [result, setResult] = useState<AIResult | null>(null);
 
 const handleGenerate = async () => {
   setLoading(true);
@@ -80,10 +82,9 @@ const handleGenerate = async () => {
 };
 ```
 
-### 3. Prompt通过工程 (Prompt Engineering)
+### 3. 提示词工程 (Prompt Engineering)
 
 - **指令清晰**: 明确告诉 AI 角色（Role）、任务（Task）和输出格式（Format）。
-- **上下文**: 如果需要，将之前的对话或相关文档片段包含在 Prompt 中。
 - **结构化输出**: 如果代码需要解析结果，要求 AI 输出 JSON 格式，并给出 Schema 示例。
 
 ## 安全与配置

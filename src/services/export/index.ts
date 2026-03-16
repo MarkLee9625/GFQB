@@ -460,11 +460,10 @@ export async function generatePrintableHTML(
                             <span>分类: ${article.category}</span>
                         </div>
                     </div>
-                    ${article.abstract ? `<div class="summary-card"><div class="summary-label">摘要 / 导读</div><p>${article.abstract}</p></div>` : ''}
+                    ${article.abstract ? `<div class="summary-card"><div class="summary-label">摘要</div><p>${article.abstract}</p></div>` : ''}
                     <div class="sws-prose">${processedContent}</div>
                     <div class="article-footer-knowledge-base">
                         ${logo ? `<img src="${logo}" class="footer-logo" />` : ''}
-                        SWS KNOWLEDGE BASE
                     </div>
                     <div class="article-end-mark">- End of Article -</div>
                 </div>

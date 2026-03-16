@@ -178,26 +178,53 @@ export const PRINT_STYLES = `
         opacity: 1 !important;
         width: 100% !important;
         height: auto !important;
-        page-break-after: always;
-        break-after: page;
+        page-break-before: always !important;
+        break-before: page !important;
+        page-break-after: auto !important;
+        break-after: auto !important;
         float: none !important;
         position: relative !important;
         left: 0 !important;
         top: 0 !important;
     }
 
-    /* 例外：如果是“打印单页”模式 (body没有print-all类)，则隐藏非激活项 */
+    /* 例外：如果是“打印单页”模式 (body没有print-all类)，则隐藏非激活项，并取消可见项的前置分页 */
     body:not(.print-all) .article-wrapper:not(.active),
     body:not(.print-all) .toc-page {
         display: none !important;
     }
+    body:not(.print-all) .article-wrapper.active {
+        page-break-before: auto !important;
+        break-before: auto !important;
+    }
+    
+    /* 防止“打印全部”模式的第一个元素前产生空白页 */
+    #render-target > div:first-child,
+    .app-root > div:first-child,
+    #content-container > div:first-child {
+        page-break-before: auto !important;
+        break-before: auto !important;
+    }
     
     /* --- 目录页样式 (修复一页一条目) --- */
+    .toc-page {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-height: 100vh !important; /* Changed from mm to vh to prevent overflow */
+        padding: 60px 40px !important;
+    }
     .toc-container {
         width: 100% !important;
+        max-width: 700px !important;
         height: auto !important;
-        min-height: 0 !important; /* 移除最小高度限制 */
-        padding: 2.54cm 3.17cm !important;
+        min-height: 0 !important;
+        flex: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        padding: 0 !important;
         background: white !important;
         overflow: visible !important;
     }
@@ -226,10 +253,10 @@ export const PRINT_STYLES = `
     
     /* --- 封面/封底 (全屏无边距) --- */
     .cover-root, .magazine-cover, .magazine-back-cover, .normal-back-root { 
-        width: 210mm !important;
-        min-height: 296mm !important; /* 轻微小于297防止溢出 */
-        max-height: none !important;  /* 允许溢出，防止切断 */
-        height: auto !important;
+        width: 100% !important;
+        height: 100vh !important; /* 强制填满一页 */
+        min-height: 100vh !important;
+        max-height: 100vh !important;
         margin: 0 !important;
         padding: 40px !important;
         border: none !important;
@@ -267,7 +294,6 @@ export const PRINT_STYLES = `
         break-inside: avoid;
     }
     
-    /* 正文图片样式 - 严格限制尺寸 */
     .sws-prose img { 
         max-width: 100% !important; 
         max-height: 600px !important; /* 限制最大高度，防止超出页面 */
@@ -278,6 +304,24 @@ export const PRINT_STYLES = `
         object-fit: contain !important; /* 保持纵横比 */
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+    }
+    
+    /* PDF 页面图片 - 铺满整页，覆盖通用 img 限制 */
+    .sws-prose .pdf-page-container {
+        margin: 0 -80px !important; /* 负 margin 突破 normal-container 的 padding */
+        padding: 0 !important;
+        page-break-before: always !important;
+        break-before: page !important;
+    }
+    .sws-prose .pdf-page-image {
+        width: 100% !important; /* 打印时 100% = A4 全宽 */
+        max-width: 100% !important;
+        max-height: none !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        object-fit: contain !important;
+        display: block !important;
     }
     
     /* 封面/封底图片特殊处理 */
@@ -300,16 +344,15 @@ export const PRINT_STYLES = `
         overflow: hidden !important;
     }
     
-    /* 文章底部Logo尺寸限制 */
+    /* 文章底部Logo尺寸 */
     .footer-logo {
-        max-height: 25px !important;
-        max-width: 80px !important;
+        max-height: 40px !important;
+        max-width: 120px !important;
         height: auto !important;
         width: auto !important;
         opacity: 0.5 !important;
         display: inline-block !important;
         vertical-align: middle !important;
-        margin-right: 8px !important;
         object-fit: contain !important;
     }
 
@@ -320,8 +363,8 @@ export const PRINT_STYLES = `
 export const MISC_STYLES = `
 /* Navigation & Footer */
 .bottom-nav { width: 100%; max-width: 850px; margin: 50px auto 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 0 20px; box-sizing: border-box; }
-.article-footer-knowledge-base { margin-top: 50px; pt-20px; border-top: 1px solid #f3f4f6; text-align: center; opacity: 0.4; font-size: 10px; color: #9ca3af; letter-spacing: 2px; text-transform: uppercase; font-family: sans-serif; padding-top: 20px; }
-.footer-logo { height: 25px; opacity: 0.5; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.article-footer-knowledge-base { margin-top: 50px; border-top: 1px solid #f3f4f6; text-align: center; opacity: 0.4; font-family: sans-serif; padding-top: 20px; display: flex; align-items: center; justify-content: center; }
+.footer-logo { height: 40px; opacity: 0.5; display: inline-block; vertical-align: middle; }
 .article-end-mark { text-align: center; margin: 40px auto 0; font-size: 10px; color: #e5e7eb; letter-spacing: 2px; }
 .nav-card { padding: 20px; border-radius: 16px; background: white; border: 1px solid #f3f4f6; display: flex; flex-direction: column; cursor: pointer; transition: all 0.3s; text-decoration: none; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
 .nav-card:hover { border-color: #00559630; transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }

@@ -713,6 +713,12 @@ export function getPrintableSkeleton(options: {
             overflow: hidden;
             flex-shrink: 0;
         }
+        /* 正文文章在预览中不强制297mm高度，避免底部白块 */
+        .print-page-wrapper.article-wrapper {
+            min-height: auto;
+            overflow: visible;
+        }
+        
 
         @media print {
             body { 
@@ -724,9 +730,32 @@ export function getPrintableSkeleton(options: {
                 width: 100% !important;
                 margin: 0 !important;
                 box-shadow: none !important;
-                page-break-after: always !important;
-                break-after: page !important;
-                min-height: 297mm !important;
+                page-break-before: always !important;
+                break-before: page !important;
+            }
+            /* 第一个可见元素前不加分页 */
+            .print-toolbar + .print-page-wrapper,
+            body > .print-page-wrapper:first-child {
+                page-break-before: auto !important;
+                break-before: auto !important;
+            }
+            /* 正文文章页：自然高度，内容可跨页 */
+            .print-page-wrapper.article-wrapper {
+                min-height: 0 !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+            /* 封面/封底/目录铺满一页 */
+            .print-page-wrapper:not(.article-wrapper):not(.pdf-full-page) {
+                min-height: 100vh !important;
+            }
+            /* 目录标题修复：从顶部排列，避免被 flex 居中截断 */
+            .print-page-wrapper.toc-page {
+                overflow: visible !important;
+            }
+            .print-page-wrapper.toc-page .toc-container {
+                justify-content: flex-start !important;
+                padding-top: 60px !important;
             }
             .no-print { display: none !important; }
         }
@@ -795,7 +824,7 @@ export function getPrintableSkeleton(options: {
         }
     </style>
 </head>
-<body>
+<body class="print-all">
     <div class="print-toolbar no-print">
         <div class="print-toolbar-content">
             <div class="print-toolbar-title">

@@ -5,6 +5,7 @@ import LoadingOverlay from '../../../components/LoadingOverlay';
 interface MainLayoutProps {
     // 状态标志
     isLoading: boolean;
+    loadingMessage?: string;
     isSidebarHidden: boolean;
     isImmersive: boolean;
     // 动作回调
@@ -19,6 +20,7 @@ interface MainLayoutProps {
 
 export const MainLayout: React.FC<MainLayoutProps> = ({
     isLoading,
+    loadingMessage,
     isSidebarHidden,
     isImmersive,
     onFloatMenuClick,
@@ -32,13 +34,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         <div className={`flex h-full w-full ${isSidebarHidden ? 'sidebar-hidden' : ''} ${isImmersive ? 'immersive-mode' : ''}`}>
 
             {/* Loading Overlay */}
-            <LoadingOverlay isLoading={isLoading} />
+            <LoadingOverlay isLoading={isLoading} message={loadingMessage} />
 
             {/* Floating Menu Button */}
             {(isImmersive || isSidebarHidden) && (
                 <button
                     onClick={onFloatMenuClick}
-                    className="fixed top-5 left-5 z-[50] bg-white/90 backdrop-blur border border-gray-200 rounded-full w-[44px] h-[44px] flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
+                    className="no-print fixed top-5 left-5 z-[50] bg-white/90 backdrop-blur border border-gray-200 rounded-full w-[44px] h-[44px] flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
                 >
                     <Icon name="menu" className="w-5 h-5 text-gray-600" />
                 </button>

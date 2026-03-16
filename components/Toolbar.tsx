@@ -31,7 +31,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   if (isFullscreen) return null;
 
   return (
-    <div className="absolute top-5 right-5 h-12 bg-white/90 backdrop-blur rounded-xl flex items-center justify-end px-4 gap-2 shadow-xl shadow-black/5 z-[50] border border-gray-100">
+    <div className="no-print absolute top-5 right-5 h-12 bg-white/90 backdrop-blur rounded-xl flex items-center justify-end px-4 gap-2 shadow-xl shadow-black/5 z-[50] border border-gray-100">
       <button
         onClick={onNewArticle}
         className="px-4 py-2 border-none bg-blue-600 text-white rounded-lg cursor-pointer text-xs font-bold hover:bg-blue-700 transition-all active:scale-95"

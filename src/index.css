@@ -47,88 +47,162 @@ body {
   height: 100%;
 }
 
-/* 全局打印样式优化 */
+/* ============================================================
+   从编辑器直接打印 — 所见即所得
+   点击工具栏"打印"按钮 或 Ctrl+P
+   ============================================================ */
 @media print {
 
-  /* 基础打印重置 */
+  /* 页面设置 — 强制 A4 物理基准 */
   @page {
-    margin: 1.5cm;
-    size: auto;
+    size: A4 portrait;
+    margin: 0 !important;
   }
 
-  /* 强制所有容器高度自适应并显示溢出内容 */
-  html,
-  body,
-  #root,
-  .flex,
-  .flex-col,
-  .flex-1,
-  [class*="overflow-y-auto"],
-  [class*="overflow-hidden"],
-  main,
-  article {
-    height: auto !important;
-    overflow: visible !important;
-    display: block !important;
-    float: none !important;
-    position: relative !important;
-  }
-
-  /* 隐藏非打印元素 */
-  .toolbar,
-  .sidebar,
-  .fab-nav,
-  .top-controls,
-  .navigation-capsule,
-  .pdf-expand-btn,
-  [role="toolbar"],
-  [aria-label="工具栏"],
-  button,
-  nav,
-  aside {
-    display: none !important;
-  }
-
-  /* 打印内容容器优化 */
-  .max-w-\[850px\] {
-    max-width: 100% !important;
-    width: 100% !important;
+  /* 打印样式基建层重构 — 绝对严格的 A4 物理基准 */
+  html, body, .sws-prose {
     margin: 0 !important;
     padding: 0 !important;
-    box-shadow: none !important;
-    min-height: auto !important;
+    max-width: none !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
-  /* 确保文字颜色和背景 */
+  /* ── 基础重置 ── */
+  html,
   body {
+    height: auto !important;
+    overflow: visible !important;
     background: white !important;
     color: black !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    font-family: inherit;
   }
 
-  /* 避免组件被截断 */
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* ── 隐藏非内容 UI ── */
+  .no-print {
+    display: none !important;
+  }
+
+  /* PDF canvas 预览器不可打印 */
+  .pdf-viewer-container {
+    display: none !important;
+  }
+
+  /* 视图层净化：隐藏所有纯装饰性UI，保留真实内容 */
+  .TechGrid,
+  .AmbientBg,
+  .DesignToggle {
+    display: none !important;
+  }
+
+  /* 隐藏UI交互元素（如"开始阅读"按钮） */
+  .clickable-area,
+  button,
+  .pdf-expand-btn {
+    display: none !important;
+  }
+
+  /* ── 解除高度和滚动限制 ──
+     这些规则只针对布局关键属性，不改变 display/position */
+  html,
+  body,
+  #root,
+  #root>div,
+  /* MainLayout 根 */
+  #root>div>div,
+  /* 主内容区 flex-1 */
+  #root>div>div>div
+
+  /* 滚动区 */
+    {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    min-height: 0 !important;
+  }
+
+  /* 滚动区去掉 padding（避免浪费打印纸张） */
+  .scrollbar-thin {
+    padding: 8px !important;
+  }
+
+  /* 文章容器去掉最大宽、阴影、最小高度 */
+  .sws-prose {
+    height: auto !important;
+  }
+
+  /* ── 文章内容样式 ── */
+
+  /* 避免段落/标题被截断 */
   .sws-prose p,
   .sws-prose h1,
   .sws-prose h2,
   .sws-prose h3,
-  .sws-prose img {
+  .sws-prose blockquote {
     page-break-inside: avoid;
     break-inside: avoid;
   }
 
-  /* 强制图片可见（应对懒加载占位符） */
-  img {
-    display: block !important;
+  /* 通用图片 */
+  .sws-prose img {
     max-width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
-  /* PDF 预览容器优化 */
-  .pdf-viewer-container {
-    height: auto !important;
-    min-height: auto !important;
+  /* PDF 页面图片 — 全出血铺满 A4 */
+  .sws-prose .pdf-page-container,
+  .sws-prose .media-container.pdf-page-container {
+    page-break-before: always !important;
+    break-before: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 锁定 A4 像素级容器 - 打印时强制精确尺寸 */
+  .pdf-page-container {
+    width: 210mm !important;
+    height: 297mm !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
     border: none !important;
-    overflow: visible !important;
+    background: white !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 强制图片贴合 A4 容器 */
+  .pdf-page-image {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    display: block !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 强制图片可见 */
+  img {
+    display: block !important;
   }
 }

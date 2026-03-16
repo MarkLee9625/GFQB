@@ -47,6 +47,7 @@ const AppContent: React.FC = () => {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isCatManagerOpen, setIsCatManagerOpen] = useState(false);
   const [useAlternateDesign, setUseAlternateDesign] = useState(false); // 控制是否使用杂志风设计
+  const [importProgress, setImportProgress] = useState<{ stage: string, details: string } | null>(null);
 
   // Export Options Modal State
   const [isExportOptionsModalOpen, setIsExportOptionsModalOpen] = useState(false);
@@ -362,8 +363,15 @@ const AppContent: React.FC = () => {
     const url = window.prompt('请输入微信公众号文章链接:');
     if (!url) return;
 
+    setImportProgress({ stage: 'starting', details: '准备开始抓取...' });
+
     try {
-      const result = await fetchWechatArticle(url);
+      const result = await fetchWechatArticle(url, (stage, details) => {
+        setImportProgress({ stage, details });
+      });
+
+      setImportProgress({ stage: 'saving', details: '正在保存到本地库...' });
+
       const newItem: Partial<Article> = {
         title: result.title,
         category: '智能制造',
@@ -372,12 +380,16 @@ const AppContent: React.FC = () => {
         fontSize: 18,
         lineHeight: 2.0
       };
+
       const newArt = await createArticle(newItem);
       if (newArt) {
         setCurrentId(newArt.id);
-        alert('导入成功！');
+        // 成功后延迟清空，让用户看到“导入成功”的提示（如果需要的话，或者直接清空）
+        setImportProgress(null);
+        setTimeout(() => alert('导入成功！'), 100);
       }
     } catch (err) {
+      setImportProgress(null);
       alert('导入失败: ' + (err instanceof Error ? err.message : '未知错误'));
     }
   };
@@ -395,9 +407,9 @@ const AppContent: React.FC = () => {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentId) return;
-    compressImage(file).then(base64 => {
-      if (uploadTypeRef.current === 'cover') updateArticle(currentId, { coverImage: base64 });
-      else updateArticle(currentId, { backImage: base64 });
+    fileToDataURL(file).then(base64 => {
+      if (uploadTypeRef.current === 'cover') updateArticle(currentId, { coverImage: base64 as string });
+      else updateArticle(currentId, { backImage: base64 as string });
     });
     e.target.value = '';
   };
@@ -552,7 +564,8 @@ const AppContent: React.FC = () => {
 
   return (
     <MainLayout
-      isLoading={loading}
+      isLoading={loading || !!importProgress}
+      loadingMessage={importProgress?.details}
       isSidebarHidden={isSidebarHidden}
       isImmersive={isImmersive}
       onFloatMenuClick={() => setIsSidebarHidden(false)}
@@ -668,7 +681,7 @@ const AppContent: React.FC = () => {
           <input type="file" ref={importInputRef} className="hidden" accept=".html,.json" onChange={handleImport} />
           <input type="file" ref={logoInputRef} className="hidden" accept="image/*" onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) compressImage(f).then(setLogo);
+            if (f) fileToDataURL(f).then((b64) => setLogo(b64 as string));
           }} />
           <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
         </>

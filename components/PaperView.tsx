@@ -277,25 +277,25 @@ export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode,
   if (!article) return null;
 
   // 备用设计切换按钮（仅在编辑模式显示）
-  const DesignToggle = () => (
-    isEditMode ? (
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-md border border-gray-200">
-        <span className="text-xs font-medium text-gray-600">设计模式:</span>
-        <button
-          onClick={() => setUseAlternateDesign(false)}
-          className={`px-2 py-1 text-xs rounded ${!useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-        >
-          原版
-        </button>
-        <button
-          onClick={() => setUseAlternateDesign(true)}
-          className={`px-2 py-1 text-xs rounded ${useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-        >
-          杂志风
-        </button>
-      </div>
-    ) : null
-  );
+const DesignToggle = () => (
+  isEditMode ? (
+    <div className="DesignToggle fixed top-4 right-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-md border border-gray-200">
+      <span className="text-xs font-medium text-gray-600">设计模式:</span>
+      <button
+        onClick={() => setUseAlternateDesign(false)}
+        className={`px-2 py-1 text-xs rounded ${!useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+      >
+        原版
+      </button>
+      <button
+        onClick={() => setUseAlternateDesign(true)}
+        className={`px-2 py-1 text-xs rounded ${useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+      >
+        杂志风
+      </button>
+    </div>
+  ) : null
+);
 
   if (article.category === '封面') {
     if (useAlternateDesign) {
@@ -782,7 +782,7 @@ export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode,
         </div>
         {article.abstract && (
           <div className="mt-6 p-4 bg-gray-50 border-l-4 border-brand-blue rounded-r-lg text-[14px] leading-relaxed text-gray-600 italic font-sans animate-in fade-in slide-in-from-left-2 duration-500">
-            <div className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-1 not-italic">摘要/导读</div>
+            <div className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-1 not-italic">摘要</div>
             {article.abstract}
           </div>
         )}
