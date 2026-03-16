@@ -13,15 +13,19 @@ export default defineConfig(({ mode }) => {
       hmr: {
         overlay: true,
       },
+      // 开发环境代理配置：将前端 /api 请求转发到 BFF 代理服务器
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          rewrite: (path) => path,
+        },
+      },
     },
     plugins: [
       tailwindcss(),
       react()
     ],
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || ''),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || '')
-    },
     resolve: {
       alias: {
         '@': path.resolve(process.cwd(), '.'),

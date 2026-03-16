@@ -1,11 +1,12 @@
 /**
- * AI 服务 - 用于调用 Gemini API 进行文章总结
+ * AI 服务 - 通过 BFF 代理调用 Gemini API 进行文章总结
+ * 注意：API Key 已从客户端移除，通过后端代理进行安全转发
  */
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '');
 // 使用用户指定的模型
 const MODEL_NAME = 'gemini-3-flash-preview';
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent`;
+// 前端通过本地 BFF 代理访问 Gemini API，解决跨域和 API Key 安全问题
+const API_URL = `/api/gemini/generate`;
 
 /**
  * AI 结果接口
@@ -22,10 +23,6 @@ export interface AIResult {
  * @returns Promise<AIResult> 
  */
 export async function generateArticleMeta(content: string): Promise<AIResult> {
-    if (!API_KEY) {
-        throw new Error('未配置 API Key，请在 .env.local 中配置 API_KEY');
-    }
-
     const plainText = content.replace(/<[^>]+>/g, '\n').replace(/\s+/g, ' ').trim().slice(0, 10000);
 
     const prompt = `
@@ -48,7 +45,7 @@ export async function generateArticleMeta(content: string): Promise<AIResult> {
 * **内容要求**：
     * **✅ 必须包含**：文章涉及的具体工艺环节或工种（例如：**涂装、焊接、总装、分段建造、下水**等）。
     * **✅ 包含**：核心设备或关键技术名词。
-    * **❌ 绝对禁止**：禁止生成“提质增效”、“智能化”、“数字化”、“先进技术”、“创新性”等泛泛而谈、没有实际技术细节的虚词。
+    * **❌ 绝对禁止**：禁止生成"提质增效"、"智能化"、"数字化"、"先进技术"、"创新性"等泛泛而谈、没有实际技术细节的虚词。
 
 ### 文章内容：
 ${plainText}
@@ -63,7 +60,7 @@ ${plainText}
 `;
 
     try {
-        const response = await fetch(`${API_URL}?key=${API_KEY}`, {
+        const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -73,7 +70,7 @@ ${plainText}
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(`API 请求失败: ${response.status}`);
+            throw new Error(`AI 服务请求失败: ${response.status}`);
         }
 
         const data = await response.json();
@@ -84,7 +81,7 @@ ${plainText}
             text = text.replace(/```json/g, '').replace(/```/g, '').trim();
             return JSON.parse(text) as AIResult;
         } else {
-            throw new Error('API 返回数据格式异常');
+            throw new Error('AI 服务返回数据格式异常');
         }
     } catch (error) {
         console.error('Generate meta failed:', error);
@@ -105,8 +102,6 @@ export async function generateArticleSummary(content: string): Promise<string> {
  * 仅生成标题
  */
 export async function generateTitleOnly(content: string): Promise<string> {
-    if (!API_KEY) throw new Error('未配置 API Key');
-
     // 截取前 5000 字以节省 Token
     const plainText = content.replace(/<[^>]+>/g, '\n').slice(0, 5000);
 
@@ -118,14 +113,14 @@ export async function generateTitleOnly(content: string): Promise<string> {
     请直接返回标题文本，不要包含 JSON 格式，不要包含引号或其他多余字符。
     `;
 
-    // 复用 fetch 逻辑 (请参考 generateArticleMeta 的实现)
-    const response = await fetch(`${API_URL}?key=${API_KEY}`, {
+    // 通过 BFF 代理调用 Gemini API
+    const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
     });
 
-    if (!response.ok) throw new Error('API 请求失败');
+    if (!response.ok) throw new Error('AI 服务请求失败');
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     return text.trim().replace(/^["']|["']$/g, ''); // 去除首尾引号
