@@ -18,7 +18,9 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: '.env.local' });
 
 // 健康检查：验证必需的环境变量
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+// 安全修复：移除对 VITE_ 前缀的兼容性，防止 API Key 被 Vite 打包泄露到前端
+// 警告：GEMINI_API_KEY 是后端专用密钥，绝不能以 VITE_ 开头
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // 快速失败机制：如果缺少 API Key，立即终止服务
 if (!GEMINI_API_KEY) {
@@ -41,7 +43,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '10mb' }));
+// 安全修复：限制请求体大小为 1MB，防止恶意发送超大文本耗尽内存
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Gemini API 配置
@@ -73,6 +76,19 @@ app.get('/api/health', (req, res) => {
 // Gemini API 代理端点
 app.post('/api/gemini/generate', async (req, res) => {
   try {
+    // 安全修复：暗号鉴权机制，防止外部直接调用代理接口盗刷额度
+    // 验证请求头中的自定义密钥，证明这是来自合法前端页面的请求
+    const proxySecret = process.env.PROXY_SECRET || 'my-super-secret-key';
+    const requestSecret = req.headers['x-sws-proxy-secret'];
+    
+    if (requestSecret !== proxySecret) {
+      console.warn('🚨 非法代理接口访问尝试：缺少或错误的 x-sws-proxy-secret 头部');
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: '无权访问此 API 接口',
+      });
+    }
+    
     const { contents } = req.body;
     
     if (!contents) {

@@ -62,7 +62,12 @@ ${plainText}
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                // 安全修复：添加自定义头部，向 BFF 代理服务器证明这是来自合法前端页面的请求
+                // 防止外部直接调用代理接口盗刷额度
+                'x-sws-proxy-secret': 'my-super-secret-key'
+            },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }]
             })
@@ -116,7 +121,12 @@ export async function generateTitleOnly(content: string): Promise<string> {
     // 通过 BFF 代理调用 Gemini API
     const response = await fetch(API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            // 安全修复：添加自定义头部，向 BFF 代理服务器证明这是来自合法前端页面的请求
+            // 防止外部直接调用代理接口盗刷额度
+            'x-sws-proxy-secret': 'my-super-secret-key'
+        },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
     });
 
