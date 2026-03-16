@@ -20,10 +20,14 @@
    ```
 
 2. **配置环境**:
-   在根目录创建 `.env.local` 文件，并设置您的 Gemini API 密钥：
+   在根目录创建 `.env.local` 文件，并设置您的 Gemini API 密钥（注意：这是后端代理专用密钥）：
    ```env
-   VITE_GEMINI_API_KEY=您的_GEMINI_API_KEY
+   GEMINI_API_KEY=您的_GEMINI_API_KEY
    ```
+
+   **重要安全说明**：
+   - API Key 通过后端 BFF 代理服务器安全转发，前端代码不再包含任何 API Key
+   - 确保 `.env.local` 文件不被提交到版本控制系统（已配置在 .gitignore 中）
 
 3. **运行开发服务器**:
    ```bash
@@ -180,11 +184,25 @@
 
 ## 📅 更新日志 (Changelog)
 
+### v1.2.4 (2026-03-16) - 安全架构升级与BFF代理模式
+*   **【安全架构】BFF代理模式**: 实施后端即前端（BFF）代理架构，彻底消除前端API Key硬编码的安全风险
+    *   **前端去敏感化**: 移除所有前端代码中的API Key硬编码，AI请求通过本地代理服务器转发
+    *   **代理服务器**: 新增 `server.js` 作为BFF代理，负责安全转发Gemini API请求
+    *   **暗号鉴权**: 实现自定义请求头部验证机制，防止外部直接调用代理接口盗刷额度
+    *   **环境变量安全**: 完善`.gitignore`确保`.env.local`文件被正确忽略，防止敏感配置泄露
+*   **【AI服务层】安全重构**:
+    *   `services/aiService.ts`: 重构为通过BFF代理调用Gemini API，添加安全请求头部验证
+    *   **快速失败机制**: 代理服务器启动时验证环境变量，缺少API Key立即终止服务
+    *   **请求限制**: 限制请求体大小为1MB，防止恶意发送超大文本耗尽内存
+*   **【配置管理】环境变量优化**:
+    *   **安全警告强化**: `.env.example` 添加详细的安全说明，防止误操作
+    *   **生产模式**: 支持生产环境下静态资源托管和API路由统一管理
+
 ### v1.2.3 (2026-03-16) - AI开发助手集成与性能优化
 *   **【AI开发助手】智能协作规范**: 集成 `.agent/skills` AI协作系统，确保开发过程中架构的优雅与一致性
-    *   `code-style-check`: 强化类型安全与 TailwindCSS 规范
-    *   `export-template-unification`: 确保编辑器预览与导出版视觉 100% 同位
-    *   `performance-optimization`: 专项处理大型 Base64 图片导致的内存压力（Blob Manager）
+    *   `code-style-check`: 强化类型安全与TailwindCSS规范
+    *   `export-template-unification`: 确保编辑器预览与导出版视觉100%同位
+    *   `performance-optimization`: 专项处理大型Base64图片导致的内存压力（Blob Manager）
 *   **【编辑器优化】媒体处理增强**:
     *   PDF智能提取：自动提取PDF标题、摘要和关键词作为文章元数据
     *   视频/GIF首帧提取：为打印版自动提取视频和GIF首帧，确保打印效果
