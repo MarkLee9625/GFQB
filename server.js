@@ -1,5 +1,5 @@
 /**
- * BFF 代理服务器 - 用于安全地转发 Gemini API 请求
+ * BFF 代理服务器 - 用于安全地转发 DeepSeek API 请求
  * 解决前端 API Key 硬编码的安全风险
  */
 
@@ -19,13 +19,13 @@ dotenv.config({ path: '.env.local' });
 
 // 健康检查：验证必需的环境变量
 // 安全修复：移除对 VITE_ 前缀的兼容性，防止 API Key 被 Vite 打包泄露到前端
-// 警告：GEMINI_API_KEY 是后端专用密钥，绝不能以 VITE_ 开头
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// 警告：DEEPSEEK_API_KEY 是后端专用密钥，绝不能以 VITE_ 开头
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 // 快速失败机制：如果缺少 API Key，立即终止服务
-if (!GEMINI_API_KEY) {
-  console.error('\x1b[31m%s\x1b[0m', '‼️  CRITICAL ERROR: 未检测到 GEMINI_API_KEY');
-  console.error('\x1b[31m%s\x1b[0m', '请在 .env.local 文件中配置 GEMINI_API_KEY=your_actual_api_key');
+if (!DEEPSEEK_API_KEY) {
+  console.error('\x1b[31m%s\x1b[0m', '‼️  CRITICAL ERROR: 未检测到 DEEPSEEK_API_KEY');
+  console.error('\x1b[31m%s\x1b[0m', '请在 .env.local 文件中配置 DEEPSEEK_API_KEY=your_actual_api_key');
   console.error('\x1b[31m%s\x1b[0m', '服务启动中断，请修复配置后重试');
   process.exit(1);
 }
@@ -47,9 +47,8 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Gemini API 配置
-const GEMINI_MODEL = 'gemini-3-flash-preview';
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// DeepSeek API 配置
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
 // 生产环境：托管前端静态资源
 if (process.env.NODE_ENV === 'production') {
@@ -69,12 +68,12 @@ app.get('/api/health', (req, res) => {
     service: 'sws-gongfa-bff-proxy',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    geminiApiConfigured: !!GEMINI_API_KEY,
+    deepseekApiConfigured: !!DEEPSEEK_API_KEY,
   });
 });
 
-// Gemini API 代理端点
-app.post('/api/gemini/generate', async (req, res) => {
+// DeepSeek API 代理端点
+app.post('/api/deepseek/generate', async (req, res) => {
   try {
     // 安全修复：暗号鉴权机制，防止外部直接调用代理接口盗刷额度
     // 验证请求头中的自定义密钥，证明这是来自合法前端页面的请求
@@ -89,45 +88,46 @@ app.post('/api/gemini/generate', async (req, res) => {
       });
     }
     
-    const { contents } = req.body;
+    const { messages } = req.body;
     
-    if (!contents) {
+    if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: '请求体必须包含 contents 字段',
+        message: '请求体必须包含 messages 数组',
       });
     }
 
-    const apiUrl = `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`;
+    const apiUrl = DEEPSEEK_API_URL;
     
-    console.log(`📤 转发请求到 Gemini API: ${apiUrl.substring(0, 80)}...`);
+    console.log(`📤 转发请求到 DeepSeek API: ${apiUrl.substring(0, 80)}...`);
     
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
       },
-      body: JSON.stringify({ contents }),
+      body: JSON.stringify(req.body),
     });
 
     // 透传状态码和响应头
     const responseData = await response.json();
     
     if (!response.ok) {
-      console.error('❌ Gemini API 错误:', {
+      console.error('❌ DeepSeek API 错误:', {
         status: response.status,
         statusText: response.statusText,
         data: responseData,
       });
       
       return res.status(response.status).json({
-        error: 'Gemini API Error',
+        error: 'DeepSeek API Error',
         status: response.status,
         details: responseData,
       });
     }
 
-    console.log('✅ Gemini API 请求成功');
+    console.log('✅ DeepSeek API 请求成功');
     res.status(response.status).json(responseData);
     
   } catch (error) {
@@ -152,7 +152,7 @@ app.listen(PORT, () => {
   console.log('\x1b[32m%s\x1b[0m', `🚀 BFF 代理服务器启动成功`);
   console.log('\x1b[36m%s\x1b[0m', `📍 本地地址: http://localhost:${PORT}`);
   console.log('\x1b[36m%s\x1b[0m', `📡 健康检查: http://localhost:${PORT}/api/health`);
-  console.log('\x1b[36m%s\x1b[0m', `🤖 Gemini 代理: http://localhost:${PORT}/api/gemini/generate`);
+  console.log('\x1b[36m%s\x1b[0m', `🤖 DeepSeek 代理: http://localhost:${PORT}/api/deepseek/generate`);
   console.log('\x1b[33m%s\x1b[0m', `🌍 环境模式: ${process.env.NODE_ENV || 'development'}`);
   
   if (process.env.NODE_ENV === 'production') {

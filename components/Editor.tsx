@@ -5,6 +5,7 @@ import { useBlobManager } from '../hooks/useBlobManager';
 import { fileToDataURL, compressImage } from '../src/utils/fileHelpers';
 import { generateArticleMeta, generateTitleOnly } from '../services/aiService';
 import { extractAbstractFromPdf, convertPdfToImages } from '../src/services/pdf';
+import LoadingOverlay from './LoadingOverlay';
 
 interface EditorProps {
   isOpen: boolean;
@@ -27,6 +28,8 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [showAiLoading, setShowAiLoading] = useState(false);
+  const [showTitleLoading, setShowTitleLoading] = useState(false);
 
   // 保存当前选区（光标位置）
   const saveSelection = useCallback(() => {
@@ -318,6 +321,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
       if (!window.confirm("这将覆盖现有标题，确定继续吗？")) return;
     }
 
+    setShowAiLoading(true);
     setIsGeneratingAi(true);
     try {
       const result = await generateArticleMeta(text);
@@ -330,6 +334,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     } catch (err) {
       alert("AI 总结生成失败: " + (err instanceof Error ? err.message : "未知错误"));
     } finally {
+      setShowAiLoading(false);
       setIsGeneratingAi(false);
     }
   };
@@ -338,6 +343,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     const text = contentRef.current?.innerText || '';
     if (!text || text.length < 50) return alert("内容太少，AI 无法生成标题");
 
+    setShowTitleLoading(true);
     setIsGeneratingTitle(true);
     try {
       const title = await generateTitleOnly(text);
@@ -345,6 +351,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     } catch (err) {
       alert("AI 标题生成失败: " + (err instanceof Error ? err.message : "未知错误"));
     } finally {
+      setShowTitleLoading(false);
       setIsGeneratingTitle(false);
     }
   };
@@ -419,10 +426,10 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     setIsProcessing(true);
     const timeoutId = window.setTimeout(async () => {
       try {
-        if (type === 'img') {
+                if (type === 'img') {
           const src = file.type === 'image/gif' ? await fileToDataURL(file) : await compressImage(file);
-          // 核心修复：在图片后追加 <p><br/></p>，确保光标有落脚点，且自动换行
-          insertHtml(`<img src="${src}" /><p><br/></p>`);
+                // 核心修复：在图片后追加 <p><br/></p>，确保光标有落脚点，且自动换行
+                insertHtml(`<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box; text-align: center; display: block;"><img src="${src}" style="width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0 auto; object-fit: contain;" class="max-w-full h-auto object-contain" /></div><p><br/></p>`);
         } else if (type === 'pdf') {
           const base64 = await fileToDataURL(file);
 
@@ -469,12 +476,14 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
                   // 手动构造 DOM 以确保稳定性（不使用大字符串）
                   const container = document.createElement('div');
-                  container.className = 'media-container pdf-page-container';
+                  container.className = 'media-container pdf-page-container overflow-hidden';
                   container.contentEditable = 'false';
+container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box; text-align: center; margin: 3rem auto; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; display: block;';
 
                   const img = document.createElement('img');
                   img.src = blobUrl;
-                  img.className = 'pdf-page-image';
+                  img.className = 'pdf-page-image max-w-full h-auto object-contain';
+                  img.style.cssText = 'width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0; padding: 0;';
                   img.alt = `PDF Page ${i + 1}`;
 
                   container.appendChild(img);
@@ -569,6 +578,22 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   return (
     <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
       <style>{CONSTANTS.UNIFIED_STYLES}</style>
+
+      {/* AI 摘要生成 Loading */}
+      {showAiLoading && (
+        <LoadingOverlay 
+          isLoading={showAiLoading} 
+          message="DeepSeek 正在进行深度逻辑推理，请耐心等待 (约 10-30 秒)..."
+        />
+      )}
+
+      {/* AI 标题生成 Loading */}
+      {showTitleLoading && (
+        <LoadingOverlay 
+          isLoading={showTitleLoading} 
+          message="DeepSeek 正在分析内容，生成精准标题..."
+        />
+      )}
 
       {isProcessing && (
         <div className="absolute inset-0 z-[200] bg-white/50 flex flex-col items-center justify-center backdrop-blur-[2px]">
@@ -711,7 +736,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
             </div>
 
             {/* Editable Body */}
-            <div className="flex-1 overflow-y-auto p-12 bg-white">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full">
               <div
                 ref={contentRef}
                 className="sws-prose editor-area min-h-full focus:outline-none"

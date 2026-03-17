@@ -40,6 +40,42 @@ body {
   min-height: 400px;
   font-size: 16px;
   line-height: 1.6;
+  max-width: 100%;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+.editor-area img, .editor-area video {
+  max-width: 100% !important;
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* 纸张拟物化与翻页间隙 */
+.editor-area .pdf-page-container {
+  width: 850px !important;
+  max-width: 100% !important;
+  background: #ffffff;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  margin: 3rem auto !important; /* 强翻页间隙 */
+  border-radius: 4px;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+/* 强制图片完美贴合纸张边缘，消除缩水 */
+.editor-area .pdf-page-container img {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  object-fit: fill !important;
 }
 
 /* 确保编辑器内容区域填充高度 */
@@ -48,148 +84,212 @@ body {
 }
 
 /* ============================================================
-   从编辑器直接打印 — 所见即所得
-   点击工具栏"打印"按钮 或 Ctrl+P
+   重构版打印样式 — 绝对单页隔离
+   任务：隐藏所有交互UI，确保PDF页面绝对分页
    ============================================================ */
 @media print {
-
-  /* 页面设置 — 强制 A4 物理基准 */
+  /* 页面设置 — A4 物理基准，无外边距 */
   @page {
     size: A4 portrait;
     margin: 0 !important;
   }
 
-  /* 打印样式基建层重构 — 绝对严格的 A4 物理基准 */
-  html, body, .sws-prose {
-    margin: 0 !important;
-    padding: 0 !important;
-    max-width: none !important;
-    background: white !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
-  /* ── 基础重置 ── */
-  html,
-  body {
-    height: auto !important;
-    overflow: visible !important;
-    background: white !important;
-    color: black !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
-  #root {
-    height: auto !important;
-    overflow: visible !important;
-  }
-
-  /* ── 隐藏非内容 UI ── */
-  .no-print {
-    display: none !important;
-  }
-
-  /* PDF canvas 预览器不可打印 */
-  .pdf-viewer-container {
-    display: none !important;
-  }
-
-  /* 视图层净化：隐藏所有纯装饰性UI，保留真实内容 */
-  .TechGrid,
-  .AmbientBg,
-  .DesignToggle {
-    display: none !important;
-  }
-
-  /* 隐藏UI交互元素（如"开始阅读"按钮） */
-  .clickable-area,
-  button,
-  .pdf-expand-btn {
-    display: none !important;
-  }
-
-  /* ── 解除高度和滚动限制 ──
-     这些规则只针对布局关键属性，不改变 display/position */
-  html,
-  body,
-  #root,
-  #root>div,
-  /* MainLayout 根 */
-  #root>div>div,
-  /* 主内容区 flex-1 */
-  #root>div>div>div
-
-  /* 滚动区 */
-    {
+  /* ========================================================
+     第1步：隐藏所有非内容交互UI（Sidebar, Toolbar等）
+     ======================================================== */
+  
+  /* 基础重置 — 解除所有屏幕布局约束 */
+  html, body, #root, #root > div {
     height: auto !important;
     max-height: none !important;
     overflow: visible !important;
     min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
-  /* 滚动区去掉 padding（避免浪费打印纸张） */
-  .scrollbar-thin {
-    padding: 8px !important;
+  /* 隐藏所有交互UI组件 */
+  .no-print,
+  /* 浮动菜单按钮（已在MainLayout中添加no-print类） */
+  .sidebar-hidden,
+  .immersive-mode,
+  /* Sidebar 组件 */
+  [class*="sidebar"],
+  /* Toolbar 组件 */
+  [class*="toolbar"],
+  /* 编辑器工具栏 */
+  [class*="editor-toolbar"],
+  /* 模态窗口 */
+  [class*="modal"],
+  /* 所有按钮 */
+  button,
+  /* 所有可点击交互元素 */
+  .clickable-area,
+  /* PDF预览容器 */
+  .pdf-viewer-container,
+  /* 浮动操作按钮 */
+  .float-button,
+  /* 设计切换按钮 */
+  .DesignToggle,
+  /* 装饰性背景 */
+  .TechGrid,
+  .AmbientBg,
+  /* 全屏按钮 */
+  .pdf-expand-btn,
+  /* 加载指示器 */
+  [class*="loading"],
+  [class*="spinner"],
+  /* 所有输入控件 */
+  input,
+  select,
+  textarea,
+  /* 导航胶囊 */
+  .NavigationCapsule,
+  /* 布局控制按钮 */
+  [class*="layout-control"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
   }
 
-  /* 文章容器去掉最大宽、阴影、最小高度 */
-  .sws-prose {
+  /* ========================================================
+     第2步：解除布局约束，主渲染区全宽
+     ======================================================== */
+  
+  /* MainLayout 容器：移除flex布局，改为块级全宽 */
+  #root > div,
+  #root > div > div {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
     height: auto !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: none !important;
   }
 
-  /* ── 文章内容样式 ── */
+  /* 主内容区域：全宽、无内边距、无背景色 */
+  #root > div > div > div {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    position: static !important;
+  }
 
-  /* 避免段落/标题被截断 */
+  /* 滚动区域：解除所有滚动约束 */
+  .scrollbar-thin {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+  }
+
+  /* ========================================================
+     第3步：内容区域样式优化
+     ======================================================== */
+  
+  /* 文章容器 */
+  .sws-prose {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+
+  /* 避免文本截断 */
   .sws-prose p,
   .sws-prose h1,
   .sws-prose h2,
   .sws-prose h3,
-  .sws-prose blockquote {
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-
-  /* 通用图片 */
-  .sws-prose img {
-    max-width: 100% !important;
-    height: auto !important;
-    display: block !important;
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-
-  /* PDF 页面图片 — 全出血铺满 A4 */
-  .sws-prose .pdf-page-container,
-  .sws-prose .media-container.pdf-page-container {
-    page-break-before: always !important;
-    break-before: page !important;
+  .sws-prose h4,
+  .sws-prose h5,
+  .sws-prose h6,
+  .sws-prose blockquote,
+  .sws-prose ul,
+  .sws-prose ol,
+  .sws-prose li {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    widows: 3 !important;
+    orphans: 3 !important;
   }
 
-  /* 锁定 A4 像素级容器 - 打印时强制精确尺寸 */
-  .pdf-page-container {
+  /* 防止标题与后续内容分离 */
+  .sws-prose h1,
+  .sws-prose h2,
+  .sws-prose h3 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* ========================================================
+     第4步：PDF页面绝对单页隔离（最高优先级）
+     ======================================================== */
+  
+  /* PDF页面容器 — 绝对物理A4尺寸 */
+  .pdf-page-container,
+  .media-container.pdf-page-container {
+    /* A4物理尺寸（210mm × 297mm） */
     width: 210mm !important;
     height: 297mm !important;
+    
+    /* 布局控制 */
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    
+    /* 边界控制 */
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: white !important;
+    box-sizing: border-box !important;
+    
+    /* 绝对分页控制 — 每个容器必须独占一页 */
+    page-break-before: always !important;
+    break-before: page !important;
     page-break-after: always !important;
     break-after: page !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    
+    /* 内容溢出控制 */
     overflow: hidden !important;
-    border: none !important;
-    background: white !important;
-    box-sizing: border-box !important;
+    
+    /* 防止缩放 */
+    transform: none !important;
+    max-width: none !important;
+    max-height: none !important;
   }
 
-  /* 强制图片贴合 A4 容器 */
+  /* PDF页面中的图片 — 贴合容器 */
   .pdf-page-image {
     width: 100% !important;
     height: 100% !important;
@@ -199,10 +299,70 @@ body {
     border: none !important;
     display: block !important;
     box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
-  /* 强制图片可见 */
-  img {
+  /* ========================================================
+     第5步：通用图片和媒体处理
+     ======================================================== */
+  
+  /* 所有图片响应式约束 */
+  img,
+  canvas,
+  svg {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
     display: block !important;
+  }
+
+  /* 封面封底图片特殊处理 */
+  .magazine-cover img,
+  .magazine-back-cover img {
+    width: 100% !important;
+    max-width: 85% !important;
+    max-height: 85% !important;
+    margin: 0 auto !important;
+  }
+
+  /* ========================================================
+     第6步：表格和复杂元素处理
+     ======================================================== */
+  
+  /* 表格分页优化 */
+  table {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* 防止表格跨页断裂 */
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* ========================================================
+     第7步：装饰性元素彻底隐藏
+     ======================================================== */
+  
+  /* 所有背景渐变、阴影、装饰性边框 */
+  [class*="gradient"],
+  [class*="shadow"],
+  [class*="blur"],
+  [class*="backdrop"] {
+    background: white !important;
+    box-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    opacity: 1 !important;
+  }
+
+  /* 透明和半透明元素 */
+  [class*="opacity-"],
+  [class*="transparent"] {
+    opacity: 1 !important;
+    background: white !important;
   }
 }

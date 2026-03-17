@@ -196,6 +196,20 @@ async function processMediaForPrint(content: string): Promise<string> {
         }
     }
 
+    // 3. 彻底清洗富文本数据，开启双维约束，并剥离原生宽高
+    const imgRegexAll = /<img([^>]*)>/gi;
+    processedContent = processedContent.replace(imgRegexAll, (match, attrs) => {
+        // 暴力剥离原生 width 和 height 属性
+        let cleanAttrs = attrs.replace(/\b(width|height)=["']?\d+["']?/gi, '');
+        
+        if (/style=["']([^"']*)["']/i.test(cleanAttrs)) {
+            cleanAttrs = cleanAttrs.replace(/style=["']([^"']*)["']/i, 'style="$1; max-width: 100% !important; max-height: 280mm !important; width: auto !important; height: auto !important; box-sizing: border-box; object-fit: contain;"');
+        } else {
+            cleanAttrs += ' style="max-width: 100% !important; max-height: 280mm !important; width: auto !important; height: auto !important; box-sizing: border-box; object-fit: contain;"';
+        }
+        return `<img${cleanAttrs}>`;
+    });
+
     return processedContent;
 }
 
@@ -428,12 +442,12 @@ export async function generatePrintableHTML(
 
                     console.log(`[Export] PDF转换成功，共${pdfImages.length}页`);
 
-                    // 生成PDF图片HTML
-                    const pdfImagesHtml = pdfImages.map((imgData, idx) =>
-                        `<div class="pdf-page-container">
-                            <img src="${imgData}" class="pdf-page-image" alt="PDF Page ${idx + 1}" />
-                        </div>`
-                    ).join('');
+// 生成PDF图片HTML - 修复DPI缩放溢出问题（强化边界约束）
+const pdfImagesHtml = pdfImages.map((imgData, idx) =>
+    `<div class="pdf-page-container" style="width: 100%; max-width: 100%; min-width: 0; overflow: hidden; box-sizing: border-box; page-break-after: always; break-after: page; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+        <img src="${imgData}" class="pdf-page-image" alt="PDF Page ${idx + 1}" style="max-width: 100% !important; max-height: 285mm !important; width: auto !important; height: auto !important; display: block; margin: 0 auto; box-sizing: border-box; object-fit: contain; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;" />
+    </div>`
+).join('');
 
                     // 将PDF图片追加到内容末尾
                     processedContent += pdfImagesHtml;

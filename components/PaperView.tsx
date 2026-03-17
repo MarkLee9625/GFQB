@@ -47,7 +47,7 @@ const useBlobUrl = (dataUrl: string | null | undefined) => {
   return blobUrl;
 };
 
-/**
+/** 
  * 带懒加载的图片组件
  */
 const LazyImage: React.FC<{
@@ -113,7 +113,7 @@ const LazyImage: React.FC<{
       <img
         src={src}
         alt={alt}
-        className={`${className} ${isPrinting ? 'force-print-visible' : ''}`}
+        className={`${className} max-w-full h-auto object-contain ${isPrinting ? 'force-print-visible' : ''}`}
         style={{
           ...style,
           opacity: (loaded || isPrinting) ? 1 : 0.8, // 提高初始透明度，减少淡入闪烁感
@@ -351,9 +351,9 @@ const DesignToggle = () => (
             </div>
 
             {/* 图片区域 - 杂志封面中心焦点 */}
-            <div className="flex-grow flex flex-col justify-center items-center z-[1] w-full min-h-[520px] mt-[5px] relative">
+            <div className="flex-grow flex flex-col justify-center items-center z-[1] w-full min-h-[520px] mt-[5px] relative overflow-hidden">
               <div
-                className={`w-full h-full flex items-center justify-center relative overflow-visible ${isEditMode ? (article.coverImage ? 'cursor-pointer' : 'cursor-pointer') : ''}`}
+                className={`w-full h-full flex items-center justify-center relative ${isEditMode ? (article.coverImage ? 'cursor-pointer' : 'cursor-pointer') : ''}`}
                 onClick={() => isEditMode && onImageUpload('cover')}
               >
                 {article.coverImage ? (
@@ -468,7 +468,7 @@ const DesignToggle = () => (
                 </div>
               </div>
             </div>
-            <div className="flex-grow flex flex-col justify-center items-center z-[1] w-full min-h-[500px] mt-[10px] relative">
+            <div className="flex-grow flex flex-col justify-center items-center z-[1] w-full min-h-[500px] mt-[10px] relative overflow-hidden">
               <div
                 className={`w-full h-full flex items-center justify-center relative overflow-visible ${isEditMode ? (article.coverImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
                 onWheel={handleWheel}
@@ -560,7 +560,7 @@ const DesignToggle = () => (
             </div>
 
             {/* 图片区域 - 杂志封底设计 */}
-            <div className="flex-grow w-full flex flex-col items-center justify-center relative overflow-visible min-h-[520px] mb-[25px]">
+            <div className="flex-grow w-full flex flex-col items-center justify-center relative overflow-hidden min-h-[520px] mb-[25px]">
               <div
                 className={`w-full h-full flex flex-col items-center justify-center ${isEditMode ? 'cursor-pointer' : ''}`}
                 onClick={() => isEditMode && onImageUpload('back')}
@@ -695,7 +695,7 @@ const DesignToggle = () => (
                 Sailing With Success
               </div>
             </div>
-            <div className="flex-grow w-full flex flex-col items-center justify-center relative overflow-visible min-h-[500px]">
+            <div className="flex-grow w-full flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
               <div
                 className={`w-full h-full flex flex-col items-center justify-center m-0 border-none ${isEditMode ? (article.backImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
                 onWheel={handleWheel}
@@ -798,7 +798,7 @@ const DesignToggle = () => (
       />
 
       {article.pdfData && (
-        <div className="w-full h-[85vh] min-h-[600px] border border-gray-200 mt-[30px] bg-gray-50 flex flex-col relative overflow-hidden rounded-[24px] pdf-viewer-container">
+        <div className="w-full h-[85vh] min-h-[600px] border border-gray-200 mt-[30px] bg-gray-50 flex flex-col relative overflow-hidden rounded-[24px] pdf-viewer-container" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
           {/* PDF Toolbar */}
           <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 select-none">
             <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
@@ -826,10 +826,41 @@ const DesignToggle = () => (
             </button>
           </div>
 
-          <div className="flex-1 w-full relative bg-gray-100/50">
+          <div className="flex-1 w-full relative bg-gray-100/50 overflow-hidden">
             {pdfUrl ? (
-              <div className="w-full h-full absolute inset-0">
-                <LazyPdfViewer pdfUrl={pdfUrl} />
+              <div className="w-full h-full absolute inset-0 overflow-auto" style={{ maxWidth: '100%', boxSizing: 'border-box' }}>
+                <div className="pdf-content-wrapper min-h-full w-full" style={{ 
+                  width: '100%', 
+                  maxWidth: '100%', 
+                  overflow: 'auto', 
+                  position: 'relative',
+                  padding: '20px'
+                }}>
+                  {/* 边界防护层 - 防止PDF内容溢出 */}
+                  <div className="pdf-boundary-guard" style={{ 
+                    width: '100%', 
+                    maxWidth: '100%', 
+                    height: '100%',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    backgroundColor: 'white',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
+                  }}>
+                    {/* PDF内容容器 - 严格的溢出控制 */}
+                    <div style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      position: 'relative', 
+                      overflow: 'auto',
+                      maxWidth: '100%',
+                      boxSizing: 'border-box'
+                    }}>
+                      <LazyPdfViewer pdfUrl={pdfUrl} />
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4">
@@ -849,10 +880,10 @@ const DesignToggle = () => (
           </div>
         </div>
       )}
-
-      <div className="mt-[50px] pt-[20px] border-t border-gray-100 text-center opacity-40 text-[10px] text-gray-400 tracking-[2px] uppercase font-sans">
+      
+      <div className="mt-8 pt-6 border-t border-gray-100 text-center">
         <img src={logo} className="h-[25px] opacity-50 inline-block align-middle mr-2" alt="" />
-        SWS KNOWLEDGE BASE
+        <span className="text-xs text-gray-400 font-bold tracking-widest">SWS KNOWLEDGE BASE</span>
       </div>
       <div className="text-center m-[40px_auto_0] text-[10px] text-gray-200 tracking-[2px]">- End of Article -</div>
     </div>
