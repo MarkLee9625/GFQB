@@ -184,6 +184,17 @@
 
 ## 📅 更新日志 (Changelog)
 
+### v1.2.5 (2026-03-17) - DeepSeek Reasoning 适配与Prompt工程化重构
+*   **【AI服务架构】DeepSeek Reasoning 模型深度适配**: 针对DeepSeek-Reasoner模型的架构特性进行专业优化
+    *   **128K上下文算力释放**: 大幅放宽字符截断限制，`generateArticleMeta`从10K提升至100K字符，`generateTitleOnly`从5K提升至50K字符
+    *   **System-User双轨制协议**: 重构单体Prompt为严格适配Reasoning模型的"System-User"双轨制结构
+    *   **Prompt工程化重构**: 剥离指令层与数据层，实现专业船舶工程"技术主编"人设的精细调优
+    *   **防御逻辑完整保留**: 完整继承BFF代理架构、安全头部验证和推理标签清洗函数，确保高可用性
+*   **【Prompt工程】船舶工程专业人设优化**:
+    *   `generateArticleMeta`: 实现标题、摘要、标签的三维专业规范，拒绝学术化和虚词，强调工程实战感
+    *   `generateTitleOnly`: 提供简练、专业、无标点的纯文本标题生成，符合工程文档要求
+    *   **输出格式标准化**: 严格执行JSON输出规范，确保与现有解析系统的无缝兼容
+
 ### v1.2.4 (2026-03-16) - 安全架构升级与BFF代理模式
 *   **【安全架构】BFF代理模式**: 实施后端即前端（BFF）代理架构，彻底消除前端API Key硬编码的安全风险
     *   **前端去敏感化**: 移除所有前端代码中的API Key硬编码，AI请求通过本地代理服务器转发
