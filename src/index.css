@@ -253,12 +253,12 @@ body {
      第4步：PDF页面绝对单页隔离（最高优先级）
      ======================================================== */
   
-  /* PDF页面容器 — 绝对物理A4尺寸 */
+  /* PDF页面容器 — 绝对物理A4尺寸 + 安全高度 */
   .pdf-page-container,
   .media-container.pdf-page-container {
-    /* A4物理尺寸（210mm × 297mm） */
+    /* A4物理尺寸（210mm × 297mm），使用安全高度防止子像素溢出 */
     width: 210mm !important;
-    height: 297mm !important;
+    height: 296.5mm !important; /* 安全阈值：防止子像素溢出导致空白页 */
     
     /* 布局控制 */
     display: flex !important;

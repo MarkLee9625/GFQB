@@ -9,7 +9,7 @@ interface ExportOptionsModalProps {
     useAlternateDesign: boolean;
     includeImages: boolean;
     optimizeForPrint: boolean;
-    exportType: 'reader' | 'printable';
+    exportType: 'reader' | 'printable' | 'pdf';
   }) => void;
 }
 
@@ -22,7 +22,7 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   const [selectedDesign, setSelectedDesign] = useState<'original' | 'magazine'>(currentUseAlternateDesign ? 'magazine' : 'original');
   const [includeImages, setIncludeImages] = useState(true);
   const [optimizeForPrint, setOptimizeForPrint] = useState(false);
-  const [exportType, setExportType] = useState<'reader' | 'printable'>('reader');
+  const [exportType, setExportType] = useState<'reader' | 'printable' | 'pdf'>('pdf');
 
   if (!isOpen) {
     return null;

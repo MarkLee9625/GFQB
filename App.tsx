@@ -16,7 +16,7 @@ import ExportOptionsModal from './components/ExportOptionsModal';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor';
 import { useJournal } from './hooks/useJournal';
 import { fetchWechatArticle } from './services/wechatImporter';
-import { generateReaderHTML, generatePrintableHTML } from './src/services/export';
+import { generateReaderHTML, generatePrintableHTML, exportToPdf, PdfExportOptions } from './src/services/export';
 import MainLayout from './src/components/Layout/MainLayout';
 
 const AppContent: React.FC = () => {
@@ -501,25 +501,36 @@ const AppContent: React.FC = () => {
     useAlternateDesign: boolean;
     includeImages: boolean;
     optimizeForPrint: boolean;
-    exportType: 'reader' | 'printable';
+    exportType: 'reader' | 'printable' | 'pdf';
   }) => {
     try {
-      let htmlContent: string;
-      let fileName: string;
-
-      if (options.exportType === 'printable') {
-        htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
-        fileName = `SWS_Printable_${new Date().toISOString().slice(0, 10)}.html`;
+      if (options.exportType === 'pdf') {
+        // 使用PDF双核导出引擎
+        const pdfOptions: PdfExportOptions = {
+          useAlternateDesign: options.useAlternateDesign,
+          includeImages: options.includeImages,
+          optimizeForPrint: options.optimizeForPrint,
+          logo: logo // 传递Logo信息
+        };
+        await exportToPdf(articles, pdfOptions);
       } else {
-        htmlContent = await generateReaderHTML(articles, options, { logo, sidebarMeta });
-        fileName = `SWS_Reader_${new Date().toISOString().slice(0, 10)}.html`;
-      }
+        let htmlContent: string;
+        let fileName: string;
 
-      const url = createExportBlob(htmlContent);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
+        if (options.exportType === 'printable') {
+          htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
+          fileName = `SWS_Printable_${new Date().toISOString().slice(0, 10)}.html`;
+        } else {
+          htmlContent = await generateReaderHTML(articles, options, { logo, sidebarMeta });
+          fileName = `SWS_Reader_${new Date().toISOString().slice(0, 10)}.html`;
+        }
+
+        const url = createExportBlob(htmlContent);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+      }
     } catch (error) {
       console.error('导出失败:', error);
       alert('导出过程中发生错误，请查看控制台。');

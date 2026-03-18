@@ -725,6 +725,12 @@ export function getPrintableSkeleton(options: {
                 background: white !important; 
                 padding: 0 !important; 
                 display: block !important;
+                height: auto !important; 
+                overflow: visible !important;
+            }
+            html {
+                height: auto !important; 
+                overflow: visible !important;
             }
             .print-page-wrapper {
                 width: 100% !important;
@@ -732,9 +738,10 @@ export function getPrintableSkeleton(options: {
                 box-shadow: none !important;
                 page-break-before: always !important;
                 break-before: page !important;
+                overflow: visible !important;
             }
             /* 第一个可见元素前不加分页 */
-            .print-toolbar + .print-page-wrapper,
+            .print-toolbar ~ .print-page-wrapper:first-of-type,
             body > .print-page-wrapper:first-child {
                 page-break-before: auto !important;
                 break-before: auto !important;
@@ -745,9 +752,16 @@ export function getPrintableSkeleton(options: {
                 height: auto !important;
                 overflow: visible !important;
             }
-            /* 封面/封底/目录铺满一页 */
+            
+            /* 目录页：自然高度，内容可跨页 */
+            .print-page-wrapper.toc-page {
+                height: auto !important; 
+                min-height: 0 !important;
+                overflow: visible !important;
+            }
+            /* 封面/封底/目录铺满一页 - 替换危险单位 */
             .print-page-wrapper:not(.article-wrapper):not(.pdf-full-page) {
-                min-height: 100vh !important;
+                min-height: 297mm !important;
             }
             /* 目录标题修复：从顶部排列，避免被 flex 居中截断 */
             .print-page-wrapper.toc-page {
@@ -758,6 +772,25 @@ export function getPrintableSkeleton(options: {
                 padding-top: 60px !important;
             }
             .no-print { display: none !important; }
+            
+            /* 终极防截断：强制解除所有排版容器的 Flex/Grid 约束与高度限制 */
+            html, body, .print-all,
+            .normal-container, 
+            .sws-prose, 
+            .article-body, 
+            .print-page-wrapper.article-wrapper * {
+                display: block !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                overflow: visible !important;
+                position: static !important;
+            }
+            /* 确保目录页容器也具有正确的属性 */
+            .print-page-wrapper.toc-page .toc-container {
+                overflow: visible !important;
+                height: auto !important;
+            }
         }
 
         /* 顶部提示工具条 */

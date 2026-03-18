@@ -14,7 +14,7 @@ const GLOBAL_PRINT_CSS = `
     @media print {
         /* 1. 彻底剥夺浏览器默认的页面边距，实现真正的全屏铺满 */
         @page {
-            size: A4;
+            size: 210mm 297mm !important; /* 绝对A4尺寸定义 */
             margin: 0 !important;
         }
 
@@ -24,6 +24,8 @@ const GLOBAL_PRINT_CSS = `
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
+            height: auto !important;
+            overflow: visible !important;
         }
 
         /* 3. 协同模板的分页：只定义自身基础属性，分页指令全部交由 templates.ts (page-break-before) 处理，彻底消灭双重空白页！ */
@@ -41,21 +43,26 @@ const GLOBAL_PRINT_CSS = `
             padding: 15mm 20mm !important;
         }
 
-        /* 5. PDF 专用页：严丝合缝的 A4 尺寸，零边距 */
+        /* 5. PDF 专用页：严丝合缝的 A4 尺寸，零边距 + 强制分页原语 */
         .print-page-wrapper.pdf-full-page {
             padding: 0 !important;
+            margin: 0 !important;
             width: 210mm !important;
-            height: 297mm !important; /* 强制绝对满高 */
+            height: 297mm !important; /* 绝对精确的 A4 高度，实现 100% 铺满 */
             overflow: hidden !important;
             background: white !important;
+            page-break-before: always !important;
+            page-break-inside: avoid !important;
+            break-before: page !important;
+            break-inside: avoid !important;
         }
 
-        /* 6. PDF 图片：裁剪填满容器，不留一丝白边 */
+        /* 6. PDF 图片：绝对贴合容器，不留一丝白边 - 强制 fill 模式，彻底消灭比例白边 */
         .pdf-full-page img {
             display: block !important;
             width: 100% !important;
             height: 100% !important;
-            object-fit: cover !important; 
+            object-fit: fill !important; /* 强制绝对填充，彻底消灭1mm安全缝隙和比例白边 */
             margin: 0 !important;
             padding: 0 !important;
             border: none !important;

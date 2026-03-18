@@ -108,20 +108,24 @@ const LazyImage: React.FC<{
     return <div ref={ref as React.RefObject<HTMLDivElement>} className={className} style={style} />;
   }
 
-  return (
-    <div ref={ref as React.RefObject<HTMLDivElement>} style={{ display: 'contents' }}>
-      <img
-        src={src}
-        alt={alt}
-        className={`${className} max-w-full h-auto object-contain ${isPrinting ? 'force-print-visible' : ''}`}
-        style={{
-          ...style,
-          opacity: (loaded || isPrinting) ? 1 : 0.8, // 提高初始透明度，减少淡入闪烁感
-          transition: 'opacity 0.2s ease-out', // 缩短过渡时间
-        }}
-        onLoad={() => setLoaded(true)}
-      />
-    </div>
+    return (
+      <div ref={ref as React.RefObject<HTMLDivElement>} style={{ display: 'contents' }}>
+        <img
+          src={src}
+          alt={alt}
+          className={`${className} max-w-full h-auto object-contain ${isPrinting ? 'force-print-visible' : ''}`}
+          style={{
+            ...style,
+            opacity: (loaded || isPrinting) ? 1 : 0.8, // 提高初始透明度，减少淡入闪烁感
+            transition: 'opacity 0.2s ease-out', // 缩短过渡时间
+          }}
+          onLoad={() => setLoaded(true)}
+          onError={(e) => {
+            console.error(`[LazyImage] 图片加载失败: ${src}`);
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      </div>
   );
 };
 

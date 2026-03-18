@@ -1,0 +1,273 @@
+import React from 'react';
+import { pdf } from '@react-pdf/renderer';
+import { PDFDocument } from 'pdf-lib';
+import { Article } from '../../../types';
+import { MyDocument } from './pdfComponents';
+
+/**
+ * PDF 导出引擎选项
+ */
+export interface PdfExportOptions {
+  /** 是否使用替代设计（杂志风格） */
+  useAlternateDesign?: boolean;
+  /** Logo Base64 数据 */
+  logo?: string;
+  /** 包含图片数据 */
+  includeImages?: boolean;
+  /** 优化打印布局 */
+  optimizeForPrint?: boolean;
+}
+
+/**
+ * 将 Base64 字符串转换为 ArrayBuffer
+ */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = atob(base64);
+  const length = binaryString.length;
+  const bytes = new Uint8Array(length);
+  for (let i = 0; i < length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * 检查是否为有效的 Base64 PDF 数据
+ */
+function isValidPdfData(data: string): boolean {
+  if (!data) return false;
+  // 简单检查：Base64 PDF 通常以特定模式开头
+  const base64Pattern = /^[A-Za-z0-9+/]+={0,2}$/;
+  if (!base64Pattern.test(data)) return false;
+  // 更精确的检查：尝试解析为二进制
+  try {
+    const buffer = base64ToArrayBuffer(data);
+    // PDF 文件的前几个字节应该是 "%PDF"
+    const header = new Uint8Array(buffer.slice(0, 4));
+    const headerStr = String.fromCharCode(...header);
+    return headerStr === '%PDF';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 使用 React-PDF 渲染文档并生成 ArrayBuffer
+ */
+async function renderDocumentBuffer(articles: Article[], options: PdfExportOptions): Promise<ArrayBuffer> {
+  try {
+    // 创建 React-PDF 文档组件
+    const documentElement = React.createElement(MyDocument, {
+      articles: articles,
+      options: {
+        useAlternateDesign: options.useAlternateDesign || false,
+        logo: options.logo || ''
+      }
+    });
+
+    // 渲染为 Blob，然后转换为 ArrayBuffer
+    const pdfInstance = pdf(documentElement);
+    const blob = await pdfInstance.toBlob();
+    return await blob.arrayBuffer();
+  } catch (error) {
+    console.error('[PDF Engine] React-PDF 渲染失败:', error);
+    throw new Error(`PDF渲染失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * 加载并验证 PDF 附件
+ */
+async function loadPdfAttachment(pdfData: string): Promise<PDFDocument> {
+  try {
+    // 验证 PDF 数据
+    if (!isValidPdfData(pdfData)) {
+      throw new Error('无效的PDF数据格式');
+    }
+
+    const buffer = base64ToArrayBuffer(pdfData);
+    const pdfDoc = await PDFDocument.load(buffer);
+    
+    // 验证 PDF 文档是否有效
+    const pageCount = pdfDoc.getPageCount();
+    if (pageCount === 0) {
+      throw new Error('PDF文档无有效页面');
+    }
+    
+    return pdfDoc;
+  } catch (error) {
+    console.error('[PDF Engine] PDF附件加载失败:', error);
+    throw new Error(`PDF附件加载失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * 合并主文档和PDF附件
+ */
+async function mergeDocuments(mainDoc: PDFDocument, articles: Article[]): Promise<PDFDocument> {
+  try {
+    // 遍历所有文章，查找并合并 PDF 附件
+    for (const article of articles) {
+      if (article.pdfData && isValidPdfData(article.pdfData)) {
+        try {
+          const attachmentDoc = await loadPdfAttachment(article.pdfData);
+          const pageCount = attachmentDoc.getPageCount();
+          
+          // 复制附件页面到主文档
+          for (let i = 0; i < pageCount; i++) {
+            const [copiedPage] = await mainDoc.copyPages(attachmentDoc, [i]);
+            mainDoc.addPage(copiedPage);
+          }
+          
+          console.log(`[PDF Engine] 已合并文章 "${article.title}" 的 PDF 附件（${pageCount} 页）`);
+        } catch (attachmentError) {
+          console.warn(`[PDF Engine] 文章 "${article.title}" 的PDF附件合并失败:`, attachmentError);
+          // 继续处理其他文章，不中断整个导出流程
+          continue;
+        }
+      }
+    }
+    
+    return mainDoc;
+  } catch (error) {
+    console.error('[PDF Engine] 文档合并失败:', error);
+    throw new Error(`文档合并失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * 触发浏览器下载PDF文件
+ */
+function downloadPdfFile(pdfBytes: Uint8Array, fileName: string = '工法情报_导出.pdf'): void {
+  try {
+    // 创建 Blob - 使用类型断言解决 TypeScript 严格类型检查
+    const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+    
+    // 创建下载链接
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    
+    // 触发下载
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // 清理 URL 对象
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+    
+    console.log(`[PDF Engine] PDF文件已生成: ${fileName} (${pdfBytes.length} 字节)`);
+  } catch (error) {
+    console.error('[PDF Engine] PDF下载失败:', error);
+    throw new Error(`PDF下载失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * 核心导出函数：生成并下载合并后的PDF
+ * 
+ * @param articles 文章数组
+ * @param options 导出选项
+ * @returns Promise<void>
+ */
+export async function exportToPdf(
+  articles: Article[],
+  options: PdfExportOptions = {}
+): Promise<void> {
+  try {
+    console.log('[PDF Engine] 开始PDF导出流程...');
+    
+    if (!articles || articles.length === 0) {
+      throw new Error('没有可导出的文章');
+    }
+    
+    // 1. 使用 React-PDF 渲染主文档
+    console.log('[PDF Engine] 正在渲染React-PDF文档...');
+    const mainBuffer = await renderDocumentBuffer(articles, options);
+    
+    // 2. 加载主文档到 pdf-lib
+    console.log('[PDF Engine] 正在加载主文档...');
+    const mainDoc = await PDFDocument.load(mainBuffer);
+    
+    // 3. 合并PDF附件
+    console.log('[PDF Engine] 正在合并PDF附件...');
+    const mergedDoc = await mergeDocuments(mainDoc, articles);
+    
+    // 4. 保存最终文档
+    console.log('[PDF Engine] 正在保存最终PDF...');
+    const pdfBytes = await mergedDoc.save();
+    
+    // 5. 触发下载
+    const fileName = generateFileName(articles, options);
+    downloadPdfFile(pdfBytes, fileName);
+    
+    console.log('[PDF Engine] PDF导出流程完成');
+  } catch (error) {
+    console.error('[PDF Engine] PDF导出失败:', error);
+    throw new Error(`PDF导出失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * 生成导出文件名
+ */
+function generateFileName(articles: Article[], options: PdfExportOptions): string {
+  try {
+    // 查找封面文章以获取期号和日期
+    const coverArticle = articles.find(article => article.category === '封面');
+    const issueText = coverArticle?.issueText || 'NO-01';
+    const dateText = coverArticle?.dateText || 'JAN-2025';
+    
+    // 清理文本，移除无效字符
+    const cleanIssue = issueText.replace(/[^\w\s-]/gi, '').replace(/\s+/g, '-');
+    const cleanDate = dateText.replace(/[^\w\s-]/gi, '').replace(/\s+/g, '-');
+    
+    return `工法情报_${cleanIssue}_${cleanDate}.pdf`;
+  } catch {
+    // 如果生成文件名失败，返回默认文件名
+    return '工法情报_导出.pdf';
+  }
+}
+
+/**
+ * 预览PDF（生成Blob URL，用于iframe预览）
+ * 
+ * @param articles 文章数组
+ * @param options 导出选项
+ * @returns Promise<string> Blob URL
+ */
+export async function previewPdf(
+  articles: Article[],
+  options: PdfExportOptions = {}
+): Promise<string> {
+  try {
+    if (!articles || articles.length === 0) {
+      throw new Error('没有可预览的文章');
+    }
+    
+    // 1. 使用 React-PDF 渲染主文档
+    const mainBuffer = await renderDocumentBuffer(articles, options);
+    
+    // 2. 加载主文档到 pdf-lib
+    const mainDoc = await PDFDocument.load(mainBuffer);
+    
+    // 3. 合并PDF附件
+    const mergedDoc = await mergeDocuments(mainDoc, articles);
+    
+    // 4. 保存为字节数组
+    const pdfBytes = await mergedDoc.save();
+    
+    // 5. 创建Blob URL
+    const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
+    const blobUrl = URL.createObjectURL(blob);
+    
+    console.log(`[PDF Engine] PDF预览URL已生成: ${blobUrl}`);
+    return blobUrl;
+  } catch (error) {
+    console.error('[PDF Engine] PDF预览生成失败:', error);
+    throw new Error(`PDF预览生成失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export default exportToPdf;

@@ -5,6 +5,9 @@ export { generateExportHtml } from './data';
 export { encodeContent, base64ToFile } from './utils/file';
 export { processMediaForPrint, extractVideoFirstFrame, extractGifFirstFrame } from './utils/media';
 
+// PDF 导出引擎
+export { exportToPdf, previewPdf, type PdfExportOptions } from './pdfEngine';
+
 // 注意保留 APP_CONFIG 等必要的常量导出
 import { CONSTANTS } from '../../../types';
 export const APP_CONFIG = {
