@@ -765,10 +765,10 @@ const DesignToggle = () => (
     }
   }
 
-      return (
-      <div className="flex-1 flex flex-col w-full text-left shrink-0">
+  return (
+    <div className="flex-1 flex flex-col w-full text-left min-h-0 min-w-0 h-full overflow-hidden bg-white">
       <style>{CONSTANTS.UNIFIED_STYLES}</style>
-      <div className="mb-[30px] text-left border-b border-gray-200 pb-[20px] shrink-0">
+      <div className="shrink-0 mb-[30px] text-left border-b border-gray-200 pb-[20px]">
         <h1 className="font-serif text-[32px] text-[#111] m-[0_0_15px_0] leading-[1.3] font-bold tracking-[1px]">{article.title}</h1>
         <div className="text-gray-400 text-[13px] flex flex-wrap gap-y-3 gap-x-5 font-medium font-sans uppercase tracking-[1px] items-center">
           {article.category !== '封面' && article.category !== '封底' && article.tags && article.tags.length > 0 ? (
@@ -793,7 +793,7 @@ const DesignToggle = () => (
       </div>
 
       <div
-        className={`sws-prose article-body mb-8 ${article.pdfData ? 'shrink-0' : 'flex-1 min-h-0'}`}
+        className={`sws-prose article-body ${article.pdfData ? 'flex-shrink-0 h-[40%] max-h-[50%] overflow-y-auto border-b border-gray-100 pb-4' : 'flex-1 min-h-0 overflow-y-auto'}`}
         style={{
           fontSize: `${article.fontSize || 18}px`,
           lineHeight: article.lineHeight || 2.0
@@ -802,63 +802,63 @@ const DesignToggle = () => (
       />
 
 {article.pdfData && (
-        <div className="w-full flex flex-col relative rounded-[24px] pdf-viewer-container border border-gray-200 shadow-sm flex-1 min-h-[800px] shrink-0">
-          {/* PDF Toolbar */}
-          <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 select-none">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-              <Icon name="file-text" className="w-4 h-4" />
-              PDF PREVIEW
-            </div>
-            <button
-              className="pdf-expand-btn bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue border border-brand-blue/20 rounded-md px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-2 transition-all"
-              onClick={(e) => {
-                e.stopPropagation();
-                const container = e.currentTarget.closest('.pdf-viewer-container');
-                if (container) {
-                  if (container.classList.contains('expanded')) {
-                    container.classList.remove('expanded');
-                    document.exitFullscreen?.();
-                  } else {
-                    container.classList.add('expanded');
-                    container.requestFullscreen?.();
-                  }
-                }
-              }}
-            >
-              <Icon name="maximize" className="w-3.5 h-3.5" />
-              <span>全屏阅读</span>
-            </button>
-          </div>
+  <div className="w-full flex flex-col relative rounded-[24px] pdf-viewer-container border border-gray-200 shadow-sm flex-1 min-h-0 min-w-0 overflow-hidden">
+    {/* PDF Toolbar */}
+    <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 select-none">
+      <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+        <Icon name="file-text" className="w-4 h-4" />
+        PDF PREVIEW
+      </div>
+      <button
+        className="pdf-expand-btn bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue border border-brand-blue/20 rounded-md px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-2 transition-all"
+        onClick={(e) => {
+          e.stopPropagation();
+          const container = e.currentTarget.closest('.pdf-viewer-container');
+          if (container) {
+            if (container.classList.contains('expanded')) {
+              container.classList.remove('expanded');
+              document.exitFullscreen?.();
+            } else {
+              container.classList.add('expanded');
+              container.requestFullscreen?.();
+            }
+          }
+        }}
+      >
+        <Icon name="maximize" className="w-3.5 h-3.5" />
+        <span>全屏阅读</span>
+      </button>
+    </div>
 
-          <div className="flex-1 w-full relative bg-gray-100/50 overflow-hidden min-h-0">
-            {pdfUrl ? (
-              <div className="w-full h-full flex flex-col p-4">
-                {/* 边界防护层 - 防止PDF内容溢出 */}
-                <div className="flex-1 w-full overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm">
-                  {/* PDF内容容器 */}
-                  <div className="w-full h-full overflow-auto">
-                    <LazyPdfViewer pdfUrl={pdfUrl} />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-                <div className="w-10 h-10 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
-                <div className="text-gray-400 text-sm">正在加载 PDF...</div>
-              </div>
-            )}
-            <a
-              href={pdfUrl || '#'}
-              target="_blank"
-              rel="noreferrer"
-              className="absolute bottom-4 right-4 z-10 bg-white px-3 py-1 text-xs border border-gray-300 rounded text-brand-blue no-underline flex items-center gap-1 hover:bg-gray-50"
-            >
-              <Icon name="external-link" className="w-3 h-3" />
-              无法预览？点击打开PDF
-            </a>
+    <div className="flex-1 w-full relative bg-gray-100/50 overflow-hidden min-h-0 h-full">
+      {pdfUrl ? (
+        <div className="w-full h-full flex flex-col p-4 relative">
+          {/* 边界防护层 - 防止PDF内容溢出 */}
+          <div className="flex-1 w-full overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm relative h-full">
+            {/* PDF内容容器 */}
+            <div className="w-full h-full overflow-auto relative">
+              <LazyPdfViewer pdfUrl={pdfUrl} />
+            </div>
           </div>
         </div>
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+          <div className="w-10 h-10 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
+          <div className="text-gray-400 text-sm">正在加载 PDF...</div>
+        </div>
       )}
+      <a
+        href={pdfUrl || '#'}
+        target="_blank"
+        rel="noreferrer"
+        className="absolute bottom-4 right-4 z-10 bg-white px-3 py-1 text-xs border border-gray-300 rounded text-brand-blue no-underline flex items-center gap-1 hover:bg-gray-50"
+      >
+        <Icon name="external-link" className="w-3 h-3" />
+        无法预览？点击打开PDF
+      </a>
+    </div>
+  </div>
+)}
 
       {/* Footer - Always visible */}
       <div className="mt-auto pt-8 border-t border-gray-100 text-center shrink-0">

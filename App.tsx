@@ -619,20 +619,22 @@ const AppContent: React.FC = () => {
             <p>请选择左侧文档</p>
           </div>
         ) : (
-          <div className={`w-full transition-all duration-300 origin-top ${isImmersive ? 'max-w-full min-h-screen m-0 p-0 flex items-center justify-center' : 'max-w-[850px] mx-auto bg-white flex flex-col flex-1 p-[40px] shadow-sm'}`}>
-            <PaperView
-              article={currentArticle}
-              logo={logo}
-              isEditMode={isEditMode}
-              onUpdate={updateArticle}
-              onImageUpload={(type) => {
-                uploadTypeRef.current = type;
-                coverInputRef.current?.click();
-              }}
-              onNext={() => handleNavigate('next')}
-              useAlternateDesign={useAlternateDesign}
-              setUseAlternateDesign={setUseAlternateDesign}
-            />
+            <div className={`w-full transition-all duration-300 origin-top ${isImmersive ? 'max-w-full min-h-screen m-0 p-0 flex items-center justify-center' : 'flex flex-row h-screen w-full overflow-hidden'}`}>
+            <div className="flex-1 min-w-0 h-full min-w-0 overflow-hidden bg-white">
+              <PaperView
+                article={currentArticle}
+                logo={logo}
+                isEditMode={isEditMode}
+                onUpdate={updateArticle}
+                onImageUpload={(type) => {
+                  uploadTypeRef.current = type;
+                  coverInputRef.current?.click();
+                }}
+                onNext={() => handleNavigate('next')}
+                useAlternateDesign={useAlternateDesign}
+                setUseAlternateDesign={setUseAlternateDesign}
+              />
+            </div>
 
             {(() => {
               const idx = sortedArticles.findIndex(a => a.id === currentId);
