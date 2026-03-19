@@ -766,9 +766,9 @@ const DesignToggle = () => (
   }
 
   return (
-    <div className="w-full text-left">
+    <div className="w-full text-left flex flex-col min-h-0 flex-1">
       <style>{CONSTANTS.UNIFIED_STYLES}</style>
-      <div className="mb-[30px] text-left border-b border-gray-200 pb-[20px]">
+      <div className="mb-[30px] text-left border-b border-gray-200 pb-[20px] shrink-0">
         <h1 className="font-serif text-[32px] text-[#111] m-[0_0_15px_0] leading-[1.3] font-bold tracking-[1px]">{article.title}</h1>
         <div className="text-gray-400 text-[13px] flex flex-wrap gap-y-3 gap-x-5 font-medium font-sans uppercase tracking-[1px] items-center">
           {article.category !== '封面' && article.category !== '封底' && article.tags && article.tags.length > 0 ? (
@@ -785,7 +785,7 @@ const DesignToggle = () => (
           )}
         </div>
         {article.abstract && (
-          <div className="mt-6 p-4 bg-gray-50 border-l-4 border-brand-blue rounded-r-lg text-[14px] leading-relaxed text-gray-600 italic font-sans animate-in fade-in slide-in-from-left-2 duration-500">
+          <div className="mt-6 p-4 bg-gray-50 border-l-4 border-brand-blue rounded-r-lg text-[14px] leading-relaxed text-gray-600 italic font-sans animate-in fade-in slide-in-from-left-2 duration-500 shrink-0">
             <div className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-1 not-italic">摘要</div>
             {article.abstract}
           </div>
@@ -793,7 +793,7 @@ const DesignToggle = () => (
       </div>
 
       <div
-        className="sws-prose article-body"
+        className={`sws-prose article-body mb-8 ${article.pdfData ? 'max-h-[50vh] overflow-auto' : ''}`}
         style={{
           fontSize: `${article.fontSize || 18}px`,
           lineHeight: article.lineHeight || 2.0
@@ -802,7 +802,7 @@ const DesignToggle = () => (
       />
 
       {article.pdfData && (
-        <div className="w-full h-[85vh] min-h-[600px] border border-gray-200 mt-[30px] bg-gray-50 flex flex-col relative overflow-hidden rounded-[24px] pdf-viewer-container" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
+        <div className="w-full flex flex-col relative overflow-hidden rounded-[24px] pdf-viewer-container flex-1 min-h-0">
           {/* PDF Toolbar */}
           <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 select-none">
             <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
@@ -830,36 +830,38 @@ const DesignToggle = () => (
             </button>
           </div>
 
-          <div className="flex-1 w-full relative bg-gray-100/50 overflow-hidden">
+          <div className="flex-1 w-full relative bg-gray-100/50 overflow-hidden min-h-0">
             {pdfUrl ? (
-              <div className="w-full h-full absolute inset-0 overflow-auto" style={{ maxWidth: '100%', boxSizing: 'border-box' }}>
-                <div className="pdf-content-wrapper min-h-full w-full" style={{ 
+              <div className="w-full h-full overflow-hidden min-h-0" style={{ boxSizing: 'border-box' }}>
+                <div className="h-full w-full min-h-0" style={{ 
                   width: '100%', 
                   maxWidth: '100%', 
-                  overflow: 'auto', 
                   position: 'relative',
-                  padding: '20px'
+                  padding: '20px',
+                  height: '100%',
+                  minHeight: 0
                 }}>
                   {/* 边界防护层 - 防止PDF内容溢出 */}
-                  <div className="pdf-boundary-guard" style={{ 
+                  <div className="h-full w-full min-h-0" style={{ 
                     width: '100%', 
                     maxWidth: '100%', 
-                    height: '100%',
                     position: 'relative',
                     overflow: 'hidden',
                     border: '1px solid #e5e7eb',
                     borderRadius: '12px',
                     backgroundColor: 'white',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                    height: '100%',
+                    minHeight: 0
                   }}>
                     {/* PDF内容容器 - 严格的溢出控制 */}
-                    <div style={{ 
+                    <div className="h-full w-full overflow-auto min-h-0" style={{ 
                       width: '100%', 
-                      height: '100%', 
                       position: 'relative', 
-                      overflow: 'auto',
                       maxWidth: '100%',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      height: '100%',
+                      minHeight: 0
                     }}>
                       <LazyPdfViewer pdfUrl={pdfUrl} />
                     </div>
@@ -867,7 +869,7 @@ const DesignToggle = () => (
                 </div>
               </div>
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4 min-h-0">
                 <div className="w-10 h-10 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
                 <div className="text-gray-400 text-sm">正在加载 PDF...</div>
               </div>
@@ -885,11 +887,15 @@ const DesignToggle = () => (
         </div>
       )}
       
-      <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-        <img src={logo} className="h-[25px] opacity-50 inline-block align-middle mr-2" alt="" />
-        <span className="text-xs text-gray-400 font-bold tracking-widest">SWS KNOWLEDGE BASE</span>
-      </div>
-      <div className="text-center m-[40px_auto_0] text-[10px] text-gray-200 tracking-[2px]">- End of Article -</div>
+      {!article.pdfData && (
+        <>
+          <div className="mt-8 pt-6 border-t border-gray-100 text-center shrink-0">
+            <img src={logo} className="h-[25px] opacity-50 inline-block align-middle mr-2" alt="" />
+            <span className="text-xs text-gray-400 font-bold tracking-widest">SWS KNOWLEDGE BASE</span>
+          </div>
+          <div className="text-center m-[40px_auto_0] text-[10px] text-gray-200 tracking-[2px] shrink-0">- End of Article -</div>
+        </>
+      )}
     </div>
   );
 };

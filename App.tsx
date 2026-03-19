@@ -619,7 +619,7 @@ const AppContent: React.FC = () => {
             <p>请选择左侧文档</p>
           </div>
         ) : (
-          <div className={`w-full transition-all duration-300 origin-top ${isImmersive ? 'max-w-full min-h-screen m-0 p-0 flex items-center justify-center' : 'max-w-[850px] mx-auto bg-white min-h-[1000px] p-[80px_100px] shadow-sm mb-[40px]'}`}>
+          <div className={`w-full transition-all duration-300 origin-top ${isImmersive ? 'max-w-full min-h-screen m-0 p-0 flex items-center justify-center' : 'max-w-[850px] mx-auto bg-white flex flex-col flex-1 p-[40px] shadow-sm'}`}>
             <PaperView
               article={currentArticle}
               logo={logo}

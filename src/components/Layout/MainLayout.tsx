@@ -55,10 +55,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                 {/* Toolbar Slot */}
                 {toolbar}
 
-                {/* Content Area Slot */}
-                <div className="flex-1 overflow-y-auto p-[40px] relative scroll-smooth overscroll-none scrollbar-thin">
-                    {content}
-                </div>
+            {/* Content Area Slot */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                {content}
+            </div>
 
             </div>
 
