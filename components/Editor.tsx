@@ -576,7 +576,7 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-[100] flex flex-col overflow-y-auto w-full">
       <style>{CONSTANTS.UNIFIED_STYLES}</style>
 
       {/* AI 摘要生成 Loading */}
@@ -619,9 +619,9 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
         </div>
 
         {/* Workspace: Split Panel */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-h-full">
           {/* Left Panel: Content Editor */}
-          <div className="flex-1 flex flex-col border-r border-gray-100 bg-gray-50/30">
+          <div className="flex-1 flex flex-col border-r border-gray-100 bg-gray-50/30 min-h-0">
             {/* Dynamic Title Input */}
             <div className="p-8 pb-4 flex items-center gap-2">
               <input

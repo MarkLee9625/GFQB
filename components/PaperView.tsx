@@ -765,8 +765,8 @@ const DesignToggle = () => (
     }
   }
 
-  return (
-    <div className="w-full text-left flex flex-col flex-1 min-h-0">
+      return (
+      <div className="flex-1 flex flex-col w-full text-left shrink-0">
       <style>{CONSTANTS.UNIFIED_STYLES}</style>
       <div className="mb-[30px] text-left border-b border-gray-200 pb-[20px] shrink-0">
         <h1 className="font-serif text-[32px] text-[#111] m-[0_0_15px_0] leading-[1.3] font-bold tracking-[1px]">{article.title}</h1>
@@ -793,7 +793,7 @@ const DesignToggle = () => (
       </div>
 
       <div
-        className={`sws-prose article-body mb-8 ${article.pdfData ? '' : 'flex-1 min-h-0'}`}
+        className={`sws-prose article-body mb-8 ${article.pdfData ? 'shrink-0' : 'flex-1 min-h-0'}`}
         style={{
           fontSize: `${article.fontSize || 18}px`,
           lineHeight: article.lineHeight || 2.0
@@ -802,7 +802,7 @@ const DesignToggle = () => (
       />
 
 {article.pdfData && (
-        <div className="w-full flex flex-col relative rounded-[24px] pdf-viewer-container border border-gray-200 shadow-sm flex-1 min-h-0 min-h-[800px]">
+        <div className="w-full flex flex-col relative rounded-[24px] pdf-viewer-container border border-gray-200 shadow-sm flex-1 min-h-[800px] shrink-0">
           {/* PDF Toolbar */}
           <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 select-none">
             <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">

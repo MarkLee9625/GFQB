@@ -50,13 +50,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             {sidebar}
 
             {/* Main Content Area */}
-            <div className={`flex-1 flex flex-col relative transition-[margin] duration-300 w-full overflow-hidden ${isSidebarHidden ? 'ml-0' : ''}`}>
+            <div className={`flex-1 flex flex-col relative transition-[margin] duration-300 w-full ${isSidebarHidden ? 'ml-0' : ''}`}>
 
                 {/* Toolbar Slot */}
                 {toolbar}
 
             {/* Content Area Slot */}
-            <div className="flex-1 overflow-y-auto p-[40px] relative scroll-smooth overscroll-none scrollbar-thin">
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-[40px] relative scroll-smooth overscroll-none scrollbar-thin">
                 {content}
             </div>
 
