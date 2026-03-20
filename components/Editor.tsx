@@ -7,6 +7,34 @@ import { generateArticleMeta, generateTitleOnly } from '../services/aiService';
 import { extractAbstractFromPdf, convertPdfToImages } from '../src/services/pdf';
 import LoadingOverlay from './LoadingOverlay';
 
+// 封面/封底预览组件
+const AmbientBg: React.FC<{ src: string | null | undefined }> = ({ src }) => {
+  if (!src) return null;
+  return (
+    <div
+      className="absolute inset-0 w-full h-full bg-cover bg-center opacity-30 pointer-events-none z-0 transition-opacity duration-700"
+      style={{
+        backgroundImage: `url('${src}')`,
+        filter: 'blur(60px) saturate(180%) brightness(1.05)',
+        transform: 'scale(1.2)',
+      }}
+    />
+  );
+};
+
+const TechGrid: React.FC = () => (
+  <div
+    className="absolute inset-0 w-full h-full pointer-events-none z-[0] opacity-[0.03]"
+    style={{
+      backgroundImage: `
+            linear-gradient(#005596 1px, transparent 1px),
+            linear-gradient(90deg, #005596 1px, transparent 1px)
+        `,
+      backgroundSize: '40px 40px'
+    }}
+  />
+);
+
 interface EditorProps {
   isOpen: boolean;
   article: Partial<Article>;
@@ -736,21 +764,31 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
             </div>
 
             {/* Editable Body */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full">
-              <div
-                ref={contentRef}
-                className="sws-prose editor-area min-h-full focus:outline-none"
-                contentEditable
-                onMouseUp={saveSelection}
-                onKeyUp={saveSelection}
-                onBlur={saveSelection} // [新增] 失去焦点时保存光标
-                style={{
-                  fontSize: `${formData.fontSize}px`,
-                  lineHeight: formData.lineHeight,
-                  textAlign: 'justify'
-                }}
-              />
-            </div>
+            {formData.category === '封面' || formData.category === '封底' ? (
+              <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full flex items-center justify-center">
+                <div className="text-center text-gray-400">
+                  <div className="text-lg font-bold mb-2">封面/封底专属预览</div>
+                  <div className="text-sm">请在右侧控制面板上传/更换图片</div>
+                  <div className="text-xs mt-1">当前为封面排版专属预览视图</div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full">
+                <div
+                  ref={contentRef}
+                  className="sws-prose editor-area min-h-full focus:outline-none"
+                  contentEditable
+                  onMouseUp={saveSelection}
+                  onKeyUp={saveSelection}
+                  onBlur={saveSelection} // [新增] 失去焦点时保存光标
+                  style={{
+                    fontSize: `${formData.fontSize}px`,
+                    lineHeight: formData.lineHeight,
+                    textAlign: 'justify'
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Right Panel: Settings & Meta */}
@@ -923,7 +961,7 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
         </div>
 
         {/* Footer Actions */}
-        <div className="p-6 border-t border-gray-100 flex justify-between items-center bg-gray-50/30">
+        <div className="p-6 border-t border-gray-100 flex justify-between items-center bg-white">
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Icon name="lock" className="w-3 h-3" />
             所有更改已自动缓存到本地数据库

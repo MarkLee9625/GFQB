@@ -483,20 +483,20 @@ const DesignToggle = () => (
               >
                 {article.coverImage ? (
                   coverUrl ? (
-                    <LazyImage
-                      src={coverUrl}
-                      alt="Cover"
-                      className="w-auto h-full max-w-full max-h-full p-4 object-contain shadow-2xl relative z-[1] rounded-[8px] origin-center will-change-transform transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto"
-                      style={{
-                        transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
-                        boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.5)'
-                      }}
-                      placeholder={
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
-                        </div>
-                      }
-                    />
+      <LazyImage
+        src={coverUrl}
+        alt="Cover"
+        className="w-auto h-full max-w-full max-h-full p-4 object-contain shadow-2xl relative z-[1] rounded-[8px] origin-center will-change-transform transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto mix-blend-multiply"
+        style={{
+          transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
+          boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.5)'
+        }}
+        placeholder={
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
+          </div>
+        }
+      />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>

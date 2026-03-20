@@ -121,6 +121,16 @@ object[type="application/pdf"] {
     margin: 0 !important;
   }
 
+  /* 全局强制解绑约束 - 修复长文章截断问题 */
+  * {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  
+  html, body, #root {
+    height: auto !important;
+  }
+
   /* ========================================================
      第1步：隐藏所有非内容交互UI（Sidebar, Toolbar等）
      ======================================================== */
@@ -158,8 +168,6 @@ object[type="application/pdf"] {
   button,
   /* 所有可点击交互元素 */
   .clickable-area,
-  /* PDF预览容器 */
-  .pdf-viewer-container,
   /* 浮动操作按钮 */
   .float-button,
   /* 设计切换按钮 */
@@ -189,6 +197,14 @@ object[type="application/pdf"] {
     padding: 0 !important;
     border: none !important;
     overflow: hidden !important;
+  }
+  /* 确保 PDF 查看器在打印时可见 */
+  .pdf-viewer-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    width: auto !important;
   }
 
   /* ========================================================
@@ -251,7 +267,6 @@ object[type="application/pdf"] {
   }
 
   /* 避免文本截断 */
-  .sws-prose p,
   .sws-prose h1,
   .sws-prose h2,
   .sws-prose h3,
@@ -259,9 +274,8 @@ object[type="application/pdf"] {
   .sws-prose h5,
   .sws-prose h6,
   .sws-prose blockquote,
-  .sws-prose ul,
-  .sws-prose ol,
-  .sws-prose li {
+  img,
+  table {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     widows: 3 !important;

@@ -43,12 +43,13 @@ const GLOBAL_PRINT_CSS = `
             padding: 15mm 20mm !important;
         }
 
-        /* 5. PDF 专用页：严丝合缝的 A4 尺寸，零边距 + 强制分页原语 */
+        /* 5. PDF 专用页：自适应高度 + 最大A4限制，消除双重空白页 */
         .print-page-wrapper.pdf-full-page {
             padding: 0 !important;
             margin: 0 !important;
-            width: 210mm !important;
-            height: 297mm !important; /* 绝对精确的 A4 高度，实现 100% 铺满 */
+            width: 100% !important;
+            height: 100vh !important;
+            max-height: 297mm !important; /* 自适应高度，但不超过A4页面限制 */
             overflow: hidden !important;
             background: white !important;
             page-break-before: always !important;

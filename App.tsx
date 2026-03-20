@@ -619,26 +619,24 @@ const AppContent: React.FC = () => {
             <p>请选择左侧文档</p>
           </div>
             ) : (
-            <div className="flex flex-col w-full h-auto gap-8 pb-12 relative">
-              {/* PaperView 容器：移除高度限制，允许内容自然撑开 */}
-              <div className="w-full bg-white rounded-lg shadow-sm">
-                <PaperView
-                  article={currentArticle}
-                  logo={logo}
-                  isEditMode={isEditMode}
-                  onUpdate={updateArticle}
-                  onImageUpload={(type) => {
-                    uploadTypeRef.current = type;
-                    coverInputRef.current?.click();
-                  }}
-                  onNext={() => handleNavigate('next')}
-                  useAlternateDesign={useAlternateDesign}
-                  setUseAlternateDesign={setUseAlternateDesign}
-                />
-              </div>
+            <div className="flex flex-col w-full h-auto pb-12 relative bg-white rounded-lg shadow-sm">
+              {/* PaperView 容器：移除额外包装，直接使用 PaperView 的白色背景 */}
+              <PaperView
+                article={currentArticle}
+                logo={logo}
+                isEditMode={isEditMode}
+                onUpdate={updateArticle}
+                onImageUpload={(type) => {
+                  uploadTypeRef.current = type;
+                  coverInputRef.current?.click();
+                }}
+                onNext={() => handleNavigate('next')}
+                useAlternateDesign={useAlternateDesign}
+                setUseAlternateDesign={setUseAlternateDesign}
+              />
 
-              {/* NavigationCapsule 容器：置于文章正下方并水平居中 */}
-              <div className="flex justify-center w-full mt-4 pb-8">
+              {/* NavigationCapsule 容器：置于文章正下方，移除 margin-top，使用 padding-top 确保连续背景 */}
+              <div className="flex justify-center w-full pt-4 pb-8">
                 {(() => {
                   const idx = sortedArticles.findIndex(a => a.id === currentId);
                   const prevArt = idx > 0 ? sortedArticles[idx - 1] : null;
