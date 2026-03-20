@@ -355,9 +355,9 @@ const DesignToggle = () => (
             </div>
 
             {/* 图片区域 - 杂志封面中心焦点 */}
-            <div className="flex-grow flex flex-col justify-center items-center z-[1] w-full min-h-[520px] mt-[5px] relative overflow-hidden">
+            <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative my-4">
               <div
-                className={`w-full h-full flex items-center justify-center relative ${isEditMode ? (article.coverImage ? 'cursor-pointer' : 'cursor-pointer') : ''}`}
+                className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? (article.coverImage ? 'cursor-pointer' : 'cursor-pointer') : ''}`}
                 onClick={() => isEditMode && onImageUpload('cover')}
               >
                 {article.coverImage ? (
@@ -366,9 +366,9 @@ const DesignToggle = () => (
                       <LazyImage
                         src={coverUrl}
                         alt="Cover"
-                        className="w-auto h-auto max-w-[85%] max-h-[85%] object-contain relative z-[1] shadow-2xl origin-center will-change-transform rounded-[4px] transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02]"
+                        className="w-auto h-auto max-w-full max-h-full object-contain shadow-2xl relative z-[1] rounded-[8px] transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto"
                         style={{
-                          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.4)'
+                          boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.3)'
                         }}
                         placeholder={
                           <div className="w-full h-full flex items-center justify-center">
@@ -472,9 +472,9 @@ const DesignToggle = () => (
                 </div>
               </div>
             </div>
-            <div className="flex-grow flex flex-col justify-center items-center z-[1] w-full min-h-[500px] mt-[10px] relative overflow-hidden">
+            <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative overflow-hidden my-4">
               <div
-                className={`w-full h-full flex items-center justify-center relative overflow-visible ${isEditMode ? (article.coverImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
+                className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? (article.coverImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
                 onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
@@ -486,7 +486,7 @@ const DesignToggle = () => (
                     <LazyImage
                       src={coverUrl}
                       alt="Cover"
-                      className="w-auto h-auto max-w-full max-h-full object-contain relative z-[1] shadow-2xl origin-center will-change-transform rounded-sm"
+                      className="w-auto h-full max-w-full max-h-full p-4 object-contain shadow-2xl relative z-[1] rounded-[8px] origin-center will-change-transform transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto"
                       style={{
                         transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
                         boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.5)'
@@ -564,9 +564,9 @@ const DesignToggle = () => (
             </div>
 
             {/* 图片区域 - 杂志封底设计 */}
-            <div className="flex-grow w-full flex flex-col items-center justify-center relative overflow-hidden min-h-[520px] mb-[25px]">
+            <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative overflow-hidden my-4">
               <div
-                className={`w-full h-full flex flex-col items-center justify-center ${isEditMode ? 'cursor-pointer' : ''}`}
+                className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? 'cursor-pointer' : ''}`}
                 onClick={() => isEditMode && onImageUpload('back')}
               >
                 {article.backImage ? (
@@ -575,7 +575,7 @@ const DesignToggle = () => (
                       <LazyImage
                         src={backUrl}
                         alt="Back Cover"
-                        className="w-auto h-auto max-w-[80%] max-h-[80%] object-contain shadow-2xl relative z-[1] rounded-[8px] transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto"
+                        className="w-auto h-auto max-w-full max-h-full object-contain shadow-2xl relative z-[1] rounded-[8px] transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto"
                         style={{
                           boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.3)'
                         }}
@@ -699,9 +699,9 @@ const DesignToggle = () => (
                 Sailing With Success
               </div>
             </div>
-            <div className="flex-grow w-full flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]">
+            <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative overflow-hidden my-4">
               <div
-                className={`w-full h-full flex flex-col items-center justify-center m-0 border-none ${isEditMode ? (article.backImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
+                className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? (article.backImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
                 onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
@@ -766,7 +766,7 @@ const DesignToggle = () => (
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full text-left min-h-0 min-w-0 h-full overflow-hidden bg-white">
+    <div className="flex flex-col w-full text-left bg-white relative">
       <style>{CONSTANTS.UNIFIED_STYLES}</style>
       <div className="shrink-0 mb-[30px] text-left border-b border-gray-200 pb-[20px]">
         <h1 className="font-serif text-[32px] text-[#111] m-[0_0_15px_0] leading-[1.3] font-bold tracking-[1px]">{article.title}</h1>
@@ -792,73 +792,77 @@ const DesignToggle = () => (
         )}
       </div>
 
-      <div
-        className={`sws-prose article-body ${article.pdfData ? 'flex-shrink-0 h-[40%] max-h-[50%] overflow-y-auto border-b border-gray-100 pb-4' : 'flex-1 min-h-0 overflow-y-auto'}`}
-        style={{
-          fontSize: `${article.fontSize || 18}px`,
-          lineHeight: article.lineHeight || 2.0
-        }}
-        dangerouslySetInnerHTML={{ __html: article.content }}
-      />
+      <div className="flex flex-col w-full">
+        <div
+          className={`sws-prose article-body w-full ${article.pdfData ? 'border-b border-gray-100 pb-8' : ''}`}
+          style={{
+            fontSize: `${article.fontSize || 18}px`,
+            lineHeight: article.lineHeight || 2.0
+          }}
+          dangerouslySetInnerHTML={{ __html: article.content }}
+        />
 
-{article.pdfData && (
-  <div className="w-full flex flex-col relative rounded-[24px] pdf-viewer-container border border-gray-200 shadow-sm flex-1 min-h-0 min-w-0 overflow-hidden">
-    {/* PDF Toolbar */}
-    <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 select-none">
-      <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-        <Icon name="file-text" className="w-4 h-4" />
-        PDF PREVIEW
-      </div>
-      <button
-        className="pdf-expand-btn bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue border border-brand-blue/20 rounded-md px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-2 transition-all"
-        onClick={(e) => {
-          e.stopPropagation();
-          const container = e.currentTarget.closest('.pdf-viewer-container');
-          if (container) {
-            if (container.classList.contains('expanded')) {
-              container.classList.remove('expanded');
-              document.exitFullscreen?.();
-            } else {
-              container.classList.add('expanded');
-              container.requestFullscreen?.();
-            }
-          }
-        }}
-      >
-        <Icon name="maximize" className="w-3.5 h-3.5" />
-        <span>全屏阅读</span>
-      </button>
-    </div>
+        {article.pdfData && (
+          <div className="w-full flex flex-col mt-8">
+            <div className="w-full h-[80vh] min-h-[800px] flex flex-col relative rounded-[24px] pdf-viewer-container border border-gray-200 shadow-sm">
+              {/* PDF Toolbar */}
+              <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 select-none">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                  <Icon name="file-text" className="w-4 h-4" />
+                  PDF PREVIEW
+                </div>
+                <button
+                  className="pdf-expand-btn bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue border border-brand-blue/20 rounded-md px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-2 transition-all"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const container = e.currentTarget.closest('.pdf-viewer-container');
+                    if (container) {
+                      if (container.classList.contains('expanded')) {
+                        container.classList.remove('expanded');
+                        document.exitFullscreen?.();
+                      } else {
+                        container.classList.add('expanded');
+                        container.requestFullscreen?.();
+                      }
+                    }
+                  }}
+                >
+                  <Icon name="maximize" className="w-3.5 h-3.5" />
+                  <span>全屏阅读</span>
+                </button>
+              </div>
 
-    <div className="flex-1 w-full relative bg-gray-100/50 overflow-hidden min-h-0 h-full">
-      {pdfUrl ? (
-        <div className="w-full h-full flex flex-col p-4 relative">
-          {/* 边界防护层 - 防止PDF内容溢出 */}
-          <div className="flex-1 w-full overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm relative h-full">
-            {/* PDF内容容器 */}
-            <div className="w-full h-full overflow-auto relative">
-              <LazyPdfViewer pdfUrl={pdfUrl} />
+              <div className="flex-1 w-full relative bg-gray-100/50 overflow-hidden min-h-0 h-full">
+                {pdfUrl ? (
+                  <div className="w-full h-full flex flex-col p-4 relative">
+                    {/* 边界防护层 - 防止PDF内容溢出 */}
+                    <div className="flex-1 w-full overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm relative h-full min-h-[300px]">
+                      {/* PDF内容容器 */}
+                      <div className="w-full h-full overflow-auto relative min-h-[300px]">
+                        <LazyPdfViewer pdfUrl={pdfUrl} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-4 min-h-[300px]">
+                    <div className="w-10 h-10 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
+                    <div className="text-gray-400 text-sm">正在加载 PDF...</div>
+                  </div>
+                )}
+                <a
+                  href={pdfUrl || '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="absolute bottom-4 right-4 z-10 bg-white px-3 py-1 text-xs border border-gray-300 rounded text-brand-blue no-underline flex items-center gap-1 hover:bg-gray-50"
+                >
+                  <Icon name="external-link" className="w-3 h-3" />
+                  无法预览？点击打开PDF
+                </a>
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-          <div className="w-10 h-10 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
-          <div className="text-gray-400 text-sm">正在加载 PDF...</div>
-        </div>
-      )}
-      <a
-        href={pdfUrl || '#'}
-        target="_blank"
-        rel="noreferrer"
-        className="absolute bottom-4 right-4 z-10 bg-white px-3 py-1 text-xs border border-gray-300 rounded text-brand-blue no-underline flex items-center gap-1 hover:bg-gray-50"
-      >
-        <Icon name="external-link" className="w-3 h-3" />
-        无法预览？点击打开PDF
-      </a>
-    </div>
-  </div>
-)}
+        )}
+      </div>
 
       {/* Footer - Always visible */}
       <div className="mt-auto pt-8 border-t border-gray-100 text-center shrink-0">

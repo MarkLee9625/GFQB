@@ -618,42 +618,46 @@ const AppContent: React.FC = () => {
           <div className="text-center text-gray-300 mt-[200px]">
             <p>请选择左侧文档</p>
           </div>
-        ) : (
-            <div className={`w-full transition-all duration-300 origin-top ${isImmersive ? 'max-w-full min-h-screen m-0 p-0 flex items-center justify-center' : 'flex flex-row h-screen w-full overflow-hidden'}`}>
-            <div className="flex-1 min-w-0 h-full min-w-0 overflow-hidden bg-white">
-              <PaperView
-                article={currentArticle}
-                logo={logo}
-                isEditMode={isEditMode}
-                onUpdate={updateArticle}
-                onImageUpload={(type) => {
-                  uploadTypeRef.current = type;
-                  coverInputRef.current?.click();
-                }}
-                onNext={() => handleNavigate('next')}
-                useAlternateDesign={useAlternateDesign}
-                setUseAlternateDesign={setUseAlternateDesign}
-              />
-            </div>
-
-            {(() => {
-              const idx = sortedArticles.findIndex(a => a.id === currentId);
-              const prevArt = idx > 0 ? sortedArticles[idx - 1] : null;
-              const nextArt = idx > -1 && idx < sortedArticles.length - 1 ? sortedArticles[idx + 1] : null;
-              const isSpecial = currentArticle?.category === '封面' || currentArticle?.category === '封底';
-
-              return (
-                <NavigationCapsule
-                  onPrev={() => handleNavigate('prev')}
+            ) : (
+            <div className="flex flex-col w-full h-auto gap-8 pb-12 relative">
+              {/* PaperView 容器：移除高度限制，允许内容自然撑开 */}
+              <div className="w-full bg-white rounded-lg shadow-sm">
+                <PaperView
+                  article={currentArticle}
+                  logo={logo}
+                  isEditMode={isEditMode}
+                  onUpdate={updateArticle}
+                  onImageUpload={(type) => {
+                    uploadTypeRef.current = type;
+                    coverInputRef.current?.click();
+                  }}
                   onNext={() => handleNavigate('next')}
-                  onShowShortcutsHelp={() => setShowShortcutsHelp(true)}
-                  prevTitle={prevArt?.title}
-                  nextTitle={nextArt?.title}
-                  isSpecialPage={isSpecial}
+                  useAlternateDesign={useAlternateDesign}
+                  setUseAlternateDesign={setUseAlternateDesign}
                 />
-              );
-            })()}
-          </div>
+              </div>
+
+              {/* NavigationCapsule 容器：置于文章正下方并水平居中 */}
+              <div className="flex justify-center w-full mt-4 pb-8">
+                {(() => {
+                  const idx = sortedArticles.findIndex(a => a.id === currentId);
+                  const prevArt = idx > 0 ? sortedArticles[idx - 1] : null;
+                  const nextArt = idx > -1 && idx < sortedArticles.length - 1 ? sortedArticles[idx + 1] : null;
+                  const isSpecial = currentArticle?.category === '封面' || currentArticle?.category === '封底';
+
+                  return (
+                    <NavigationCapsule
+                      onPrev={() => handleNavigate('prev')}
+                      onNext={() => handleNavigate('next')}
+                      onShowShortcutsHelp={() => setShowShortcutsHelp(true)}
+                      prevTitle={prevArt?.title}
+                      nextTitle={nextArt?.title}
+                      isSpecialPage={isSpecial}
+                    />
+                  );
+                })()}
+              </div>
+            </div>
         )
       }
       modals={

@@ -56,8 +56,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                 {toolbar}
 
             {/* Content Area Slot */}
-            <div className="flex-1 flex flex-col min-h-0 w-full overflow-hidden p-[40px] relative">
-                <div className="flex-1 flex flex-col min-h-0 min-w-0 w-full h-full overflow-y-auto scroll-smooth overscroll-none scrollbar-thin">
+            <div className="flex-1 flex flex-col min-h-0 w-full overflow-y-auto relative">
+                <div className="flex-1 flex flex-col min-h-0 min-w-0 w-full h-full p-4 md:p-6 lg:p-8 scroll-smooth overscroll-none scrollbar-thin box-border">
                     {content}
                 </div>
             </div>
