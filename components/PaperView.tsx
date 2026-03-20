@@ -434,8 +434,8 @@ const DesignToggle = () => (
       return (
         <>
           <DesignToggle />
-          <div className="w-full min-h-[840px] flex flex-col p-[30px_50px] bg-white text-left border-t-8 border-brand-blue relative overflow-hidden group">
-            <div className="absolute inset-0 z-0 overflow-hidden bg-gray-50/50">
+          <div className="w-full min-h-[840px] flex flex-col p-0 bg-transparent text-left border-t-8 border-brand-blue relative overflow-hidden group">
+            <div className="absolute inset-0 z-0 bg-transparent">
               <TechGrid />
               <AmbientBg src={coverUrl} />
             </div>
@@ -472,7 +472,7 @@ const DesignToggle = () => (
                 </div>
               </div>
             </div>
-            <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative overflow-hidden my-4">
+            <div className="w-full min-h-[550px] h-auto shrink-0 flex justify-center items-center z-[1] relative my-4">
               <div
                 className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? (article.coverImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
                 onWheel={handleWheel}
@@ -686,8 +686,8 @@ const DesignToggle = () => (
       return (
         <>
           <DesignToggle />
-          <div className="w-full min-h-[840px] flex flex-col p-[30px_50px] bg-white text-left border-t-8 border-brand-blue relative overflow-hidden">
-            <div className="absolute inset-0 z-0 overflow-hidden bg-gray-50/50">
+          <div className="w-full min-h-[840px] flex flex-col p-0 bg-transparent text-left border-t-8 border-brand-blue relative overflow-hidden">
+            <div className="absolute inset-0 z-0 overflow-hidden bg-transparent">
               <TechGrid />
               <AmbientBg src={backUrl} />
             </div>

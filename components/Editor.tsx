@@ -765,13 +765,40 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
 
             {/* Editable Body */}
             {formData.category === '封面' || formData.category === '封底' ? (
-              <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full flex items-center justify-center">
-                <div className="text-center text-gray-400">
-                  <div className="text-lg font-bold mb-2">封面/封底专属预览</div>
-                  <div className="text-sm">请在右侧控制面板上传/更换图片</div>
-                  <div className="text-xs mt-1">当前为封面排版专属预览视图</div>
-                </div>
-              </div>
+    <div className="flex-1 relative overflow-hidden bg-gray-50 flex items-center justify-center min-h-[600px]">
+      <TechGrid />
+      <AmbientBg src={formData.category === '封面' ? formData.coverImage : formData.backImage} />
+      <div className="relative z-10 w-full h-full p-0 flex items-center justify-center">
+        {formData.category === '封面' ? (
+          formData.coverImage ? (
+            <img 
+              src={formData.coverImage} 
+              className="max-w-full max-h-full object-contain mix-blend-multiply" 
+              alt="封面预览" 
+            />
+          ) : (
+            <div className="text-center text-gray-400 p-8 bg-white/80 rounded-lg backdrop-blur-sm">
+              <div className="text-lg font-bold mb-2">未设置封面图片</div>
+              <div className="text-sm">请在右侧控制面板上传图片</div>
+            </div>
+          )
+        ) : formData.backImage ? (
+          <img 
+            src={formData.backImage} 
+            className="max-w-full max-h-full object-contain mix-blend-multiply" 
+            alt="封底预览" 
+          />
+        ) : (
+          <div className="text-center text-gray-400 p-8 bg-white/80 rounded-lg backdrop-blur-sm">
+            <div className="text-lg font-bold mb-2">未设置封底图片</div>
+            <div className="text-sm">请在右侧控制面板上传图片</div>
+          </div>
+        )}
+      </div>
+      <div className="absolute bottom-4 right-4 z-20 bg-black/70 text-white text-xs px-3 py-2 rounded backdrop-blur-sm">
+        请在右侧面板更换图片
+      </div>
+    </div>
             ) : (
               <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full">
                 <div

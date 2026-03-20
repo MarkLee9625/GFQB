@@ -15,12 +15,6 @@
   box-sizing: border-box;
 }
 
-/* 确保所有 flex 容器正确处理最小高度 */
-.flex, .flex-col, .flex-row {
-  min-height: 0;
-  min-width: 0;
-}
-
 /* 自定义滚动条调整，这些用工具类难以实现 */
 ::-webkit-scrollbar {
   width: 8px;
@@ -69,8 +63,8 @@ body,
 
 /* 纸张拟物化与翻页间隙 */
 .editor-area .pdf-page-container {
-  width: 850px !important;
-  max-width: 100% !important;
+  width: 100% !important;
+  max-width: 850px !important;
   background: #ffffff;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
   border: 1px solid #e5e7eb;
@@ -115,20 +109,36 @@ object[type="application/pdf"] {
    任务：隐藏所有交互UI，确保PDF页面绝对分页
    ============================================================ */
 @media print {
+  /* 1. 禁用所有动画和过渡，防止打印引擎抓取到 opacity: 0 的初始空帧 */
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* 2. 强制剥离透明度隐身，确保所有非隐藏元素绝对可见 */
+  body, html, #root, .sws-prose, .article-body {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* 3. 强制正文颜色为纯黑，防止 Tailwind 颜色变量在打印上下文中断链 */
+  .sws-prose, .article-body {
+    color: #000000 !important;
+  }
+  .sws-prose *, .article-body * {
+    color: #000000 !important;
+    text-shadow: none !important;
+  }
+
+  /* 4. 彻底打通遮挡层，防止任何绝对定位的白板遮盖文字 */
+  .ambient-bg, .tech-grid {
+    display: none !important;
+  }
+
   /* 页面设置 — A4 物理基准，无外边距 */
   @page {
     size: A4 portrait;
     margin: 0 !important;
-  }
-
-  /* 全局强制解绑约束 - 修复长文章截断问题 */
-  * {
-    overflow: visible !important;
-    max-height: none !important;
-  }
-  
-  html, body, #root {
-    height: auto !important;
   }
 
   /* ========================================================
