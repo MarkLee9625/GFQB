@@ -302,6 +302,14 @@ const AppContent: React.FC = () => {
 
   const currentArticle = articles.find(a => a.id === currentId);
 
+  // 切换文章发布状态
+  const handleTogglePublish = useCallback(() => {
+    if (!currentId || !currentArticle) return;
+    
+    const newPublishedState = !currentArticle.isPublished;
+    updateArticle(currentId, { isPublished: newPublishedState });
+  }, [currentId, currentArticle, updateArticle]);
+
   const handleSaveArticle = async (updated: Partial<Article>) => {
     if (updated.id) {
       updateArticle(updated.id, updated);
@@ -611,6 +619,8 @@ const AppContent: React.FC = () => {
           onReset={handleReset}
           onExportReader={() => handleExport(true)}
           onExportProject={() => handleExport(false)}
+          isPublished={currentArticle?.isPublished || false}
+          onTogglePublish={handleTogglePublish}
         />
       }
       content={

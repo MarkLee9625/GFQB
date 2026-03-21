@@ -13,6 +13,8 @@ interface ToolbarProps {
   onReset: () => void;
   onExportReader: () => void;
   onExportProject: () => void;
+  isPublished?: boolean;
+  onTogglePublish?: () => void;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -27,6 +29,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onReset,
   onExportReader,
   onExportProject,
+  isPublished,
+  onTogglePublish,
 }) => {
   if (isFullscreen) return null;
 
@@ -71,6 +75,20 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <button onClick={onExportReader} className="px-3 py-2 text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-lg text-xs font-bold transition-colors">
         导出阅读版
       </button>
+      {onTogglePublish && currentId !== null && (
+       <button
+         onClick={onTogglePublish}
+         className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+           isPublished
+             ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/50'
+             : 'text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200/50'
+         }`}
+         title={isPublished ? "当前已发布，点击取消发布" : "当前为草稿，点击发布"}
+       >
+         <Icon name={isPublished ? "check" : "send"} className="w-4 h-4" />
+         <span>{isPublished ? '已发布' : '发布文章'}</span>
+       </button>
+     )}
       <button onClick={onExportProject} className="px-4 py-2 bg-gray-900 text-white rounded-lg text-xs font-bold hover:bg-black transition-all shadow-lg shadow-black/10 active:scale-95">
         保存工程
       </button>

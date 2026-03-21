@@ -27,6 +27,8 @@ export interface Article {
   lineHeight?: number;
   abstract?: string | null;
   tags?: string[]; // 新增：多标签/关键词功能
+  // 发布状态
+  isPublished?: boolean;
   // 拖拽排序顺序
   order?: number;
 }

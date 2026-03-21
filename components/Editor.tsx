@@ -87,7 +87,8 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
         abstract: article.abstract || '',
         tags: article.tags || [],
         fontSize: article.fontSize || 18,
-        lineHeight: article.lineHeight || 2.0
+        lineHeight: article.lineHeight || 2.0,
+        isPublished: article.isPublished || false // 核心修复：恢复状态记忆
       });
       if (article.pdfData) {
         setTempPdf({ name: 'Existing PDF', data: article.pdfData });
@@ -565,7 +566,7 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
     timeoutIdsRef.current.push(timeoutId);
   };
 
-  const handleSave = () => {
+  const handleSave = (targetPublishState?: boolean) => {
     if (!formData.title) return alert("请输入标题");
 
     // 存盘前克隆 DOM 进行“数据还原” (将临时 Blob URL 换回持久 DataURL)
@@ -597,14 +598,15 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
     onSave({
       ...formData,
       content: finalContent,
-      pdfData: tempPdf?.data
+      pdfData: tempPdf?.data,
+      isPublished: targetPublishState !== undefined ? targetPublishState : formData.isPublished
     });
   };
 
   if (!isOpen) return null;
 
   return (
-      <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-[100] flex flex-col overflow-y-auto w-full">
+      <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-[100] flex items-center justify-center p-0 md:p-6 overflow-hidden w-full">
       <style>{CONSTANTS.UNIFIED_STYLES}</style>
 
       {/* AI 摘要生成 Loading */}
@@ -647,7 +649,7 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
         </div>
 
         {/* Workspace: Split Panel */}
-        <div className="flex-1 flex overflow-hidden min-h-full">
+        <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Left Panel: Content Editor */}
           <div className="flex-1 flex flex-col border-r border-gray-100 bg-gray-50/30 min-h-0">
             {/* Dynamic Title Input */}
@@ -1001,10 +1003,16 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
               放弃修改
             </button>
             <button
-              onClick={handleSave}
+              onClick={() => handleSave(false)}
+              className="px-6 py-2.5 bg-amber-50 border border-amber-200 text-amber-600 rounded-xl hover:bg-amber-100 transition-all font-bold text-xs shadow-sm"
+            >
+              存为草稿
+            </button>
+            <button
+              onClick={() => handleSave(true)}
               className="px-8 py-2.5 bg-brand-blue text-white rounded-xl hover:shadow-xl hover:shadow-blue-200 hover:-translate-y-0.5 transition-all font-bold text-xs shadow-lg active:translate-y-0"
             >
-              保存并发布
+              {formData.id && formData.isPublished ? '更新并发布' : '直接发布'}
             </button>
           </div>
         </div>
