@@ -5,74 +5,6 @@ import { processMediaForPrint } from './utils/media';
 import { base64ToFile } from './utils/file';
 import { ExportOptions, ExportMetadata } from './reader';
 
-/**
- * 精准重置的全局打印 CSS (Global Print Reset)
- * 核心目标：剥夺浏览器边距，并与 templates.ts 完美协同，绝不误伤内部排版
- */
-const GLOBAL_PRINT_CSS = `
-<style>
-    @media print {
-        /* 1. 彻底剥夺浏览器默认的页面边距，实现真正的全屏铺满 */
-        @page {
-            size: 210mm 297mm !important; /* 绝对A4尺寸定义 */
-            margin: 0 !important;
-        }
-
-        /* 2. 仅精准重置最外层挂载点，绝不使用模糊正则，保护内部组件样式 */
-        html, body, #root, #app {
-            display: block !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
-            height: auto !important;
-            overflow: visible !important;
-        }
-
-        /* 3. 协同模板的分页：只定义自身基础属性，分页指令全部交由 templates.ts (page-break-before) 处理，彻底消灭双重空白页！ */
-        .print-page-wrapper {
-            display: block !important;
-            position: relative !important;
-            width: 100% !important;
-            margin: 0 !important;
-            box-sizing: border-box !important;
-        }
-
-        /* 4. 常规阅读页补充安全边距（因为 @page margin 为 0，不加内边距文字会贴边） */
-        .print-page-wrapper.article-wrapper,
-        .print-page-wrapper.toc-page {
-            padding: 15mm 20mm !important;
-        }
-
-        /* 5. PDF 专用页：自适应高度 + 最大A4限制，消除双重空白页 */
-        .print-page-wrapper.pdf-full-page {
-            padding: 0 !important;
-            margin: 0 !important;
-            width: 100% !important;
-            height: 100vh !important;
-            max-height: 297mm !important; /* 自适应高度，但不超过A4页面限制 */
-            overflow: hidden !important;
-            background: white !important;
-            page-break-before: always !important;
-            page-break-inside: avoid !important;
-            break-before: page !important;
-            break-inside: avoid !important;
-        }
-
-        /* 6. PDF 图片：绝对贴合容器，不留一丝白边 - 强制 fill 模式，彻底消灭比例白边 */
-        .pdf-full-page img {
-            display: block !important;
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: fill !important; /* 强制绝对填充，彻底消灭1mm安全缝隙和比例白边 */
-            margin: 0 !important;
-            padding: 0 !important;
-            border: none !important;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
-        }
-    }
-</style>
-`;
 
 /**
  * 生成打印专用版 HTML
@@ -118,7 +50,7 @@ export async function generatePrintableHTML(
     `;
 
     // 2. 生成所有内容
-    let bodyHtml = GLOBAL_PRINT_CSS; // 注入精准重置 CSS
+    let bodyHtml = ''; // 移除硬编码的 CSS 注入，统一下放给模板引擎
 
     for (const article of sortedArticles) {
         let articleHtml = '';

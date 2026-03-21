@@ -721,18 +721,23 @@ export function getPrintableSkeleton(options: {
         
 
         @media print {
-            body { 
-                background: white !important; 
-                padding: 0 !important; 
+            /* 1. 绝对页面与边距重置 */
+            @page {
+                size: 210mm 297mm !important;
+                margin: 0 !important;
+            }
+            html, body, .print-all {
                 display: block !important;
-                height: auto !important; 
+                background: white !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                height: auto !important;
                 overflow: visible !important;
             }
-            html {
-                height: auto !important; 
-                overflow: visible !important;
-            }
+
+            /* 2. 基础页面容器设置 */
             .print-page-wrapper {
+                display: block !important;
                 width: 100% !important;
                 margin: 0 !important;
                 box-shadow: none !important;
@@ -740,57 +745,125 @@ export function getPrintableSkeleton(options: {
                 break-before: page !important;
                 overflow: visible !important;
             }
-            /* 第一个可见元素前不加分页 */
             .print-toolbar ~ .print-page-wrapper:first-of-type,
             body > .print-page-wrapper:first-child {
                 page-break-before: auto !important;
                 break-before: auto !important;
             }
-            /* 正文文章页：自然高度，内容可跨页 */
-            .print-page-wrapper.article-wrapper {
-                min-height: 0 !important;
-                height: auto !important;
-                overflow: visible !important;
-            }
-            
-            /* 目录页：自然高度，内容可跨页 */
-            .print-page-wrapper.toc-page {
-                height: auto !important; 
-                min-height: 0 !important;
-                overflow: visible !important;
-            }
-            /* 封面/封底/目录铺满一页 - 替换危险单位 */
-            .print-page-wrapper:not(.article-wrapper):not(.pdf-full-page) {
-                min-height: 297mm !important;
-            }
-            /* 目录标题修复：从顶部排列，避免被 flex 居中截断 */
-            .print-page-wrapper.toc-page {
-                overflow: visible !important;
-            }
-            .print-page-wrapper.toc-page .toc-container {
-                justify-content: flex-start !important;
-                padding-top: 60px !important;
-            }
-            .no-print { display: none !important; }
-            
-            /* 终极防截断：强制解除所有排版容器的 Flex/Grid 约束与高度限制 */
-            html, body, .print-all,
-            .normal-container, 
-            .sws-prose, 
-            .article-body, 
-            .print-page-wrapper.article-wrapper * {
+
+            /* 3. 架构级降维打击：彻底解决 Chrome 幻影排版 (Phantom Pagination) */
+            .normal-container,
+            .article-wrapper,
+            .sws-prose,
+            .article-header,
+            .article-body {
                 display: block !important;
                 height: auto !important;
                 min-height: 0 !important;
                 max-height: none !important;
                 overflow: visible !important;
                 position: static !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                color: #000 !important;
             }
-            /* 确保目录页容器也具有正确的属性 */
+            
+            /* 保护文章内容内部的所有元素 */
+            .sws-prose > *,
+            .article-body > * {
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+            
+            /* 确保内联文本元素正确显示 */
+            .sws-prose p,
+            .sws-prose span,
+            .sws-prose strong,
+            .sws-prose em,
+            .sws-prose a,
+            .sws-prose li {
+                color: #000 !important;
+            }
+            
+            /* 确保段落和列表项正确换行 */
+            .sws-prose p {
+                display: block !important;
+                margin: 1em 0 !important;
+            }
+            
+            .sws-prose li {
+                display: list-item !important;
+            }
+            
+            /* 特别修复：确保span、strong、em等内联元素保持内联显示 */
+            .sws-prose span,
+            .sws-prose strong,
+            .sws-prose em,
+            .sws-prose a {
+                display: inline !important;
+            }
+
+            /* 3.5 宽幅重置：彻底打碎网页端 65ch 与 max-w 定宽约束，解决两侧大白边 */
+            .normal-container,
+            .sws-prose,
+            .article-body,
+            .article-header {
+                width: 100% !important;
+                max-width: none !important; 
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+                box-sizing: border-box !important;
+            }
+            
+            /* 强制段落撑满并两端对齐，达到专业期刊排版效果 */
+            .sws-prose p, 
+            .sws-prose div {
+                max-width: none !important;
+                width: 100% !important;
+                text-align: justify !important; 
+            }
+
+            /* 4. 各类页面的特定高度与边距规范 */
+            .print-page-wrapper.article-wrapper,
+            .print-page-wrapper.toc-page {
+                padding: 15mm 20mm !important;
+                height: auto !important;
+                min-height: 0 !important;
+            }
+            .print-page-wrapper:not(.article-wrapper):not(.pdf-full-page) {
+                min-height: 297mm !important;
+            }
+            
+            /* 5. 目录页修复 */
             .print-page-wrapper.toc-page .toc-container {
+                justify-content: flex-start !important;
+                padding-top: 60px !important;
                 overflow: visible !important;
                 height: auto !important;
             }
+
+            /* 6. PDF 专用页与图片强制填充 */
+            .print-page-wrapper.pdf-full-page {
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+                height: 100vh !important;
+                max-height: 297mm !important;
+                overflow: hidden !important;
+            }
+            .pdf-full-page img {
+                display: block !important;
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: fill !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+            }
+
+            .no-print { display: none !important; }
         }
 
         /* 顶部提示工具条 */

@@ -430,7 +430,35 @@ const ArticlePage: React.FC<ArticlePageProps> = ({ article, logo }) => {
 
       <View style={styles.articleContent}>
         {article.content ? (
-          <Html>{article.content}</Html>
+          <Html
+            style={{ 
+              fontFamily: 'NotoSansSC', 
+              fontSize: 12, 
+              color: '#1F2937' 
+            }}
+            stylesheet={{
+              p: { fontFamily: 'NotoSansSC', marginBottom: 12, lineHeight: 1.8 },
+              div: { fontFamily: 'NotoSansSC' },
+              span: { fontFamily: 'NotoSansSC' },
+              li: { fontFamily: 'NotoSansSC', marginBottom: 4 },
+              ul: { fontFamily: 'NotoSansSC', marginBottom: 12 },
+              ol: { fontFamily: 'NotoSansSC', marginBottom: 12 },
+              h1: { fontFamily: 'NotoSansSC', fontWeight: 'bold', fontSize: 24, marginBottom: 12 },
+              h2: { fontFamily: 'NotoSansSC', fontWeight: 'bold', fontSize: 20, marginBottom: 10 },
+              h3: { fontFamily: 'NotoSansSC', fontWeight: 'bold', fontSize: 16, marginBottom: 8 },
+              h4: { fontFamily: 'NotoSansSC', fontWeight: 'bold', fontSize: 14, marginBottom: 6 },
+              strong: { fontFamily: 'NotoSansSC', fontWeight: 'bold' },
+              em: { fontFamily: 'NotoSansSC', fontStyle: 'italic' },
+              table: { fontFamily: 'NotoSansSC', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12 },
+              tr: { fontFamily: 'NotoSansSC' },
+              td: { fontFamily: 'NotoSansSC', padding: 4 },
+              th: { fontFamily: 'NotoSansSC', fontWeight: 'bold', padding: 4 },
+              a: { fontFamily: 'NotoSansSC', color: '#005596', textDecoration: 'none' },
+              img: { maxWidth: '100%', objectFit: 'contain', marginVertical: 10, alignSelf: 'center' }
+            }}
+          >
+            {article.content}
+          </Html>
         ) : (
           <Text style={{ color: '#9CA3AF', fontStyle: 'italic' }}>
             本文暂无内容
@@ -528,7 +556,7 @@ interface MyDocumentProps {
   };
 }
 
-const MyDocument: React.FC<MyDocumentProps> = ({ articles, options = {} }) => {
+const MyDocument: React.FC<MyDocumentProps> = ({ articles, options }) => {
   const { useAlternateDesign = false, logo = '' } = options || {};
   
   // 按类别排序：封面 -> 正文 -> 封底

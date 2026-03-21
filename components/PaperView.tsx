@@ -486,7 +486,7 @@ const DesignToggle = () => (
       <LazyImage
         src={coverUrl}
         alt="Cover"
-        className="w-auto h-full max-w-full max-h-full p-4 object-contain shadow-2xl relative z-[1] rounded-[8px] origin-center will-change-transform transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto mix-blend-multiply"
+        className="w-auto h-auto max-w-full max-h-full object-contain shadow-2xl relative z-[1] rounded-[8px] origin-center will-change-transform transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto mix-blend-multiply"
         style={{
           transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
           boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.5)'
@@ -534,7 +534,7 @@ const DesignToggle = () => (
       return (
         <>
           <DesignToggle />
-          <div className="w-full min-h-[840px] flex flex-col p-[40px_60px] bg-white text-left relative overflow-hidden magazine-back-cover">
+          <div className="w-full min-h-[840px] flex flex-col p-[40px_60px] bg-white text-left relative overflow-hidden group magazine-back-cover">
             {/* 背景 - 简洁渐变 */}
             <div className="absolute inset-0 z-0 bg-gradient-to-tl from-blue-50/80 via-white to-gray-50/80"></div>
 
@@ -564,7 +564,7 @@ const DesignToggle = () => (
             </div>
 
             {/* 图片区域 - 杂志封底设计 */}
-            <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative overflow-hidden my-4">
+            <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative my-4">
               <div
                 className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? 'cursor-pointer' : ''}`}
                 onClick={() => isEditMode && onImageUpload('back')}
@@ -686,7 +686,7 @@ const DesignToggle = () => (
       return (
         <>
           <DesignToggle />
-          <div className="w-full min-h-[840px] flex flex-col p-0 bg-transparent text-left border-t-8 border-brand-blue relative overflow-hidden">
+          <div className="w-full min-h-[840px] flex flex-col p-0 bg-transparent text-left border-t-8 border-brand-blue relative overflow-hidden group">
             <div className="absolute inset-0 z-0 overflow-hidden bg-transparent">
               <TechGrid />
               <AmbientBg src={backUrl} />
@@ -699,7 +699,7 @@ const DesignToggle = () => (
                 Sailing With Success
               </div>
             </div>
-            <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative overflow-hidden my-4">
+            <div className="w-full min-h-[550px] h-auto shrink-0 flex justify-center items-center z-[1] relative my-4">
               <div
                 className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? (article.backImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
                 onWheel={handleWheel}
@@ -710,22 +710,20 @@ const DesignToggle = () => (
               >
                 {article.backImage ? (
                   backUrl ? (
-                    <div className="flex flex-col items-center justify-center w-full h-full">
-                      <LazyImage
-                        src={backUrl}
-                        alt="Back Cover"
-                        className="w-auto h-auto max-w-full max-h-full object-contain shadow-2xl relative z-[1] origin-center will-change-transform rounded-sm mx-auto"
-                        style={{
-                          transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
-                          boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.5)'
-                        }}
-                        placeholder={
-                          <div className="w-full h-full flex items-center justify-center">
-                            <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
-                          </div>
-                        }
-                      />
-                    </div>
+                    <LazyImage
+                      src={backUrl}
+                      alt="Back Cover"
+                      className="w-auto h-auto max-w-full max-h-full object-contain shadow-2xl relative z-[1] rounded-[8px] origin-center will-change-transform transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto mix-blend-multiply"
+                      style={{
+                        transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
+                        boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.5)'
+                      }}
+                      placeholder={
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
+                        </div>
+                      }
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
@@ -734,7 +732,7 @@ const DesignToggle = () => (
                 ) : (
                   <button
                     type="button"
-                    className="clickable-area text-gray-400 text-[12px] z-[10] bg-white/80 backdrop-blur-sm px-6 py-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-white hover:text-brand-blue hover:scale-105 active:scale-95 transition-all shadow-sm font-bold"
+                    className="clickable-area absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-[13px] bg-white/80 backdrop-blur-sm px-6 py-3 border border-gray-200 z-[10] tracking-widest rounded-lg shadow-sm hover:bg-white hover:text-brand-blue hover:border-brand-blue hover:scale-105 active:scale-95 transition-all cursor-pointer font-bold"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isEditMode) onImageUpload('back');

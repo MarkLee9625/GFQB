@@ -136,12 +136,39 @@ export const PRINT_STYLES = `
 @media print {
     @page { margin: 0; size: A4 portrait; }
     
-    /* 全局重置 */
+    /* 1. 核心修复：禁用所有动画，防止摘要(summary-card)因fadeIn定格在opacity:0而隐身 */
     *, *:before, *:after {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
         color-adjust: exact !important;
         box-sizing: border-box !important;
+        animation: none !important;
+        transition: none !important;
+    }
+    
+    /* 强制确保摘要卡片可见 */
+    .summary-card, .summary-label {
+        display: block !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        page-break-inside: avoid !important;
+    }
+
+    /* 2. 修复顶部巨大留白与镶嵌感：重置正文容器与标题的边距 */
+    .normal-container {
+        width: 100% !important;
+        padding: 0 !important; /* 核心修复：外层画布已有页边距，此处强制清零，彻底消除双重边距叠加！ */
+        margin: 0 !important; 
+        min-height: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important; 
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    
+    .article-header {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
     }
     
     html, body {
@@ -243,12 +270,16 @@ export const PRINT_STYLES = `
         break-after: auto !important;
     }
     
-    /* --- 正文容器 (A4 页边距模拟) --- */
-    .normal-container {
+    
+    /* 打破 Tailwind prose 的 65ch 限制，并实现期刊级的两端对齐 */
+    .sws-prose, .article-body {
         width: 100% !important;
-        padding: 2.54cm 3.17cm !important;
-        min-height: 25cm !important; /* 保证高度但允许撑开 */
-        background: white !important;
+        max-width: none !important;
+    }
+    .sws-prose p, .sws-prose div {
+        max-width: none !important;
+        text-align: justify !important; /* 核心：左右对齐的期刊级排版 */
+        line-height: 1.8 !important;
     }
     
     /* --- 封面/封底 (全屏无边距) --- */
@@ -279,6 +310,8 @@ export const PRINT_STYLES = `
         font-size: 24pt !important; 
         color: #000 !important; 
         text-align: center; 
+        margin-top: 0 !important; /* 强制归零浏览器默认的 h1 顶部边距 */
+        padding-top: 0 !important;
         page-break-after: avoid; 
     }
     
@@ -308,7 +341,7 @@ export const PRINT_STYLES = `
     
     /* PDF 页面图片 - 铺满整页，覆盖通用 img 限制 */
     .sws-prose .pdf-page-container {
-        margin: 0 -80px !important; /* 负 margin 突破 normal-container 的 padding */
+        margin: 0 -20mm !important; /* 精准抵消 normal-container 的左右 20mm padding */
         padding: 0 !important;
         page-break-before: always !important;
         break-before: page !important;
