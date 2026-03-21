@@ -3,7 +3,7 @@ import { Article, CONSTANTS } from '../types';
 import { Icon } from './Icons';
 import { useBlobManager } from '../hooks/useBlobManager';
 import { fileToDataURL, compressImage } from '../src/utils/fileHelpers';
-import { generateArticleMeta, generateTitleOnly } from '../services/aiService';
+import { generateArticleMeta, generateTitleOnly, scaleText } from '../services/aiService';
 import { extractAbstractFromPdf, convertPdfToImages } from '../src/services/pdf';
 import LoadingOverlay from './LoadingOverlay';
 
@@ -58,6 +58,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [showAiLoading, setShowAiLoading] = useState(false);
   const [showTitleLoading, setShowTitleLoading] = useState(false);
+  const [isScalingText, setIsScalingText] = useState(false);
 
   // 保存当前选区（光标位置）
   const saveSelection = useCallback(() => {
@@ -339,6 +340,47 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
     // 强制触发 React 状态同步
     setFormData(prev => ({ ...prev, content: body.innerHTML }));
+  };
+
+  const handleScaleText = async (mode: 'expand' | 'shrink') => {
+    if (!contentRef.current) return;
+    
+    // 1. 获取当前选区
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
+      alert("请先用鼠标选中需要伸缩的文本段落！");
+      return;
+    }
+
+    const selectedText = selection.toString();
+    
+    // 2. 存下当前光标/选区（利用组件内已有的 saveSelection 方法）
+    saveSelection();
+    setIsScalingText(true);
+
+    try {
+      // 3. 调用 AI 进行伸缩
+      const aiResult = await scaleText(selectedText, mode);
+      
+      // 4. 恢复选区并进行安全替换
+      if (document.activeElement !== contentRef.current) {
+        contentRef.current.focus();
+      }
+      restoreSelection();
+      
+      // 使用原生的 insertText 保证纯文本的安全替换，且支持浏览器的撤销(Undo)栈
+      document.execCommand('insertText', false, aiResult);
+      
+      // 5. 立即同步 React 状态 (关键防丢失屏障！)
+      setFormData(prev => ({ ...prev, content: contentRef.current!.innerHTML }));
+      
+      // 6. 更新选区引用
+      saveSelection();
+    } catch (err) {
+      alert(`AI ${mode === 'expand' ? '扩写' : '精简'}失败: ` + (err instanceof Error ? err.message : "未知错误"));
+    } finally {
+      setIsScalingText(false);
+    }
   };
 
   const handleAiSummary = async () => {
@@ -745,6 +787,33 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
                   className="px-3 py-1 bg-blue-50 text-brand-blue text-[11px] font-bold rounded hover:bg-blue-100 transition-colors border border-blue-100 shadow-sm"
                   title="智能首行缩进"
                 >智能缩进</button>
+              </div>
+
+              <div className="w-px h-4 bg-gray-200 mx-1"></div>
+
+              <div className="flex items-center gap-2 mx-1">
+                <button
+                  onClick={() => handleScaleText('expand')}
+                  disabled={isScalingText}
+                  className={`flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded border shadow-sm transition-all ${
+                    isScalingText ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-purple-50 text-purple-600 border-purple-100 hover:bg-purple-100 hover:-translate-y-0.5'
+                  }`}
+                  title="AI 智能扩写选中段落"
+                >
+                  {isScalingText ? <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin"></div> : '➕'}
+                  AI 扩写
+                </button>
+                <button
+                  onClick={() => handleScaleText('shrink')}
+                  disabled={isScalingText}
+                  className={`flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded border shadow-sm transition-all ${
+                    isScalingText ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100 hover:-translate-y-0.5'
+                  }`}
+                  title="AI 智能精简选中段落"
+                >
+                  {isScalingText ? <div className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin"></div> : '➖'}
+                  AI 精简
+                </button>
               </div>
 
               <div className="flex-1"></div>

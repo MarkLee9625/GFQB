@@ -16,7 +16,9 @@ import ExportOptionsModal from './components/ExportOptionsModal';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor';
 import { useJournal } from './hooks/useJournal';
 import { fetchWechatArticle } from './services/wechatImporter';
+import { generateForeword, extractGlobalKnowledgeGraph } from './services/aiService';
 import { generateReaderHTML, generatePrintableHTML, exportToPdf, PdfExportOptions } from './src/services/export';
+import { generateGraphHtml } from './src/utils/graphRenderer';
 import MainLayout from './src/components/Layout/MainLayout';
 
 const AppContent: React.FC = () => {
@@ -392,13 +394,109 @@ const AppContent: React.FC = () => {
       const newArt = await createArticle(newItem);
       if (newArt) {
         setCurrentId(newArt.id);
-        // 成功后延迟清空，让用户看到“导入成功”的提示（如果需要的话，或者直接清空）
+        // 成功后延迟清空，让用户看到"导入成功"的提示（如果需要的话，或者直接清空）
         setImportProgress(null);
         setTimeout(() => alert('导入成功！'), 100);
       }
     } catch (err) {
       setImportProgress(null);
       alert('导入失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    }
+  };
+
+  // 生成卷首语业务流
+  const handleGenerateForeword = async () => {
+    // 1. 过滤并提取有效文章的标题和摘要
+    const validArticles = articles.filter(a =>
+      a.category !== '封面' &&
+      a.category !== '封底' &&
+      a.title &&
+      a.title !== '未命名文章'
+    );
+
+    if (validArticles.length === 0) {
+      alert("当前没有任何有效文章，无法生成导读！请先添加文章内容。");
+      return;
+    }
+
+    // 2. 将数据组装为 Prompt 友好的文本格式
+    const articlesSummary = validArticles.map((a, index) => 
+      `【文章 ${index + 1}】标题：${a.title}\n摘要：${a.abstract || '暂无摘要，请根据标题推测'}\n标签：${(a.tags || []).join(', ')}`
+    ).join('\n\n');
+
+    // 3. 拦截 UI，复用现有的全局 Loading 状态（DeepSeek Reasoner 耗时较长）
+    setImportProgress({ stage: 'generating', details: 'DeepSeek 正在纵览全局，撰写本期卷首语，请稍候 (约 15-30 秒)...' });
+
+    try {
+      // 4. 调用 AI 引擎
+      const htmlContent = await generateForeword(articlesSummary);
+
+      // 5. 将 AI 结果直接落库为一篇新文章
+      const newArt = await createArticle({
+        title: '本期导读 / 卷首语',
+        category: '特别报道',
+        content: htmlContent,
+        abstract: '本文由 AI 根据本期收录的工法情报自动统稿生成，旨在为您提供宏观的技术导览。',
+        isPublished: true // 默认设为已发布状态
+      });
+
+      // 6. 跳转到新文章并给与提示
+      if (newArt) {
+        setCurrentId(newArt.id);
+        setTimeout(() => alert('✨ 卷首语生成成功！AI 已自动为您排版。'), 100);
+      }
+    } catch (err) {
+      alert('生成卷首语失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    } finally {
+      // 7. 解除拦截 UI
+      setImportProgress(null);
+    }
+  };
+
+  // 生成知识图谱业务流
+  const handleGenerateGraph = async () => {
+    // 1. 获取所有正文文本
+    const validArticles = articles.filter(a => a.category !== '封面' && a.category !== '封底' && a.content);
+    if (validArticles.length === 0) return alert("当前无有效内容，无法提取图谱！");
+
+    const allText = validArticles.map((a, index) => {
+      // 1. 尝试提取正文纯文本
+      let pureText = (a.content || '').replace(/<[^>]+>/g, '').trim();
+      
+      // 2. 如果正文文本太短（说明可能是纯图片/PDF构成的文章），则使用摘要和标签作为数据补偿
+      if (pureText.length < 50) {
+        pureText = `本文摘要：${a.abstract || ''}。本文核心关键词：${(a.tags || []).join('、')}。`;
+      }
+      
+      return `【文章 ${index + 1}：${a.title}】\n${pureText}`;
+    }).join('\n\n---\n\n').slice(0, 80000);
+
+    setImportProgress({ stage: 'generating', details: 'DeepSeek 正在进行全局知识点提取与拓扑计算，请稍候 (约 20-40 秒)...' });
+
+    try {
+      // 2. 调用 AI 提取结构化图谱
+      const graphData = await extractGlobalKnowledgeGraph(allText);
+      
+      // 3. 转化为原生 SVG
+      const htmlContent = generateGraphHtml(graphData);
+
+      // 4. 创建专属于图谱的页面
+      const newArt = await createArticle({
+        title: '本期技术知识图谱',
+        category: '特别报道',
+        content: htmlContent,
+        abstract: '本图谱由 AI 引擎根据全刊内容自动提炼，展示了本期收录的核心工艺、材料与设备之间的技术拓扑关系。',
+        isPublished: true
+      });
+
+      if (newArt) {
+        setCurrentId(newArt.id);
+        setTimeout(() => alert('🕸️ 知识图谱生成成功！'), 100);
+      }
+    } catch (err) {
+      alert('生成图谱失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    } finally {
+      setImportProgress(null);
     }
   };
 
@@ -621,6 +719,8 @@ const AppContent: React.FC = () => {
           onExportProject={() => handleExport(false)}
           isPublished={currentArticle?.isPublished || false}
           onTogglePublish={handleTogglePublish}
+          onGenerateForeword={handleGenerateForeword}
+          onGenerateGraph={handleGenerateGraph}
         />
       }
       content={

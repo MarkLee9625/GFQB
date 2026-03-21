@@ -15,6 +15,8 @@ interface ToolbarProps {
   onExportProject: () => void;
   isPublished?: boolean;
   onTogglePublish?: () => void;
+  onGenerateForeword?: () => void;
+  onGenerateGraph?: () => void;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -31,6 +33,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onExportProject,
   isPublished,
   onTogglePublish,
+  onGenerateForeword,
+  onGenerateGraph,
 }) => {
   if (isFullscreen) return null;
 
@@ -72,6 +76,22 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <button onClick={onReset} className="px-3 py-2 text-yellow-600 hover:bg-yellow-50 rounded-lg text-xs font-bold transition-colors">
         重置
       </button>
+      {onGenerateForeword && (
+        <button 
+          onClick={onGenerateForeword} 
+          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all"
+        >
+          ✨ 生成本期导读
+        </button>
+      )}
+      {onGenerateGraph && (
+        <button 
+          onClick={onGenerateGraph} 
+          className="px-3 py-2 bg-white text-gray-700 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600 rounded-lg text-xs font-bold shadow-sm transition-all"
+        >
+          🕸️ 提取知识图谱
+        </button>
+      )}
       <button onClick={onExportReader} className="px-3 py-2 text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-lg text-xs font-bold transition-colors">
         导出阅读版
       </button>
