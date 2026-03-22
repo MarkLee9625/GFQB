@@ -62,6 +62,9 @@
 ├── build_debug.txt                 # 调试构建日志
 ├── build_detailed_error.txt        # 详细错误日志
 ├── error_log.txt                   # 错误日志
+├── "AI 季度智能选题库 (AI Curation Dashboard) 开发规划.md"  # AI选题库开发规划
+├── "全渠道工法情报矩阵 (Omni-Channel Intelligence Matrix) 开发规划.md"  # 全渠道矩阵开发规划
+├── ai-upgrade-plan.md              # AI升级计划
 ├── extract*.js / .mjs              # PDF 提取相关脚本
 ├── test_*.js                       # 测试脚本
 │
@@ -86,9 +89,9 @@
 │   └── useMemoryMonitor.ts         # 内存监控
 │
 ├── services/                       # 业务服务层
-│   ├── aiService.ts                # Gemini AI 服务
+│   ├── aiService.ts                # Gemini + DeepSeek AI 服务（含批量评审接口）
 │   ├── db.ts                       # IndexedDB 封装（V2 原子化存储）
-│   └── wechatImporter.ts           # 微信文章抓取 V5
+│   └── aiService.ts.backup         # AI 服务备份文件
 │
 ├── scripts/                        # 构建脚本
 │   ├── post-build.js               # 构建后处理（资源内联与注入）
@@ -98,8 +101,9 @@
 │   ├── index.css                   # 全局样式
 │   ├── pdf-worker.d.ts             # PDF Worker 类型定义
 │   │
-│   ├── components/                 # 源码组件（部分）
+│   ├── components/                 # 源码组件
 │   │   ├── Toolbar.tsx
+│   │   ├── AiCurationModal.tsx     # AI季度智能选题库工作台
 │   │   └── Layout/
 │   │       └── MainLayout.tsx      # 主布局组件
 │   │
@@ -122,7 +126,8 @@
 │   │   └── ui.ts                   # UI 组件类型
 │   │
 │   └── utils/                      # 工具函数
-│       └── fileHelpers.ts          # 文件操作辅助
+│       ├── fileHelpers.ts          # 文件操作辅助
+│       └── graphRenderer.ts        # 知识图谱渲染引擎
 │
 ├── public/                         # 静态资源（Vite 公共目录）
 │   ├── pdf.min.mjs                 # PDF.js 主库
