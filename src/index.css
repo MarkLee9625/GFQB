@@ -110,6 +110,28 @@ body,
   text-indent: 0 !important;
 }
 
+/* 5. 期刊级标题间距控制 (收紧各级标题上方的过度留白) */
+.editor-area h1, .sws-prose h1, .article-body h1,
+.editor-area h2, .sws-prose h2, .article-body h2,
+.editor-area h3, .sws-prose h3, .article-body h3,
+.editor-area h4, .sws-prose h4, .article-body h4 {
+  margin-top: 1.2em !important; /* 强制缩小顶部间距，原默认值通常很大 */
+  margin-bottom: 0.8em !important; /* 保持与下方正文的紧凑感 */
+  line-height: 1.5 !important;
+}
+
+/* 6. 幽灵空行粉碎机：清理富文本导入时产生的不可见空行 (这是导致间距突然变大的元凶) */
+.editor-area p:empty,
+.sws-prose p:empty,
+.article-body p:empty,
+.editor-area p:has(> br:only-child),
+.sws-prose p:has(> br:only-child),
+.article-body p:has(> br:only-child) {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
 /* 纸张拟物化与翻页间隙 */
 .editor-area .pdf-page-container {
   width: 100% !important;
