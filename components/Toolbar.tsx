@@ -7,7 +7,6 @@ interface ToolbarProps {
   onNewArticle: () => void;
   onEditArticle: () => void;
   onImport: () => void;
-  onImportWechat: () => void;
   onToggleFullscreen: () => void;
   onDelete: () => void;
   onReset: () => void;
@@ -17,6 +16,7 @@ interface ToolbarProps {
   onTogglePublish?: () => void;
   onGenerateForeword?: () => void;
   onGenerateGraph?: () => void;
+  onOpenAiCuration?: () => void;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -25,7 +25,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onNewArticle,
   onEditArticle,
   onImport,
-  onImportWechat,
   onToggleFullscreen,
   onDelete,
   onReset,
@@ -35,6 +34,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onTogglePublish,
   onGenerateForeword,
   onGenerateGraph,
+  onOpenAiCuration,
 }) => {
   if (isFullscreen) return null;
 
@@ -58,9 +58,14 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <button onClick={onImport} className="px-3 py-2 text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-lg text-xs font-bold transition-colors">
         导入项目
       </button>
-      <button onClick={onImportWechat} className="px-3 py-2 text-green-600 hover:bg-green-50 rounded-lg text-xs font-bold transition-colors">
-        公众号导入
-      </button>
+      {onOpenAiCuration && (
+        <button 
+          onClick={onOpenAiCuration} 
+          className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all"
+        >
+          🤖 智能选题
+        </button>
+      )}
 
       <div className="w-px h-4 bg-gray-100 mx-1"></div>
 

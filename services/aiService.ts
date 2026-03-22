@@ -37,6 +37,9 @@ function extractJsonFromReasoning(text: string): string {
     
     // 5.5 【靶向修复】抹除大模型偶尔口吃产生的嵌套键名幻觉 (将 "id": "name": "nodeX" 强行纠正为 "id": "nodeX")
     jsonStr = jsonStr.replace(/"id"\s*:\s*"name"\s*:/g, '"id":');
+
+    // 5.6 【靶向修复】抹除大模型漏掉 "id": 键名的幻觉 (将 { "node20", 强行纠正为 { "id": "node20",)
+    jsonStr = jsonStr.replace(/({\s*)"(node\d+)"(\s*,)/g, '$1"id": "$2"$3');
     
     // 6. 【核心修复】保留换行符 \n 和回车符 \r，只清理绝对会引发崩溃的低位控制字符
     jsonStr = jsonStr.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]+/g, "");
@@ -98,6 +101,17 @@ export interface KnowledgeLink {
 export interface KnowledgeGraphData {
     nodes: KnowledgeNode[];
     links: KnowledgeLink[];
+}
+
+/**
+ * AI 批量评审结果接口
+ */
+export interface AiEvaluationResult {
+  id: string;
+  aiSummary: string; // AI 提炼的真实技术摘要
+  decision: 'recommend' | 'reject';
+  reason: string;
+  tags: string[]; // AI 提取的关键词
 }
 
 // ==================== 核心 AI 方法 ====================
@@ -484,4 +498,109 @@ export async function generateTitleOnly(content: string): Promise<string> {
         console.error('[aiService] 标题生成失败:', error);
         throw error;
     }
+}
+
+/**
+ * 批量评审文章（赛博总编引擎）
+ * @param articlesToEvaluate 待评审的文章数组，包含 id, title, content
+ * @returns Promise<AiEvaluationResult[]> AI 评审结果数组
+ */
+export async function batchEvaluateArticles(
+  articlesToEvaluate: { id: string; title: string; content: string }[]
+): Promise<AiEvaluationResult[]> {
+  if (!articlesToEvaluate.length) return [];
+
+  // 构造给 AI 的数据源，截取每篇文章前 3000 个字（去除长篇大论的废话，保留核心工艺描述，防超限）
+  const inputData = JSON.stringify(articlesToEvaluate.map(a => ({
+    id: a.id,
+    title: a.title,
+    content: a.content.replace(/[#*\\[\\]!>]/g, '').replace(/\\s+/g, ' ').substring(0, 3000)
+  })));
+
+  const systemPrompt = `你是一位拥有20年经验的顶级船舶制造总工和《工法情报》期刊总编。
+我将给你一批微信公众号文章的纯文本内容。请你认真阅读每篇文章的核心内容。
+
+【收录标准】必须严格符合以下至少一项：
+1. 涂装、舾装、吊装工艺与技术
+2. 船舶建造核心工法
+3. 国内外船厂的先进工艺实践或前沿工艺
+4. 实际造船中采用的先进装备或工艺
+5. 智能船舶与绿色船舶技术
+6. 智能制造系统与造船机器人
+
+【坚决淘汰】以下水文或非技术文章：
+领导视察、会议纪要、党建活动、人事任命、公司获奖通报、行业宏观政策泛泛而谈等。
+
+【输出要求】
+请严格输出一个 JSON 数组。数组中的每个对象必须包含：
+- "id": 对应输入文章的 id
+- "aiSummary": 你提炼的该文章核心技术摘要（50字左右，必须客观精炼）
+- "tags": 提取 2-3 个核心技术关键词标签（如 ["吊装工艺", "爬壁机器人"]）
+- "decision": 结合摘要和标准，给出 "recommend" 或 "reject"
+- "reason": 15字以内，说明为什么推荐或淘汰
+
+千万不要输出 Markdown 代码块，直接返回纯正的 JSON 数组。`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-sws-proxy-secret': 'my-super-secret-key' 
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `请评审以下文章：\n${inputData}` }
+        ],
+        temperature: 0.1, // 降低随机性，保证 JSON 稳定
+      }),
+    });
+
+    const data = await response.json();
+    let content = data.choices?.[0]?.message?.content || '';
+    
+    if (!content) {
+      throw new Error('AI 服务返回内容为空');
+    }
+    
+      // 【终极 JSON 洗衣机：工业级大模型防爆破解析】
+    try {
+      // 1. 暴力清除所有 Markdown 代码块标记
+      content = content.replace(/\`\`\`(?:json)?/gi, '').replace(/\`\`\`/g, '').trim();
+      
+      // 2. 抹除可能会导致崩溃的低位控制字符
+      content = content.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]+/g, "");
+      
+      // 3. 靶向修复 "JSONL 综合征" (输出多个对象但不加中括号)
+      if (content.startsWith('{') && content.endsWith('}')) {
+        // 将连续的 } { 替换为 },{ 
+        content = content.replace(/}\s*{/g, '},{');
+        content = `[${content}]`; // 强行套上数组外衣
+      }
+
+      // 4. 找到最外层的 [ 和 ]，直接截取（防止前面或后面有废话文本）
+      const firstBracket = content.indexOf('[');
+      const lastBracket = content.lastIndexOf(']');
+      if (firstBracket !== -1 && lastBracket !== -1) {
+        content = content.substring(firstBracket, lastBracket + 1);
+      }
+
+      // 5. 抹除尾随逗号 (Trailing comma)
+      content = content.replace(/,\s*([}\]])/g, '$1');
+
+      const results: AiEvaluationResult[] = JSON.parse(content);
+      console.log('[aiService] AI 批量评审成功，结果数:', results.length);
+      return results;
+    } catch (parseError) {
+      console.error("[aiService] JSON 洗衣机清洗失败！原始大模型输出为:\n", content);
+      console.error("解析错误详情:", parseError);
+      // 优雅降级：不要抛出致命错误阻断整个流水线，而是返回空数组跳过这 5 篇
+      return []; 
+    }
+  } catch (error) {
+    console.error('[aiService] AI 批量评审失败:', error);
+    throw new Error('AI 评审解析失败，请重试');
+  }
 }

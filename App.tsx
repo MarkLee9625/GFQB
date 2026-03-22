@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Article, CONSTANTS } from './types';
 import { db } from './services/db';
-import { compressImage, fileToDataURL } from './src/utils/fileHelpers';
+import { compressImage, fileToDataURL, parseMarkdownToHtml } from './src/utils/fileHelpers';
 import { Icon } from './components/Icons';
 import { PaperView } from './components/PaperView';
 import { Editor } from './components/Editor';
@@ -13,9 +13,9 @@ import NavigationCapsule from './components/NavigationCapsule';
 import LoadingOverlay from './components/LoadingOverlay';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import ExportOptionsModal from './components/ExportOptionsModal';
+import AiCurationModal, { WechatArticleMeta } from './src/components/AiCurationModal';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor';
 import { useJournal } from './hooks/useJournal';
-import { fetchWechatArticle } from './services/wechatImporter';
 import { generateForeword, extractGlobalKnowledgeGraph } from './services/aiService';
 import { generateReaderHTML, generatePrintableHTML, exportToPdf, PdfExportOptions } from './src/services/export';
 import { generateGraphHtml } from './src/utils/graphRenderer';
@@ -50,6 +50,7 @@ const AppContent: React.FC = () => {
   const [isCatManagerOpen, setIsCatManagerOpen] = useState(false);
   const [useAlternateDesign, setUseAlternateDesign] = useState(false); // 控制是否使用杂志风设计
   const [importProgress, setImportProgress] = useState<{ stage: string, details: string } | null>(null);
+  const [isAiCurationModalOpen, setIsAiCurationModalOpen] = useState(false);
 
   // Export Options Modal State
   const [isExportOptionsModalOpen, setIsExportOptionsModalOpen] = useState(false);
@@ -369,40 +370,6 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const handleImportWechat = async () => {
-    const url = window.prompt('请输入微信公众号文章链接:');
-    if (!url) return;
-
-    setImportProgress({ stage: 'starting', details: '准备开始抓取...' });
-
-    try {
-      const result = await fetchWechatArticle(url, (stage, details) => {
-        setImportProgress({ stage, details });
-      });
-
-      setImportProgress({ stage: 'saving', details: '正在保存到本地库...' });
-
-      const newItem: Partial<Article> = {
-        title: result.title,
-        category: '智能制造',
-        content: result.content,
-        date: result.date || new Date().toISOString().slice(0, 10),
-        fontSize: 18,
-        lineHeight: 2.0
-      };
-
-      const newArt = await createArticle(newItem);
-      if (newArt) {
-        setCurrentId(newArt.id);
-        // 成功后延迟清空，让用户看到"导入成功"的提示（如果需要的话，或者直接清空）
-        setImportProgress(null);
-        setTimeout(() => alert('导入成功！'), 100);
-      }
-    } catch (err) {
-      setImportProgress(null);
-      alert('导入失败: ' + (err instanceof Error ? err.message : '未知错误'));
-    }
-  };
 
   // 生成卷首语业务流
   const handleGenerateForeword = async () => {
@@ -469,7 +436,7 @@ const AppContent: React.FC = () => {
       }
       
       return `【文章 ${index + 1}：${a.title}】\n${pureText}`;
-    }).join('\n\n---\n\n').slice(0, 80000);
+    }).join('\n\n---\n\n').slice(0, 150000);
 
     setImportProgress({ stage: 'generating', details: 'DeepSeek 正在进行全局知识点提取与拓扑计算，请稍候 (约 20-40 秒)...' });
 
@@ -499,6 +466,32 @@ const AppContent: React.FC = () => {
       setImportProgress(null);
     }
   };
+
+  // 采纳AI选题文章的业务流
+  const handleAdoptArticle = useCallback(async (article: WechatArticleMeta) => {
+    try {
+      // 1. 将Markdown转换为HTML
+      const htmlContent = parseMarkdownToHtml(article.content);
+      
+      // 2. 创建新文章对象
+      const newArt = await createArticle({
+        title: article.title || '未命名文章',
+        category: 'AI选题',
+        content: htmlContent,
+        abstract: article.digest || '',
+        isPublished: true,
+        tags: article.tags || []
+      });
+
+      // 3. 提示用户采纳成功
+      if (newArt) {
+        setCurrentId(newArt.id);
+        setTimeout(() => alert(`✅ 文章 "${article.title}" 已成功采纳！`), 100);
+      }
+    } catch (err) {
+      alert('采纳文章失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    }
+  }, [createArticle, setCurrentId]);
 
   // Navigation Logic
   const handleNavigate = (direction: 'prev' | 'next') => {
@@ -711,7 +704,6 @@ const AppContent: React.FC = () => {
           onNewArticle={() => { setIsEditorOpen(true); setCurrentId(null); }}
           onEditArticle={() => currentId && setIsEditorOpen(true)}
           onImport={() => importInputRef.current?.click()}
-          onImportWechat={handleImportWechat}
           onToggleFullscreen={toggleReadingMode}
           onDelete={handleDelete}
           onReset={handleReset}
@@ -721,6 +713,7 @@ const AppContent: React.FC = () => {
           onTogglePublish={handleTogglePublish}
           onGenerateForeword={handleGenerateForeword}
           onGenerateGraph={handleGenerateGraph}
+          onOpenAiCuration={() => setIsAiCurationModalOpen(true)}
         />
       }
       content={
@@ -798,6 +791,11 @@ const AppContent: React.FC = () => {
               handleExportWithOptions(options);
               setIsExportOptionsModalOpen(false);
             }}
+          />
+          <AiCurationModal
+            isOpen={isAiCurationModalOpen}
+            onClose={() => setIsAiCurationModalOpen(false)}
+            onAdopt={handleAdoptArticle}
           />
         </>
       }

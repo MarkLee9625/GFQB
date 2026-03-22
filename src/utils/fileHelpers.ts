@@ -215,3 +215,26 @@ export const base64ToBlob = (dataURI: string): Blob => {
         return new Blob([]);
     }
 };
+
+/**
+ * 极简 Markdown 转 HTML 转换器（轻量级）
+ * @param mdText Markdown 格式文本
+ * @returns 转换后的 HTML 字符串
+ */
+export function parseMarkdownToHtml(mdText: string): string {
+  let html = mdText;
+  // 处理标题
+  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  // 处理加粗和斜体
+  html = html.replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>');
+  html = html.replace(/\*(.*)\*/gim, '<em>$1</em>');
+  // 处理图片 (突破微信防盗链！)
+  html = html.replace(/!\[(.*?)\]\((.*?)\)/gim, '<img src="$2" alt="$1" referrerpolicy="no-referrer" style="max-width:100%; border-radius:8px; margin:16px auto; display:block;" />');
+  // 处理链接
+  html = html.replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank" style="color:#3b82f6;">$1</a>');
+  // 处理段落换行 (保留双换行为段落)
+  html = html.split('\n\n').map(p => p.trim() ? `<p style="margin-bottom:1em; line-height:1.6;">${p}</p>` : '').join('\n');
+  return html;
+}
