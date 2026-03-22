@@ -1,97 +1,78 @@
-# 📄 AI 季度智能选题库 (AI Curation Dashboard) 开发规划 (v2.0)
+# 📄 全渠道工法情报矩阵 (Omni-Channel Intelligence Matrix) 开发规划 (v2.0)
 
 ## 🎯 1. 业务目标与愿景
-打造一个“AI 总编室”。通过导入 `wechatDownload` 等工具导出的**微信公众号历史文章 Markdown (.md) 数据**，利用 DeepSeek 模型的强大逻辑推理能力，自动从数百篇文章中筛选出符合《工法情报》定位的硬核技术文章。
-系统秉承 **“AI 辅助筛选 + 总编绝对控制 (Human-in-the-loop)”** 的黄金法则，提供一键导入和手动干预功能。
-
-**核心筛选维度（硬性指标）：**
-涂装、船舶建造工法、国内外船厂先进工艺、前沿工艺、实际造船采用的先进工艺、智能船舶、绿色船舶、智能制造、机器人等。
+打破单一微信生态的数据孤岛，构建一个覆盖全球资讯 (RSS)、底层技术 (专利库)、行业权威 (船级社) 的三维数据湖。
+同时，**重构系统界面，解决工具栏功能臃肿问题**，打造一个清爽、极其专业的“AI 赛博总编室”工作流。
 
 ---
 
-## 🏗️ 2. 架构拆解与开发阶段 (Phases)
+## 🏗️ 2. 核心底层改造：统一数据元规范 (Universal Interface)
+**目标**：抹平不同数据源的差异，让 AI 评审引擎和 UI 组件只认一种数据格式。
 
-### Phase 1: 数据解析层 (Markdown 破壁机)
-**目标**：在前端纯浏览器环境中，极速解析用户上传的 `.md` 文件，提取文章元数据。
-* **技术选型**：摒弃沉重的第三方解析库，采用纯 JavaScript 高效正则表达式（Regex）。
-* **提取逻辑**：利用正则 `\[(.*?)\]\((https?:\/\/[^\)]+)\)` 遍历全文，精准剥离出符合 Markdown 格式的文章标题与超链接。
-* **数据结构**：
-  ```typescript
-  interface WechatArticleMeta {
-    title: string;
-    url: string;
-  }
-Phase 2: AI 漏斗引擎 (AI Curation Service)
-目标：在 src/services/aiService.ts 中新增批量打分机制。
+**核心接口重构 (`src/types/intelligence.ts`)：**
+```typescript
+export type SourceType = 'wechat' | 'rss' | 'patent' | 'aip';
 
-核心方法：batchEvaluateArticles(articles: WechatArticleMeta[])
+export interface UniversalArticleMeta {
+  id: string;
+  sourceType: SourceType;  // 区分数据来源
+  sourceName: string;      // 来源名称，如 "TradeWinds", "国家专利局", "DNV"
+  title: string;           // 统一标题
+  content: string;         // 统一正文（HTML/MD/纯文本）
+  url?: string;            // 原始链接
+  publishDate?: string;    // 发布时间
+  // --- AI 评审流转字段 ---
+  aiSummary?: string;
+  decision?: 'recommend' | 'reject' | 'pending';
+  reason?: string;
+  tags?: string[];
+}
+🔌 3. 三大维度接入方案 (Data Pipelines)
+Phase 1: 全球行业资讯 (RSS 引擎)
+技术方案：使用 CORS 代理或 RSS-to-JSON 服务解析海外造船媒体（MarineLog, TradeWinds）和国内垂直门户的 RSS。映射为 UniversalArticleMeta。
 
-Prompt 设计：
+Phase 2: 硬核工法源泉 (专利检索 API)
+技术方案：对接免费公开专利库 API，预设“船舶+自动化/工艺”关键词，提取专利摘要与权利要求作为正文。
 
-角色设定：船舶制造行业资深总工、科技期刊总编。
+Phase 3: 权威风向标 (船级社 AiP 抓取)
+技术方案：编写轻量级爬虫或接入新闻聚合 API，定向追踪 DNV、ABS、CCS 等船级社的 AiP 认证新闻。
 
-输出约束：强制输出标准 JSON 格式，包含 decision ("recommend" | "reject")、reason（15字内理由）和 tags（智能标签）。
+🖥️ 4. UI 融合与重构方案 (UI Integration & Toolbar Refactoring)
+4.1 工具栏 (Toolbar) 减负与折叠设计【本次新增重点】
+目标：解决顶部工具栏按键过多、视觉拥挤的问题，提升排版编辑的专注度。
 
-容错机制：基于前端请求进行 Batch 分批处理，防止单次请求 Token 超限或引发 API Timeout。
+重构策略：引入下拉菜单（Dropdown Menu）组件。
 
-Phase 3: 智能选题台 UI 构建 (Curation Dashboard - 总编工作台)
-目标：实现一个对标顶级 SaaS 产品体验的沉浸式弹窗工作台，并赋予用户最高决策权。
+布局调整：
 
-组件名称：components/AiCurationModal.tsx
+基础排版区：保留加粗、标题、列表、图片等高频排版按键。
 
-布局与核心交互设计：
+📥 抓取与导入（合并）：将“单篇微信导入”与“本地文档导入”合并为一个下拉组。
 
-顶部控制区：
+🤖 AI 情报中枢（合并）：将极其抢眼的 “AI 智能选题” 和 “🕸️ 提取知识图谱” 合并到一个带有炫彩呼吸灯效果的下拉菜单中。点击展开后，用户可选择进入“选题工作台”或“生成全局图谱”。
 
-批量导入：文件上传按钮 <input type="file" accept=".md" />。
+4.2 全渠道总编工作台 (AiCurationModal) 扩容
+目标：将原本的弹窗升级为多信源控制中心。
 
-👑 总编特权 1 (手动追加)：一个“外部文章链接”输入框 + “➕ 直接采纳”按钮，用于绕过 AI，直接抓取天降神文。
+顶部数据源切换 Tab：
 
-主体双栏沙盘：
+[📁 微信/MD] | [🌐 全球 RSS] | [📜 专利追踪] | [🛡️ 船级社 AiP]
 
-左侧（淘汰区 - 灰色调）：展示被 AI 判定为 reject 的文章及淘汰理由。
+交互逻辑：
 
-👑 总编特权 2 (强行捞回)：每张卡片配备“↩️ 强行捞回”按钮，点击后文章瞬间移入右侧推荐区。
+切换 Tab 后，展示对应数据源的操作面板（如 RSS 需显示“拉取最新”按钮）。
 
-右侧（推荐区 - 品牌高亮）：展示 recommend 的优质文章卡片（含智能标签）。
+抓取回来的数据铺满右侧“待评审区”，并带有来源专属角标（如 [TradeWinds]）。
 
-一键入库：提供“➕ 采纳并拉取正文”按钮。点击后触发 fetchWechatArticle(url)，自动抓取正文插入当前期刊。
+依然统一使用那一颗 【🤖 开始 AI 智能评审】 按钮进行批量通读和分发。
 
-Phase 4: 系统集成与入口挂载
-目标：无缝接入现有的《工法情报》编辑流。
+📅 5. 实施路线图 (Action Plan)
+[UI 减负与底座重构]：
 
-工具栏入口：在 Toolbar.tsx 新增渐变色核心按钮：“🤖 AI 智能选题”。
+优先重构 Toolbar.tsx，引入下拉菜单组件，收纳繁杂按钮，还界面一片清爽。
 
-状态管理：在 App.tsx 中增加全局 State 控制 Modal 的开启与关闭，并将抓取到的文章内容注入当前图文排版引擎。
+重构数据类型为 UniversalArticleMeta，修改工作台的顶部，加入多源切换 Tabs。
 
-🛠️ 3. 核心 Prompt 预研 (Draft)
-[System Prompt]
-你是一位拥有 20 年经验的顶级船舶制造总工和《工法情报》期刊总编。
-你的任务是从以下提取自微信公众号的文章列表中，大浪淘沙，挑选出最具硬核技术价值的文章。
+[插件化开发 - RSS优先]：实现 rssFetcher.ts，打通海外新闻数据流，验证通用数据格式的完美兼容。
 
-【收录标准】必须严格符合以下至少一项：
-
-涂装、舾装、吊装工艺与技术
-
-船舶建造核心工法
-
-国内外船厂的先进工艺实践或前沿工艺
-
-实际造船中采用的先进装备或工艺
-
-智能船舶与绿色船舶技术
-
-智能制造系统与造船机器人
-
-【坚决淘汰】以下水文或非技术文章：
-
-领导视察、会议纪要、党建活动、人事任命、公司获奖通报、行业宏观政策泛泛而谈等。
-
-请对传入的文章进行逐一评估。输出必须是 JSON 数组，包含 title, decision ("recommend" 或 "reject"), reason (15字以内), tags (1-2个技术标签)。严格禁止输出任何 markdown 代码块标记，只输出原生 JSON。
-
-📅 4. 实施路线图建议 (Action Plan)
-[第一步：UI与入口]：编写 AiCurationModal.tsx 静态组件，实现 MD 文件上传、正则提取逻辑、双栏布局以及“手动追加链接”输入框，并挂载到 Toolbar.tsx。
-
-[第二步：AI与交互]：在 aiService.ts 中实现批量评审接口。打通数据流：MD解析 -> AI打分 -> 渲染左右双栏 -> 实现“强行捞回”的跨栏交互。
-
-[第三步：闭环入库]：实现“采纳”功能，复用原有的文章抓取逻辑，完成整个 AI 选题与排版的生态闭环。
+[专利与AiP接入]：逐步扩展专利 API 检索和船级社抓取模块。

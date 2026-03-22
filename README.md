@@ -73,7 +73,7 @@
 │   ├── PaperView.tsx               # 杂志风渲染引擎
 │   ├── PaperView.backup.tsx        # 渲染引擎备份
 │   ├── Sidebar.tsx                 # 侧边栏导航
-│   ├── Toolbar.tsx                 # 编辑器工具栏
+│   ├── Toolbar.tsx                 # 编辑器工具栏（已重构为下拉菜单式）
 │   ├── Icons.tsx                   # 自定义 SVG 图标系统
 │   ├── ErrorBoundary.tsx           # React 错误边界
 │   ├── LoadingOverlay.tsx          # 加载遮罩组件
@@ -89,7 +89,7 @@
 │   └── useMemoryMonitor.ts         # 内存监控
 │
 ├── services/                       # 业务服务层
-│   ├── aiService.ts                # Gemini + DeepSeek AI 服务（含批量评审接口）
+│   ├── aiService.ts                # Gemini + DeepSeek AI 服务（含批量评审接口+学术文献编译引擎）
 │   ├── db.ts                       # IndexedDB 封装（V2 原子化存储）
 │   └── aiService.ts.backup         # AI 服务备份文件
 │
@@ -98,12 +98,12 @@
 │   └── copy-worker.js              # Worker 复制脚本
 │
 ├── src/                            # 源码目录（Vite 主源）
-│   ├── index.css                   # 全局样式
+│   ├── index.css                   # 全局样式（含专业中文期刊排版引擎）
 │   ├── pdf-worker.d.ts             # PDF Worker 类型定义
 │   │
 │   ├── components/                 # 源码组件
 │   │   ├── Toolbar.tsx
-│   │   ├── AiCurationModal.tsx     # AI季度智能选题库工作台
+│   │   ├── AiCurationModal.tsx     # AI全渠道选题工作台（支持多数据源）
 │   │   └── Layout/
 │   │       └── MainLayout.tsx      # 主布局组件
 │   │
@@ -113,17 +113,22 @@
 │   │   │   ├── assets.ts           # 导出资源（样式/图片）
 │   │   │   └── templates.ts        # HTML 模板
 │   │   │
-│   │   └── pdf/                    # PDF 解析模块
-│   │       ├── index.ts            # PDF 服务入口
-│   │       ├── wrapper.ts          # PDF.js 封装
-│   │       └── strategies/         # 解析策略模式
-│   │           ├── abstract.ts     # 摘要提取策略
-│   │           ├── keywords.ts     # 关键词提取策略
-│   │           └── title.ts        # 标题提取策略
+│   │   ├── pdf/                    # PDF 解析模块
+│   │   │   ├── index.ts            # PDF 服务入口
+│   │   │   ├── wrapper.ts          # PDF.js 封装
+│   │   │   └── strategies/         # 解析策略模式
+│   │   │       ├── abstract.ts     # 摘要提取策略
+│   │   │       ├── keywords.ts     # 关键词提取策略
+│   │   │       └── title.ts        # 标题提取策略
+│   │   │
+│   │   └── fetchers/               # 【新增】多源数据抓取引擎
+│   │       ├── rssFetcher.ts       # RSS资讯抓取（支持双引擎代理）
+│   │       └── patentFetcher.ts    # 专利文献检索
 │   │
 │   ├── types/                      # 类型定义
 │   │   ├── models.ts               # 数据模型类型
-│   │   └── ui.ts                   # UI 组件类型
+│   │   ├── ui.ts                   # UI 组件类型
+│   │   └── intelligence.ts         # 【新增】全渠道情报统一接口定义
 │   │
 │   └── utils/                      # 工具函数
 │       ├── fileHelpers.ts          # 文件操作辅助
@@ -154,21 +159,34 @@
 
 ### 关键组件说明
 *   **编辑器 (`components/Editor.tsx`)**: 集成了富文本编辑、AI 拟题、摘要生成及媒体原子化插入逻辑。
-*   **渲染引擎 (`components/PaperView.tsx`)**: 负责“杂志风格”与“经典风格”的实时物理排版模拟。
+*   **渲染引擎 (`components/PaperView.tsx`)**: 负责"杂志风格"与"经典风格"的实时物理排版模拟。
+*   **工具栏 (`components/Toolbar.tsx`)**: 重构为下拉菜单式，包含"数据接入"和"AI情报中枢"两大功能区。
+*   **AI选题工作台 (`src/components/AiCurationModal.tsx`)**: 支持微信/MD导入、RSS资讯、专利文献的多源数据筛选。
 *   **状态管理 (`hooks/useJournal.ts`)**: 统一的数据流入口，负责 IndexedDB 的并发读写与文章生命周期管理。
-*   **构建引擎 (`scripts/post-build.js`)**: **项目灵魂**。在构建后自动内联 JS/CSS，并注入 PDF.js 核心及 Worker，实现“单文件自包含 HTML”导出。
+*   **构建引擎 (`scripts/post-build.js`)**: **项目灵魂**。在构建后自动内联 JS/CSS，并注入 PDF.js 核心及 Worker，实现"单文件自包含 HTML"导出。
 
 ---
 
 ## 🏗️ 核心技术机制
 
 ### 1. 离线阅读版导出原理
-本系统采用“量子纠缠”式的架构，导出的阅读器实际上是编辑器自身的受限功能副本：
-*   **一键内联**：通过 `post-build.js` 将所有外部依赖（包括 10MB+ 的 PDF 渲染引擎）转为 Base64 嵌入单个 HTML。
-*   **数据注入**：用户导出时，文章数据、加密图片均通过 Base64 安全注入到模板的 `window` 对象中。
-*   **单页路由**：阅读版采用极简的单页 Hash 路由切换文章。
+本系统采用"量子纠缠"式的架构，导出的阅读器实际上是编辑器自身的受限功能副本：
+*   **一键内联**: 通过 `post-build.js` 将所有外部依赖（包括 10MB+ 的 PDF 渲染引擎）转为 Base64 嵌入单个 HTML。
+*   **数据注入**: 用户导出时，文章数据、加密图片均通过 Base64 安全注入到模板的 `window` 对象中。
+*   **单页路由**: 阅读版采用极简的单页 Hash 路由切换文章。
 
-### 2. AI 智能开发助手 (Agent Skills)
+### 2. AI 全渠道情报矩阵
+**统一数据接口**: `src/types/intelligence.ts` 定义了 `UniversalArticleMeta` 接口，统一了微信、RSS、专利、船级社等多种数据源格式。
+*   **RSS双引擎抓取**: `src/services/fetchers/rssFetcher.ts` 支持 rss2json API + AllOrigins 代理双引擎，突破跨域限制。
+*   **学术文献编译引擎**: `services/aiService.ts` 新增 `translateAndFormatAcademic` 函数，将英文学术论文编译为中文工法报道。
+*   **多源筛选工作台**: AI选题工作台支持多数据源切换，使用统一AI评审流程处理不同来源的情报。
+
+### 3. UI 架构优化
+*   **工具栏重构**: 采用下拉菜单设计，将"数据接入"和"AI情报中枢"功能分组，解决按钮臃肿问题。
+*   **专业中文排版引擎**: `src/index.css` 中内置强制中文期刊排版规则，实现首行缩进2字符、图片居中、标题无缩进等专业排版效果。
+*   **响应式交互**: 优化悬浮效果和过渡动画，提升编辑体验。
+
+### 4. AI 智能开发助手 (Agent Skills)
 项目在 `.agent/skills` 下内置了一套 AI 协作规范，确保开发过程中架构的优雅与一致性：
 *   `code-style-check`: 强化类型安全与 TailwindCSS 规范。
 *   `export-template-unification`: 确保编辑器预览与导出版视觉 100% 同位。
@@ -179,13 +197,30 @@
 ## ✨ 核心特性
 
 -   **智能抓取**: 微信文章 V5 极速抓取，自动清洗头部干扰与尾部广告。
+-   **全渠道数据接入**: 支持微信/MD、RSS全球资讯、专利文献、船级社动态等多源情报抓取。
 -   **AI 辅助**: 基于 Gemini-3-Flash 智能提取技术重点 (Why/How/Benefits) 并一键拟定标题。
+-   **学术文献编译**: 将英文学术论文自动翻译并重写为专业中文工法报道。
+-   **专业中文排版**: 内置强制中文期刊排版引擎，实现首行缩进、两端对齐等专业效果。
 -   **杂志排版**: 封面/封底支持实时切换设计风格，支持高清 PDF 附件预览与自动转图。
 -   **极端离线**: 导出的情报包不依赖任何网络，所有图片与播放器内核均为内置。
 
 ---
 
 ## 📅 更新日志 (Changelog)
+
+### v1.5.0 (2026-03-22) - 全渠道工法情报矩阵上线
+*   **【全渠道情报矩阵】多源数据接入引擎**: 实现覆盖微信、RSS、专利、船级社的多维度情报矩阵
+    *   **统一数据接口**: 新增 `src/types/intelligence.ts` 定义 `UniversalArticleMeta` 接口，统一所有数据源格式
+    *   **RSS双引擎抓取**: 实现 `src/services/fetchers/rssFetcher.ts` 支持 rss2json API + AllOrigins 代理双引擎，突破海外媒体跨域限制
+    *   **学术文献编译**: 在 `services/aiService.ts` 中新增 `translateAndFormatAcademic` 函数，将英文学术论文智能编译为中文工法报道
+    *   **专利检索支持**: 预留专利API接口框架，支持船舶制造相关专利文献检索
+*   **【UI架构优化】工具栏重构与专业排版**:
+    *   **工具栏下拉菜单**: 重构 `components/Toolbar.tsx`，将功能按钮分组为"数据接入"和"AI情报中枢"两大下拉菜单
+    *   **专业中文排版引擎**: 在 `src/index.css` 中新增强制中文期刊排版规则，实现首行缩进2字符、图片居中、标题无缩进
+    *   **AI选题工作台升级**: `src/components/AiCurationModal.tsx` 支持多数据源切换（微信/MD、RSS资讯、专利文献）
+*   **【规划文档完善】**:
+    *   新增《全渠道工法情报矩阵 (Omni-Channel Intelligence Matrix) 开发规划.md》详细技术方案
+    *   更新《AI季度智能选题库 (AI Curation Dashboard) 开发规划.md》为v2.0版本
 
 ### v1.4.0 (2026-03-22) - AI季度智能选题库上线
 *   **【AI选题总编室】赛博总编引擎**: 正式上线AI季度智能选题库（AI Curation Dashboard），实现"AI辅助筛选 + 总编绝对控制"的黄金法则
@@ -329,4 +364,4 @@
 *   **IndexedDB V2**: 实现文章级原子化存储，大幅提升大数据量下的稳定性。
 
 ---
-最后更新：2026-03-21
+最后更新：2026-03-22

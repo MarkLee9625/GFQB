@@ -604,3 +604,62 @@ export async function batchEvaluateArticles(
     throw new Error('AI 评审解析失败，请重试');
   }
 }
+
+/**
+ * 学术文献深度编译引擎：将英文学术论文翻译并重写为中文工法报道
+ * @param article 包含标题和内容的学术文献
+ * @returns Promise<string> Markdown 格式的中文工法报道
+ */
+export async function translateAndFormatAcademic(article: { title: string, content: string }): Promise<string> {
+  console.log("[aiService] 启动学术文献深度编译...");
+
+  const systemPrompt = `你是一位拥有20年经验的顶级船舶制造总工和《工法情报》期刊总编。
+请将下面这篇英文学术论文（包含期刊来源和摘要）翻译并重写为一篇适合中文读者阅读的专业《工法情报》推文正文。
+【排版要求】
+1. 必须使用 Markdown 格式排版。
+2. 必须包含以下三个核心模块：
+   - 🏆 **文献来源** (提取传入文本中的期刊、作者、引用量等硬核信息)
+   - 💡 **核心工法解析** (将英文摘要翻译为通顺、专业的中文工程描述，切忌机翻味)
+   - 🚀 **应用前景分析** (作为总编，用1段话专业点评该技术在实际造船厂中的潜在应用价值)
+3. 语言风格：硬核、专业、干练。绝不要输出多余的寒暄语。`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-sws-proxy-secret': 'my-super-secret-key'
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `【论文标题】\n${article.title}\n\n【原始信息】\n${article.content}` }
+        ],
+        temperature: 0.3
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[aiService] 学术编译请求失败:', { status: response.status, errorData });
+      throw new Error(`AI 服务请求失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.choices?.[0]?.message?.content) {
+      let text = data.choices[0].message.content;
+      // 清理响应中的推理标签
+      const cleanedText = cleanPlainTextResponse(text);
+      console.log("[aiService] 学术文献深度编译成功");
+      return cleanedText;
+    } else {
+      console.error('[aiService] AI 服务返回数据格式异常:', data);
+      throw new Error('AI 服务返回数据格式异常');
+    }
+  } catch (error) {
+    console.error("[aiService] 学术编译失败:", error);
+    throw new Error("编译失败");
+  }
+}

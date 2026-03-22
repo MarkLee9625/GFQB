@@ -55,17 +55,54 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
       <div className="w-px h-4 bg-gray-100 mx-1"></div>
 
-      <button onClick={onImport} className="px-3 py-2 text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-lg text-xs font-bold transition-colors">
-        导入项目
-      </button>
-      {onOpenAiCuration && (
-        <button 
-          onClick={onOpenAiCuration} 
-          className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all"
-        >
-          🤖 智能选题
+      {/* 📥 数据接入下拉组 */}
+      <div className="relative group">
+        <button className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
+          <span>📥 数据接入</span>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </button>
-      )}
+        <div className="absolute left-0 mt-1 w-40 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+          <button 
+            onClick={onImport} 
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            📄 导入本地文档
+          </button>
+          <button 
+            // 暂时绑定到onImport，后续可以添加单独的单篇微信导入函数
+            onClick={onImport} 
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            🟢 单篇微信导入
+          </button>
+        </div>
+      </div>
+
+      {/* 🤖 AI 情报中枢下拉组 (使用酷炫渐变色) */}
+      <div className="relative group ml-2">
+        <button className="flex items-center gap-1 px-4 py-1.5 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-md shadow-sm hover:shadow-md transition-all">
+          <span>🤖 AI 情报中枢</span>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+        </button>
+        <div className="absolute left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+          {onOpenAiCuration && (
+            <button 
+              onClick={onOpenAiCuration} 
+              className="w-full text-left px-4 py-3 text-sm font-bold text-indigo-700 hover:bg-indigo-50 border-b border-gray-100"
+            >
+              📑 AI 智能选题总编室
+            </button>
+          )}
+          {onGenerateGraph && (
+            <button 
+              onClick={onGenerateGraph} 
+              className="w-full text-left px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+            >
+              🕸️ 提取全局知识图谱
+            </button>
+          )}
+        </div>
+      </div>
 
       <div className="w-px h-4 bg-gray-100 mx-1"></div>
 
@@ -87,14 +124,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
           className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all"
         >
           ✨ 生成本期导读
-        </button>
-      )}
-      {onGenerateGraph && (
-        <button 
-          onClick={onGenerateGraph} 
-          className="px-3 py-2 bg-white text-gray-700 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600 rounded-lg text-xs font-bold shadow-sm transition-all"
-        >
-          🕸️ 提取知识图谱
         </button>
       )}
       <button onClick={onExportReader} className="px-3 py-2 text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-lg text-xs font-bold transition-colors">

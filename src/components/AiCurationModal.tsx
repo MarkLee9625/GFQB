@@ -1,33 +1,26 @@
 import React, { useState, useRef } from 'react';
-import { batchEvaluateArticles, AiEvaluationResult } from '../../services/aiService';
-
-// 更新数据结构：适应本地单文件模式
-export interface WechatArticleMeta {
-  id: string;
-  title: string;
-  fileName: string;
-  content: string; // 完整 Markdown 正文
-  digest?: string;  // 截取的摘要，供 UI 展示（改为可选，兼容旧数据）
-  aiSummary?: string; // AI 提炼的真实技术摘要
-  url?: string;    // 手动追加的外部链接保留此字段
-  decision?: 'recommend' | 'reject' | 'pending';
-  reason?: string;
-  tags?: string[];
-}
+import { batchEvaluateArticles, AiEvaluationResult, translateAndFormatAcademic } from '../../services/aiService';
+import { UniversalArticleMeta, SourceType } from '../types/intelligence';
+import { fetchRssFeed, RSS_PRESETS } from '../services/fetchers/rssFetcher';
+import { fetchPatents, PATENT_KEYWORDS } from '../services/fetchers/patentFetcher';
 
 interface AiCurationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdopt: (article: WechatArticleMeta) => void;
+  onAdopt: (article: UniversalArticleMeta) => void;
 }
 
 export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCurationModalProps) {
-  const [articles, setArticles] = useState<WechatArticleMeta[]>([]);
+  const [articles, setArticles] = useState<UniversalArticleMeta[]>([]);
+  const [activeSource, setActiveSource] = useState<SourceType>('wechat');
   const [manualUrl, setManualUrl] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   // 【新增】记录 AI 阅卷进度文本
   const [progressText, setProgressText] = useState('');
   const [adoptedIds, setAdoptedIds] = useState<Set<string>>(new Set());
+  const [selectedRssUrl, setSelectedRssUrl] = useState(RSS_PRESETS[0].url);
+  const [patentKeyword, setPatentKeyword] = useState(PATENT_KEYWORDS[0].value);
+  const [translatingId, setTranslatingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 核心功能：支持 Shift 批量上传并并发解析每一个 MD 文件
@@ -38,7 +31,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
     setIsProcessing(true);
 
     const readPromises = files.map((file: File) => {
-      return new Promise<WechatArticleMeta>((resolve) => {
+      return new Promise<UniversalArticleMeta>((resolve) => {
         const reader = new FileReader();
         reader.onload = (event) => {
           const text = event.target?.result as string || '';
@@ -47,17 +40,13 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
           const titleMatch = text.match(/^#\s+(.*)/m);
           const title = titleMatch ? titleMatch[1].trim() : file.name.replace(/\.[^/.]+$/, "");
 
-          // 2. 提取摘要：移除常见的 markdown 符号，截取前 120 个字符
-          const cleanText = text.replace(/[#*_\[\]!>]/g, '').replace(/\n+/g, ' ').trim();
-          const digest = cleanText.substring(0, 120) + '...';
-
           resolve({
             id: Math.random().toString(36).substr(2, 9),
+            sourceType: 'wechat',
+            sourceName: '本地导入(.md)',
             title,
-            fileName: file.name,
             content: text,
-            digest,
-            decision: 'pending', // 初始进入测试挂起状态
+            decision: 'pending',
           });
         };
         reader.readAsText(file);
@@ -66,7 +55,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
 
     // 等待所有文件解析完毕，拼接到现有列表中
   const parsedArticles = await Promise.all(readPromises);
-    setArticles((prev: WechatArticleMeta[]) => [...prev, ...parsedArticles]);
+    setArticles((prev: UniversalArticleMeta[]) => [...prev, ...parsedArticles]);
     setIsProcessing(false);
     
     // 清空 input，允许重复上传同一批文件
@@ -138,6 +127,65 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
     }
   };
 
+  const handleAdoptArticle = async (article: UniversalArticleMeta) => {
+    // 如果已经采纳过，直接流转
+    if (adoptedIds.has(article.id)) {
+      if (onAdopt) onAdopt(article);
+      return;
+    }
+
+    // 如果是学术文献（底层类型为了兼容依然是 'patent'），触发深度编译
+    if (article.sourceType === 'patent') {
+      setTranslatingId(article.id);
+      try {
+        const translatedContent = await translateAndFormatAcademic(article);
+        // 篡改 content 为大模型生成的精美 Markdown 中文报道
+        const enrichedArticle = { ...article, content: translatedContent };
+        
+        if (onAdopt) onAdopt(enrichedArticle);
+        setAdoptedIds(prev => new Set(prev).add(article.id));
+      } catch (error) {
+        console.error("编译失败", error);
+        alert("AI 深度编译遇到网络波动，已为您采纳英文原文。");
+        if (onAdopt) onAdopt(article);
+        setAdoptedIds(prev => new Set(prev).add(article.id));
+      } finally {
+        setTranslatingId(null);
+      }
+    } else {
+      // 普通微信文章或本地文件，无需翻译，直接采纳原文
+      if (onAdopt) onAdopt(article);
+      setAdoptedIds(prev => new Set(prev).add(article.id));
+    }
+  };
+
+  const handleFetchRss = async () => {
+     setIsProcessing(true);
+     try {
+       const preset = RSS_PRESETS.find(p => p.url === selectedRssUrl);
+       const sourceName = preset ? preset.name : '自定义 RSS';
+       const newArticles = await fetchRssFeed(selectedRssUrl, sourceName);
+       
+       setArticles(prev => [...prev, ...newArticles]);
+     } catch (error: any) {
+       alert(error.message);
+     } finally {
+       setIsProcessing(false);
+     }
+   };
+
+  const handleFetchPatents = async () => {
+     setIsProcessing(true);
+     try {
+       const newArticles = await fetchPatents(patentKeyword);
+       setArticles(prev => [...prev, ...newArticles]);
+     } catch (error: any) {
+       alert(error.message);
+     } finally {
+       setIsProcessing(false);
+     }
+   };
+
   if (!isOpen) return null;
 
   return (
@@ -151,25 +199,70 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
               <span className="text-2xl">🤖</span> AI 智能选题总编室
             </h2>
             
-            {/* 核心改造：添加 multiple 属性支持批量上传 */}
-            <div className="flex items-center gap-2 ml-4">
-              <input 
-                type="file" 
-                accept=".md" 
-                multiple
-                ref={fileInputRef} 
-                onChange={handleFileUpload} 
-                className="hidden" 
-                id="md-upload" 
-              />
-              <label 
-                htmlFor="md-upload" 
-                className={`cursor-pointer px-4 py-2 border rounded-lg text-sm font-semibold shadow-sm transition-all ${isProcessing ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-wait' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-              >
-                {isProcessing ? '⏳ 正在极速解析...' : '📁 批量导入文章 (.md)'}
-              </label>
-              <span className="text-xs text-gray-500 font-medium">已入库: {articles.length} 篇</span>
-              {articles.some((a: WechatArticleMeta) => a.decision === 'pending') && (
+            {/* 动态控制面板：根据当前激活的 Tab 显示不同操作 */}
+            <div className="flex items-center gap-3 ml-4">
+              {activeSource === 'wechat' && (
+                <>
+                  <input type="file" accept=".md" multiple ref={fileInputRef} onChange={handleFileUpload} className="hidden" id="md-upload" />
+                  <label htmlFor="md-upload" className={`cursor-pointer px-4 py-2 border rounded-lg text-sm font-semibold shadow-sm transition-all ${isProcessing ? 'bg-gray-100 text-gray-400' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+                    {isProcessing ? '⏳ 处理中...' : '📁 批量导入 MD'}
+                  </label>
+                </>
+              )}
+
+              {activeSource === 'rss' && (
+                <>
+                  <select 
+                    value={selectedRssUrl}
+                    onChange={(e) => setSelectedRssUrl(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {RSS_PRESETS.map((preset, idx) => (
+                      <option key={idx} value={preset.url}>{preset.name}</option>
+                    ))}
+                  </select>
+                  <button 
+                    onClick={handleFetchRss}
+                    disabled={isProcessing}
+                    className="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-bold shadow-sm hover:bg-indigo-600 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {isProcessing ? '⏳ 正在跨洋拉取...' : '🌐 一键拉取最新资讯'}
+                  </button>
+                </>
+              )}
+
+              {activeSource === 'patent' && (
+                <>
+                  <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
+                    <select 
+                      value={patentKeyword}
+                      onChange={(e) => setPatentKeyword(e.target.value)}
+                      className="px-3 py-2 text-sm text-gray-700 bg-gray-50 border-r border-gray-300 focus:outline-none"
+                    >
+                      {PATENT_KEYWORDS.map((kw, idx) => (
+                        <option key={idx} value={kw.value}>{kw.label}</option>
+                      ))}
+                    </select>
+                    <input 
+                      type="text" 
+                      placeholder="或输入自定义英文关键词..." 
+                      className="w-48 px-3 py-2 text-sm focus:outline-none"
+                      value={!PATENT_KEYWORDS.find(k => k.value === patentKeyword) ? patentKeyword : ''}
+                      onChange={(e) => setPatentKeyword(e.target.value)}
+                    />
+                  </div>
+                  <button 
+                    onClick={handleFetchPatents}
+                    disabled={isProcessing}
+                    className="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-bold shadow-sm hover:bg-amber-500 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {isProcessing ? '⏳ 检索中...' : '🎓 检索前沿文献'}
+                  </button>
+                </>
+              )}
+              
+              <span className="text-xs text-gray-500 font-medium ml-2">已入库: {articles.length} 篇</span>
+              {articles.some((a: UniversalArticleMeta) => a.decision === 'pending') && (
                 <button 
                   onClick={handleStartAiEvaluation}
                   disabled={isProcessing}
@@ -204,6 +297,29 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
           </div>
         </div>
 
+        {/* 全渠道情报源切换 Tabs */}
+        <div className="flex px-5 bg-white border-b border-gray-200">
+          {[
+            { id: 'wechat', icon: '📁', label: '微信/MD导入' },
+            // 战略聚焦：暂时隐藏 RSS 和 AiP，深挖学术文献
+            // { id: 'rss', icon: '🌐', label: '全球 RSS 资讯' },
+            { id: 'patent', icon: '🎓', label: '前沿学术文献' },
+            // { id: 'aip', icon: '🛡️', label: '船级社 AiP' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSource(tab.id as SourceType)}
+              className={`flex items-center gap-2 px-6 py-3 font-bold text-sm border-b-2 transition-colors ${
+                activeSource === tab.id 
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <span>{tab.icon}</span> {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* 主体双栏沙盘区 */}
         <div className="flex-1 flex overflow-hidden bg-gray-50">
           
@@ -213,10 +329,10 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
               <span>🗑️ AI 淘汰区 (非硬核技术)</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {articles.filter((a: WechatArticleMeta) => a.decision === 'reject').length === 0 ? (
+              {articles.filter((a: UniversalArticleMeta) => a.decision === 'reject').length === 0 ? (
                 <div className="text-center text-gray-400 text-sm mt-10">暂无淘汰文章</div>
               ) : (
-                articles.filter((a: WechatArticleMeta) => a.decision === 'reject').map((article: WechatArticleMeta) => (
+                articles.filter((a: UniversalArticleMeta) => a.decision === 'reject').map((article: UniversalArticleMeta) => (
                   <div key={article.id} className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm group opacity-70 hover:opacity-100 transition-opacity">
                     <h4 className="font-bold text-gray-700 text-sm mb-1">{article.title}</h4>
                     <p className="text-xs text-red-500 font-medium mb-2 flex items-start gap-1">
@@ -249,7 +365,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
                         <span className={`px-2 py-0.5 text-xs font-bold rounded ${article.decision === 'recommend' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                           {article.decision === 'recommend' ? '⭐️ AI推荐' : '等待 AI 评审'}
                         </span>
-                        <span className="text-xs text-gray-400 truncate border-l pl-2 border-gray-200" title={article.fileName}>{article.fileName}</span>
+                        <span className="text-xs text-gray-400 truncate border-l pl-2 border-gray-200" title={article.sourceName}>{article.sourceName}</span>
                       </div>
                       <h4 className="font-bold text-gray-800 text-base leading-snug truncate" title={article.title}>{article.title}</h4>
                       <p className="text-sm text-gray-500 mt-2 line-clamp-2 leading-relaxed">
@@ -268,23 +384,22 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
                         </div>
                       )}
                     </div>
-                    {/* 核心修复：柔性采纳按钮 */}
+                    {/* 核心修复：柔性采纳按钮 - 去除反人类隐藏设计 */}
                     {(() => {
                       const isAdopted = adoptedIds.has(article.id);
                       return (
                         <button 
                           onClick={() => {
                             if (onAdopt) onAdopt(article);
-                            // 记录为已采纳，但不禁用按钮
                             setAdoptedIds(prev => new Set(prev).add(article.id));
                           }}
-                          className={`flex-shrink-0 px-4 py-2 border rounded-lg text-sm font-bold transition-all
+                          className={`flex-shrink-0 px-4 py-2 border rounded-lg text-sm font-bold transition-all shadow-sm hover:shadow-md
                             ${isAdopted 
-                              ? 'bg-green-50 text-green-600 border-green-200 hover:bg-green-600 hover:text-white opacity-100' 
-                              : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white opacity-0 group-hover:opacity-100'
+                              ? 'bg-green-50 text-green-600 border-green-200 hover:bg-green-600 hover:text-white' 
+                              : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white'
                             }`}
                         >
-                          {isAdopted ? '🔁 再次采纳' : '➕ 采纳正文'}
+                          {isAdopted ? '✅ 已采纳' : '➕ 采纳正文'}
                         </button>
                       );
                     })()}

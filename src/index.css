@@ -61,6 +61,55 @@ body,
   height: auto !important;
 }
 
+/* ============================================================
+   专业中文期刊排版引擎 (Auto-Typography) - 强制生效版
+   任务：接管正文段落，强制首行缩进 2 字符，并保护特殊元素
+   ============================================================ */
+
+/* 1. 强制正文首行缩进 2 字符 (2em)，并使用 !important 击穿框架默认样式 */
+.editor-area p,
+.sws-prose p,
+.article-body p,
+.editor-area > div,
+.sws-prose > div {
+  text-indent: 2em !important;
+  margin-bottom: 1em !important; 
+  text-align: justify !important; 
+}
+
+/* 2. 防御机制：绝对禁止图片和视频所在的段落发生缩进，防止布局歪斜 */
+.editor-area p:has(img),
+.sws-prose p:has(img),
+.article-body p:has(img),
+.editor-area > div:has(img),
+.sws-prose > div:has(img),
+.editor-area p:has(video),
+.sws-prose p:has(video) {
+  text-indent: 0 !important;
+  text-align: center !important; 
+}
+
+/* 3. 防御机制：如果是刻意居中/右对齐的段落（如署名、引用），剥离缩进 */
+.editor-area p[style*="text-align: center"],
+.sws-prose p[style*="text-align: center"],
+.editor-area p[style*="text-align: right"],
+.sws-prose p[style*="text-align: right"],
+.editor-area p[class*="text-center"],
+.sws-prose p[class*="text-center"],
+.editor-area > div[style*="text-align: center"],
+.sws-prose > div[style*="text-align: center"] {
+  text-indent: 0 !important;
+}
+
+/* 4. 防御机制：标题、列表、表格内容不需要首行缩进 */
+.editor-area h1, .editor-area h2, .editor-area h3, .editor-area h4,
+.sws-prose h1, .sws-prose h2, .sws-prose h3, .sws-prose h4,
+.editor-area ul, .editor-area ol, .editor-area li,
+.sws-prose ul, .sws-prose ol, .sws-prose li,
+.editor-area table, .editor-area td, .editor-area th {
+  text-indent: 0 !important;
+}
+
 /* 纸张拟物化与翻页间隙 */
 .editor-area .pdf-page-container {
   width: 100% !important;

@@ -13,7 +13,8 @@ import NavigationCapsule from './components/NavigationCapsule';
 import LoadingOverlay from './components/LoadingOverlay';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import ExportOptionsModal from './components/ExportOptionsModal';
-import AiCurationModal, { WechatArticleMeta } from './src/components/AiCurationModal';
+import AiCurationModal from './src/components/AiCurationModal';
+import { UniversalArticleMeta } from './src/types/intelligence';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor';
 import { useJournal } from './hooks/useJournal';
 import { generateForeword, extractGlobalKnowledgeGraph } from './services/aiService';
@@ -468,7 +469,7 @@ const AppContent: React.FC = () => {
   };
 
   // 采纳AI选题文章的业务流
-  const handleAdoptArticle = useCallback(async (article: WechatArticleMeta) => {
+  const handleAdoptArticle = useCallback(async (article: UniversalArticleMeta) => {
     try {
       // 1. 将Markdown转换为HTML
       const htmlContent = parseMarkdownToHtml(article.content);
@@ -478,7 +479,7 @@ const AppContent: React.FC = () => {
         title: article.title || '未命名文章',
         category: 'AI选题',
         content: htmlContent,
-        abstract: article.digest || '',
+        abstract: article.aiSummary || '',
         isPublished: true,
         tags: article.tags || []
       });
