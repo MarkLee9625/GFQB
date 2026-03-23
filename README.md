@@ -111,7 +111,15 @@
 │   │   ├── export/                 # 导出模块
 │   │   │   ├── index.ts            # 导出服务入口
 │   │   │   ├── assets.ts           # 导出资源（样式/图片）
-│   │   │   └── templates.ts        # HTML 模板
+│   │   │   ├── templates.ts        # HTML 模板
+│   │   │   ├── pdfComponents.tsx   # PDF渲染组件
+│   │   │   ├── pdfEngine.ts        # PDF生成引擎
+│   │   │   ├── print.ts            # 打印服务
+│   │   │   ├── reader.ts           # 阅读器服务
+│   │   │   ├── data.ts             # 数据服务
+│   │   │   └── utils/              # 导出工具
+│   │   │       ├── file.ts         # 文件工具
+│   │   │       └── media.ts        # 媒体工具
 │   │   │
 │   │   ├── pdf/                    # PDF 解析模块
 │   │   │   ├── index.ts            # PDF 服务入口
@@ -364,4 +372,4 @@
 *   **IndexedDB V2**: 实现文章级原子化存储，大幅提升大数据量下的稳定性。
 
 ---
-最后更新：2026-03-22
+最后更新：2026-03-23
