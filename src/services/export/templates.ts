@@ -470,7 +470,19 @@ export function getClientScript() {
         }
     });
     document.addEventListener('DOMContentLoaded', function() { app.init(); });
-    `;
+    
+    // 接收来自知识图谱的溯源检索信号 (离线无网状态下原生工作)
+    window.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'GRAPH_SEARCH_KEYWORD') {
+            var keyword = event.data.keyword;
+            // 调用浏览器原生高亮与自动滚动
+            var found = window.find(keyword, false, false, true, false, false, false);
+            if (!found) {
+                window.find(keyword, false, true, true, false, false, false);
+            }
+        }
+    });
+`;
 }
 
 export function getReaderTemplates() {

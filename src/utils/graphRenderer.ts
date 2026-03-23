@@ -7,9 +7,21 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
   const width = 800; const height = 800;
   const cx = width / 2; const cy = height / 2; const radius = 280;
 
+  // 计算全局最大最小权重用于字体大小计算
+  let minWeight = Infinity;
+  let maxWeight = -Infinity;
+  data.nodes.forEach(node => {
+    if (node.weight < minWeight) minWeight = node.weight;
+    if (node.weight > maxWeight) maxWeight = node.weight;
+  });
+
   const svgNodes = data.nodes.map((n, i) => {
     const angle = (i / data.nodes.length) * 2 * Math.PI;
-    return { ...n, x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
+    // 基于权重插值计算字体大小（9-14px）
+    const fontSizeRange = 14 - 9;
+    const weightRatio = maxWeight === minWeight ? 0.5 : (n.weight - minWeight) / (maxWeight - minWeight);
+    const fontSize = 9 + weightRatio * fontSizeRange;
+    return { ...n, x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle), fontSize };
   });
 
   const linksHtml = data.links.map(link => {
@@ -25,13 +37,16 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
     const colors: Record<string, string> = { technology: '#3b82f6', process: '#10b981', material: '#f59e0b', equipment: '#8b5cf6', concept: '#64748b' };
     const color = colors[node.type] || '#3b82f6';
     const r = 12 + (node.weight * 1.2);
-    // 静态版也只显示权重大于 6 的节点名字，避免重叠
-    const showText = node.weight >= 6;
+    // 所有节点都显示文字，根据预计算的字体大小渲染
+    const fontSize = Math.round(node.fontSize);
     return `
       <g transform="translate(${node.x}, ${node.y})">
         <circle r="${r + 4}" fill="${color}" opacity="0.15" />
         <circle r="${r}" fill="${color}" />
-        ${showText ? `<text y="${r + 14}" text-anchor="middle" fill="#334155" font-size="11" font-weight="bold">${node.name}</text>` : ''}
+        <text y="${r + 14}" text-anchor="middle" fill="#334155" font-size="${fontSize}" font-weight="bold"
+              paint-order="stroke" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          ${node.name}
+        </text>
       </g>
     `;
   }).join('');
@@ -63,11 +78,69 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
           backdrop-filter: blur(4px);
         }
         .tooltip .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 6px; }
+
+        /* 情报溯源面板 (右侧抽屉) */
+        .drawer {
+          position: absolute; top: 0; right: -350px; width: 320px; height: 100vh;
+          background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
+          box-shadow: -5px 0 25px rgba(0,0,0,0.1); border-left: 1px solid #e2e8f0;
+          transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex; flex-direction: column; z-index: 20; padding: 20px; box-sizing: border-box;
+          font-family: system-ui, -apple-system, sans-serif;
+        }
+        .drawer.open { right: 0; }
+        .drawer-close { position: absolute; top: 15px; right: 15px; cursor: pointer; color: #64748b; font-size: 20px; font-weight: bold; border:none; background:none; }
+        .drawer-close:hover { color: #0f172a; }
+        .drawer-header { margin-bottom: 20px; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; }
+        .drawer-title { font-size: 20px; font-weight: 900; color: #0f172a; margin: 10px 0 5px 0; }
+        .drawer-desc { font-size: 13px; color: #475569; line-height: 1.6; }
+        .drawer-section-title { font-size: 12px; font-weight: bold; color: #94a3b8; text-transform: uppercase; margin: 15px 0 10px 0; letter-spacing: 1px; }
+        .relation-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8fafc; border-radius: 6px; margin-bottom: 8px; font-size: 12px; border: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s;}
+        .relation-item:hover { background: #f1f5f9; }
+        .rel-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #e0e7ff; color: #4f46e5; font-weight: bold; }
+        .action-btn { margin-top: auto; width: 100%; padding: 12px; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; gap: 8px; align-items: center; transition: background 0.2s;}
+        .action-btn:hover { background: #1e293b; }
+
+        /* 缩放与平移控制台 */
+        .zoom-controls {
+          position: absolute; bottom: 20px; left: 20px; z-index: 10;
+          display: flex; gap: 8px; background: rgba(255,255,255,0.9);
+          padding: 6px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+          border: 1px solid #e2e8f0; backdrop-filter: blur(4px);
+        }
+        .zoom-btn {
+          width: 32px; height: 32px; border: none; background: #f8fafc;
+          border-radius: 6px; color: #475569; font-weight: bold; font-size: 16px;
+          cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center;
+        }
+        .zoom-btn:hover { background: #e2e8f0; color: #0f172a; }
+        .zoom-text { font-size: 12px; padding: 0 8px; width: auto; }
       </style>
     </head>
     <body>
       <canvas id="graphCanvas"></canvas>
       <div id="tooltip" class="tooltip"></div>
+      <div id="drawer" class="drawer">
+        <button id="closeDrawer" class="drawer-close">×</button>
+        <div class="drawer-header">
+          <span id="drawerTag" class="tag" style="background: #e2e8f0; color: #475569; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;"></span>
+          <h2 id="drawerTitle" class="drawer-title">节点名称</h2>
+          <p id="drawerDesc" class="drawer-desc">节点描述</p>
+        </div>
+        <div style="flex:1; overflow-y: auto;">
+          <div class="drawer-section-title">核心技术链路 (Links)</div>
+          <div id="drawerLinks"></div>
+        </div>
+        <button id="traceBtn" class="action-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          在离线文章中检索全文
+        </button>
+      </div>
+      <div class="zoom-controls">
+        <button id="zoomOut" class="zoom-btn" title="缩小">-</button>
+        <button id="zoomReset" class="zoom-btn zoom-text" title="重置视图">100%</button>
+        <button id="zoomIn" class="zoom-btn" title="放大">+</button>
+      </div>
       <script>
         const data = JSON.parse(decodeURIComponent('${encodedData}'));
         const canvas = document.getElementById('graphCanvas');
@@ -96,25 +169,63 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         }
 
         function initNodes() {
+          let minWeight = Infinity; let maxWeight = -Infinity;
           data.nodes.forEach(node => {
-            node.x = width / 2 + (Math.random() - 0.5) * 400; // 初始散开范围更大
-            node.y = height / 2 + (Math.random() - 0.5) * 400;
+            if (node.weight < minWeight) minWeight = node.weight;
+            if (node.weight > maxWeight) maxWeight = node.weight;
+          });
+          
+          data.nodes.forEach(node => {
+            node.y = height / 2 + (Math.random() - 0.5) * 200; // 初始Y轴也稍微聚拢
             node.vx = 0; node.vy = 0;
-            node.radius = 10 + (node.weight * 1.8); // 稍微放大核心节点视觉差异
+            node.radius = 10 + (node.weight * 1.8); 
             node.color = colors[node.type]?.main || colors.default.main;
             node.typeTag = colors[node.type]?.tag || colors.default.tag;
+            
+            const fontSizeRange = 15 - 9;
+            const weightRatio = maxWeight === minWeight ? 0.5 : (node.weight - minWeight) / (maxWeight - minWeight);
+            node.fontSize = 9 + weightRatio * fontSizeRange;
+
+            // 【行业标准：柔性流水线轨道】不再分布在屏幕最边缘，而是往中心聚拢，形成紧凑的带状网络
+            if (node.type === 'concept' || node.type === 'material') {
+              node.targetX = width * 0.3;  // 左侧 30%
+            } else if (node.type === 'process') {
+              node.targetX = width * 0.5;  // 中间 50%
+            } else {
+              node.targetX = width * 0.7;  // 右侧 70%
+            }
+            // 初始点在中心附近，让它们通过弹簧自己拉开
+            node.x = node.targetX + (Math.random() - 0.5) * 100;
           });
+          
+          data.nodes.sort((a, b) => a.weight - b.weight);
         }
 
-        // 【核心修改1：调整物理引擎参数，打破黑洞】
-        const ALPHA = 0.25;         // 冷却系数
-        const REPULSION = 3500;     // 斥力大幅增强 (原1500 -> 3500)
-        const SPRING_LENGTH = 180;  // 连线弹簧变长 (原150 -> 180)
-        const SPRING_K = 0.03;      // 弹簧刚度调弱，允许拉伸
-        const DAMPING = 0.85;       // 摩擦力
-        const GRAVITY = 0.003;      // 向心力大幅减弱 (原0.02 -> 0.003)，让节点自由散开
+        // 【抗抽搐物理引擎：柔性缓冲模式】
+        const ALPHA = 0.1;          // 【核心】动能倍率从 0.3 降至 0.1，防止单帧步长过大
+        const REPULSION = 6000;     // 适度增加底斥力，对抗高密连线
+        const SPRING_LENGTH = 160;  // 【核心】弹簧长度必须略大于碰撞体积(约130)，从物理上解开死锁
+        const SPRING_K = 0.015;     // 【核心】弹簧刚度大幅削弱！变成极其柔软的橡皮筋
+        const DAMPING = 0.75;       // 【核心】增加空气阻力(摩擦力)，让震荡的节点快速安静下来
+        const GRAVITY = 0.003;      // 轻微的中心向心力
 
-        let draggedNode = null, hoveredNode = null, mouseX = 0, mouseY = 0;
+        let draggedNode = null, hoveredNode = null, selectedNode = null, mouseX = 0, mouseY = 0;
+        
+        // 【架构升级：摄像机镜头系统 (Viewport)】
+        let cameraScale = 1;
+        let cameraOffsetX = 0;
+        let cameraOffsetY = 0;
+        let isPanning = false;
+        let startPanX = 0;
+        let startPanY = 0;
+
+        // 坐标转换：屏幕坐标 -> 真实世界(画布)坐标
+        function screenToWorld(x, y) {
+          return {
+            x: (x - cameraOffsetX) / cameraScale,
+            y: (y - cameraOffsetY) / cameraScale
+          };
+        }
 
         function simulate() {
           // 1. 斥力模拟
@@ -130,15 +241,17 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
                 node1.vx -= fx; node1.vy -= fy; node2.vx += fx; node2.vy += fy;
               }
 
-              // 【核心修改2：刚体碰撞检测 (Anti-Overlap)】
-              // 如果两个节点靠得太近，强制把它们弹开，绝对不许重叠
-              let minDistance = node1.radius + node2.radius + 20; // 20是最小间距
-              if (dist < minDistance) {
+              // 【核心修复：柔性防重叠碰撞，彻底消除抽搐】
+              let minDistance = node1.radius + node2.radius + 45; 
+              if (dist < minDistance && dist > 0) {
                 let overlap = minDistance - dist;
-                let nx = (dx / dist) * overlap * 0.5;
-                let ny = (dy / dist) * overlap * 0.5;
-                node1.x -= nx; node1.y -= ny;
-                node2.x += nx; node2.y += ny;
+                // 绝对禁止修改 node.x / node.y！改用施加相反的加速度 (vx/vy) 去温柔地推开
+                let pushForce = overlap * 0.03; // 极其轻柔的排斥系数
+                let nx = (dx / dist) * pushForce;
+                let ny = (dy / dist) * pushForce;
+                
+                node1.vx -= nx; node1.vy -= ny;
+                node2.vx += nx; node2.vy += ny;
               }
             }
           }
@@ -155,10 +268,15 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
             source.vx += fx; source.vy += fy; target.vx -= fx; target.vy -= fy;
           });
 
-          // 3. 微弱向心力 (防止节点飞出屏幕)
+          // 3. 【行业标准流向：紧凑型微重力 (Cohesive Drift)】
           data.nodes.forEach(node => {
-            node.vx += (width / 2 - node.x) * GRAVITY; 
-            node.vy += (height / 2 - node.y) * GRAVITY;
+            // X轴：轻柔引导至左中右轨道，但不强制，允许弹簧把它们拉偏
+            let dx = node.targetX - node.x;
+            node.vx += dx * GRAVITY;
+            
+            // Y轴：【核心恢复】强力的向心聚拢力！防止节点上下散得太开，形成紧凑的图谱生态
+            let dy = height / 2 - node.y;
+            node.vy += dy * GRAVITY;
           });
 
           // 4. 更新位置与阻尼
@@ -179,94 +297,291 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         function draw() {
           ctx.clearRect(0, 0, width, height);
           
-          // 画连线
+          // 【架构升级：应用摄像机镜头矩阵】
+          ctx.save();
+          ctx.translate(cameraOffsetX, cameraOffsetY);
+          ctx.scale(cameraScale, cameraScale);
+          
+          // --- 画连线 (引入多重边合并防重叠算法) ---
+          
+          // 1. 在视觉渲染前，将相同起点和终点的连线合并为一条物理线
+          const visualLinksMap = {};
           data.links.forEach(link => {
+            // 使用 sort() 生成无向键值，将 A->B 和 B->A 强制映射到同一条物理连线
+            const key = [link.source, link.target].sort().join('||');
+            if (!visualLinksMap[key]) {
+              visualLinksMap[key] = { 
+                source: link.source, 
+                target: link.target, 
+                strength: link.strength,
+                // 使用 Set 来去重，防止大模型生成两个一模一样的动词
+                relationships: new Set([link.relationship]) 
+              };
+            } else {
+              visualLinksMap[key].relationships.add(link.relationship);
+              // 强度取最大值
+              if (link.strength > visualLinksMap[key].strength) {
+                visualLinksMap[key].strength = link.strength;
+              }
+            }
+          });
+          
+          const visualLinks = Object.values(visualLinksMap);
+
+          // 2. 遍历合并后的线条进行绘制
+          visualLinks.forEach(link => {
             let source = data.nodes.find(n => n.id === link.source);
             let target = data.nodes.find(n => n.id === link.target);
             if (!source || !target) return;
-            let isHighlight = hoveredNode === source || hoveredNode === target;
-            let isFaded = hoveredNode && !isHighlight;
+            
+            let isHighlight = hoveredNode === source || hoveredNode === target || selectedNode === source || selectedNode === target;
+            let isFaded = (hoveredNode || selectedNode) && !isHighlight;
 
-            ctx.beginPath(); ctx.moveTo(source.x, source.y); ctx.lineTo(target.x, target.y);
+            ctx.beginPath();
+            ctx.moveTo(source.x, source.y);
+            ctx.lineTo(target.x, target.y);
             ctx.strokeStyle = isHighlight ? '#3b82f6' : '#cbd5e1'; 
-            ctx.lineWidth = isHighlight ? 2 : 1;
-            ctx.globalAlpha = isFaded ? 0.1 : (isHighlight ? 0.8 : 0.4); 
+            ctx.lineWidth = isHighlight ? 2 / cameraScale : 1 / cameraScale;
+            ctx.globalAlpha = isFaded ? 0.05 : (isHighlight ? 0.8 : 0.4); 
             ctx.stroke();
 
-            // 只有高亮时才显示连线文字，减少满屏文字的干扰
             if (isHighlight) {
               ctx.font = "bold 11px sans-serif";
               ctx.fillStyle = "#3b82f6";
-              ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.globalAlpha = 1;
-              ctx.fillText(link.relationship, (source.x + target.x) / 2, (source.y + target.y) / 2 - 6);
+              ctx.textAlign = "center"; 
+              ctx.textBaseline = "middle"; 
+              ctx.globalAlpha = 1;
+              
+              // 【核心修复：将多个关系动词拼接显示】
+              const combinedText = Array.from(link.relationships).join(' / ');
+              
+              // 如果文字太长，稍微加上一点白色背景遮罩，防止被底部的线切割
+              const textX = (source.x + target.x) / 2;
+              const textY = (source.y + target.y) / 2 - 6;
+              
+              ctx.lineWidth = 3 / cameraScale; 
+              ctx.strokeStyle = "rgba(255,255,255,0.9)";
+              ctx.lineJoin = 'round';
+              ctx.strokeText(combinedText, textX, textY);
+              ctx.fillText(combinedText, textX, textY);
             }
           });
 
-          // 画节点
-          data.nodes.forEach(node => {
-            let isHovered = hoveredNode === node;
-            let isConnected = hoveredNode ? data.links.some(l => (l.source === hoveredNode.id && l.target === node.id) || (l.target === hoveredNode.id && l.source === node.id)) : false;
-            let isFaded = hoveredNode && !isHovered && !isConnected;
+          // --- 画节点 (引入 Z轴排序与纯白护城河) ---
+          // 必须按权重从小到大重新排序绘制，确保核心工艺永远盖在最上层！
+          const sortedNodes = [...data.nodes].sort((a, b) => (a.weight || 0) - (b.weight || 0));
+          
+          sortedNodes.forEach(node => {
+            let isHovered = hoveredNode === node || selectedNode === node;
+            let isConnected = (hoveredNode || selectedNode) ? data.links.some(l => (l.source === (hoveredNode || selectedNode).id && l.target === node.id) || (l.target === (hoveredNode || selectedNode).id && l.source === node.id)) : false;
+            let isFaded = (hoveredNode || selectedNode) && !isHovered && !isConnected;
 
-            // 光晕
             ctx.globalAlpha = isFaded ? 0.1 : 1;
             ctx.beginPath(); ctx.arc(node.x, node.y, node.radius + (isHovered ? 8 : 4), 0, Math.PI * 2); 
             ctx.fillStyle = node.color; ctx.globalAlpha = isHovered ? 0.3 : 0.1; ctx.fill();
             
-            // 实体
             ctx.beginPath(); ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2); 
             ctx.fillStyle = node.color; ctx.globalAlpha = isFaded ? 0.2 : 1; ctx.fill();
             
-            // 描边
-            ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+            ctx.lineWidth = 2 / cameraScale; ctx.strokeStyle = '#ffffff'; ctx.stroke();
 
-            // 【核心修改3：文字降噪逻辑 (Label Decluttering)】
-            // 逻辑：大权重核心节点(>7)默认显示；被悬停或关联的节点强制显示；其余小节点隐藏文字。
             ctx.globalAlpha = 1;
-            let isCoreNode = node.weight >= 7;
-            if (isCoreNode || isHovered || isConnected) {
-              ctx.font = isHovered ? "bold 13px sans-serif" : (isCoreNode ? "bold 12px sans-serif" : "11px sans-serif"); 
-              ctx.fillStyle = isHovered ? "#0f172a" : (isCoreNode ? "#1e293b" : "#475569"); 
-              ctx.textAlign = "center"; ctx.textBaseline = "middle";
-              // 绘制文字白色描边提升可读性
-              ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,0.8)";
-              ctx.strokeText(node.name, node.x, node.y + node.radius + 14);
-              ctx.fillText(node.name, node.x, node.y + node.radius + 14);
-            }
+            const fontSize = Math.round(node.fontSize);
+            ctx.font = (isHovered ? "bold" : "normal") + " " + fontSize + "px sans-serif";
+            ctx.fillStyle = isHovered ? "#0f172a" : "#1e293b";
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            
+            // 【视觉核武：纯白防叠光晕 Text Halo】
+            ctx.lineWidth = 5 / cameraScale; // 随着缩放自适应的光晕厚度
+            ctx.strokeStyle = "rgba(255,255,255,0.95)";
+            ctx.lineJoin = 'round';
+            ctx.strokeText(node.name, node.x, node.y + node.radius + 14);
+            ctx.fillText(node.name, node.x, node.y + node.radius + 14);
           });
+          
+          // 【架构升级：恢复画布原始状态】
+          ctx.restore();
           ctx.globalAlpha = 1;
         }
 
         function loop() { simulate(); draw(); requestAnimationFrame(loop); }
 
+        // 【架构升级：镜头平移、缩放与抓取综合交互】
         canvas.addEventListener('mousedown', e => {
-          let rect = canvas.getBoundingClientRect(); let x = e.clientX - rect.left, y = e.clientY - rect.top;
-          draggedNode = data.nodes.find(n => Math.hypot(n.x - x, n.y - y) < n.radius + 5);
-          if(draggedNode) { draggedNode.vx = 0; draggedNode.vy = 0; }
-        });
-
-        canvas.addEventListener('mousemove', e => {
-          let rect = canvas.getBoundingClientRect(); mouseX = e.clientX - rect.left; mouseY = e.clientY - rect.top;
-          if (draggedNode) { draggedNode.x = mouseX; draggedNode.y = mouseY; }
+          let rect = canvas.getBoundingClientRect(); 
+          let screenX = e.clientX - rect.left; 
+          let screenY = e.clientY - rect.top;
           
-          hoveredNode = data.nodes.find(n => Math.hypot(n.x - mouseX, n.y - mouseY) < n.radius + 5);
-          if (hoveredNode && hoveredNode.description) {
-            tooltip.style.opacity = 1; 
-            tooltip.style.transform = "translateY(0)";
-            tooltip.style.left = (e.clientX + 20) + 'px'; tooltip.style.top = (e.clientY + 20) + 'px';
-            tooltip.innerHTML = '<span class="tag" style="background:' + hoveredNode.color + '20; color:' + hoveredNode.color + '">' + hoveredNode.typeTag + '</span><br/><strong>' + hoveredNode.name + '</strong><br/><span style="color:#cbd5e1; font-size:11px;">' + hoveredNode.description + '</span>';
-          } else { 
-            tooltip.style.opacity = 0; 
-            tooltip.style.transform = "translateY(5px)";
+          // 转换为世界坐标，判断是否点中了节点
+          let worldPos = screenToWorld(screenX, screenY);
+          draggedNode = data.nodes.find(n => Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < n.radius + 5);
+          
+          if(draggedNode) { 
+            draggedNode.vx = 0; draggedNode.vy = 0; 
+          } else {
+            // 没点中节点，开启全景平移 (Pan)
+            isPanning = true;
+            startPanX = screenX - cameraOffsetX;
+            startPanY = screenY - cameraOffsetY;
+            canvas.style.cursor = 'grabbing';
           }
         });
 
-        window.addEventListener('mouseup', () => draggedNode = null);
+        canvas.addEventListener('mousemove', e => {
+          let rect = canvas.getBoundingClientRect(); 
+          mouseX = e.clientX - rect.left; 
+          mouseY = e.clientY - rect.top;
+
+          if (isPanning) {
+            cameraOffsetX = mouseX - startPanX;
+            cameraOffsetY = mouseY - startPanY;
+          } else {
+            let worldPos = screenToWorld(mouseX, mouseY);
+            if (draggedNode) { 
+              draggedNode.x = worldPos.x; 
+              draggedNode.y = worldPos.y; 
+            }
+            
+            hoveredNode = data.nodes.find(n => Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < n.radius + 5);
+            if (hoveredNode && hoveredNode.description) {
+              tooltip.style.opacity = 1; 
+              tooltip.style.transform = "translateY(0)";
+              tooltip.style.left = (e.clientX + 20) + 'px'; tooltip.style.top = (e.clientY + 20) + 'px';
+              tooltip.innerHTML = '<span class="tag" style="background:' + hoveredNode.color + '20; color:' + hoveredNode.color + '">' + hoveredNode.typeTag + '</span><br/><strong>' + hoveredNode.name + '</strong><br/><span style="color:#cbd5e1; font-size:11px;">' + hoveredNode.description + '</span>';
+            } else { 
+              tooltip.style.opacity = 0; 
+              tooltip.style.transform = "translateY(5px)";
+            }
+          }
+        });
+
+        window.addEventListener('mouseup', () => {
+          draggedNode = null;
+          isPanning = false;
+          canvas.style.cursor = 'grab';
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+          draggedNode = null;
+          isPanning = false;
+          canvas.style.cursor = 'grab';
+        });
+
+        // 鼠标滚轮无极缩放 (向鼠标指针中心缩放)
+        canvas.addEventListener('wheel', e => {
+          e.preventDefault();
+          const zoomSensitivity = 0.001;
+          const delta = -e.deltaY * zoomSensitivity;
+          let newScale = cameraScale * (1 + delta);
+          
+          // 限制缩放级别 (10% 到 500%)
+          newScale = Math.max(0.1, Math.min(newScale, 5)); 
+
+          let rect = canvas.getBoundingClientRect();
+          let sX = e.clientX - rect.left;
+          let sY = e.clientY - rect.top;
+
+          // 核心代数矩阵补偿：保证缩放时，鼠标当前指着的节点不乱跑
+          cameraOffsetX = sX - (sX - cameraOffsetX) * (newScale / cameraScale);
+          cameraOffsetY = sY - (sY - cameraOffsetY) * (newScale / cameraScale);
+          cameraScale = newScale;
+          
+          updateZoomText();
+        }, { passive: false });
+
+        // 左下角面板按钮控制
+        function updateZoomText() {
+          document.getElementById('zoomReset').innerText = Math.round(cameraScale * 100) + '%';
+        }
+
+        document.getElementById('zoomIn').addEventListener('click', () => {
+          let newScale = Math.min(cameraScale * 1.2, 5);
+          cameraOffsetX = width/2 - (width/2 - cameraOffsetX) * (newScale / cameraScale);
+          cameraOffsetY = height/2 - (height/2 - cameraOffsetY) * (newScale / cameraScale);
+          cameraScale = newScale; updateZoomText();
+        });
+
+        document.getElementById('zoomOut').addEventListener('click', () => {
+          let newScale = Math.max(cameraScale / 1.2, 0.1);
+          cameraOffsetX = width/2 - (width/2 - cameraOffsetX) * (newScale / cameraScale);
+          cameraOffsetY = height/2 - (height/2 - cameraOffsetY) * (newScale / cameraScale);
+          cameraScale = newScale; updateZoomText();
+        });
+
+        document.getElementById('zoomReset').addEventListener('click', () => {
+          cameraScale = 1; cameraOffsetX = 0; cameraOffsetY = 0; updateZoomText();
+        });
         
         const resizeObserver = new ResizeObserver(() => resizeCanvas());
         resizeObserver.observe(document.body);
 
         setTimeout(() => { resizeCanvas(); initNodes(); loop(); }, 100);
+
+        // 【架构升级：情报溯源面板逻辑】
+        const drawer = document.getElementById('drawer');
+        const closeDrawer = document.getElementById('closeDrawer');
+
+        // 修改全局变量，增加一个点击选中态
+        // (在原本的 mousemove 逻辑里，将 isHovered 相关的判定同时兼顾 selectedNode)
+
+        canvas.addEventListener('click', e => {
+          if (draggedNode) return; // 如果在拖拽就不触发点击
+          if (hoveredNode) {
+            selectedNode = hoveredNode;
+            openDrawer(selectedNode);
+          } else {
+            selectedNode = null;
+            drawer.classList.remove('open');
+          }
+        });
+
+        closeDrawer.addEventListener('click', () => {
+          selectedNode = null;
+          drawer.classList.remove('open');
+        });
+
+        function openDrawer(node) {
+          document.getElementById('drawerTitle').innerText = node.name;
+          document.getElementById('drawerDesc').innerText = node.description || '暂无详细描述';
+          const tagEl = document.getElementById('drawerTag');
+          tagEl.innerText = node.typeTag;
+          tagEl.style.color = node.color;
+          tagEl.style.background = node.color + '20';
+          
+          // 查找与之相连的上下文链路
+          const linksHtml = data.links.filter(l => l.source === node.id || l.target === node.id).map(l => {
+            const isSource = l.source === node.id;
+            const otherNodeId = isSource ? l.target : l.source;
+            const otherNode = data.nodes.find(n => n.id === otherNodeId);
+            if(!otherNode) return '';
+            const direction = isSource ? '→ 输出至' : '← 来源于';
+            return '<div class="relation-item">' +
+              '<span style="font-weight:bold; color:#334155;">' + otherNode.name + '</span>' +
+              '<span class="rel-badge">' + direction + ': ' + l.relationship + '</span>' +
+            '</div>';
+          }).join('');
+          
+          document.getElementById('drawerLinks').innerHTML = linksHtml || '<div style="color:#94a3b8; font-size:12px; text-align:center; margin-top:20px;">暂无直接关联</div>';
+          drawer.classList.add('open');
+        }
+
+        // 离线溯源通信：点击搜索按钮，向外层阅读器发送 postMessage
+        document.getElementById('traceBtn').addEventListener('click', () => {
+          if (selectedNode) {
+            // 通知外层壳子：“我要找这个词所在的段落”
+            window.parent.postMessage({ type: 'GRAPH_SEARCH_KEYWORD', keyword: selectedNode.name }, '*');
+            
+            // 为了视觉反馈，按钮可以变一下状态
+            const btn = document.getElementById('traceBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '已触发页面检索...';
+            btn.style.background = '#10b981';
+            setTimeout(() => {
+              btn.innerHTML = originalText;
+              btn.style.background = '#0f172a';
+            }, 2000);
+          }
+        });
       </script>
     </body>
     </html>

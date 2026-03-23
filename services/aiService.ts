@@ -8,6 +8,9 @@ const MODEL_NAME = 'deepseek-reasoner';
 // 前端通过本地 BFF 代理访问 DeepSeek API，解决跨域和 API Key 安全问题
 const API_URL = `/api/deepseek/generate`;
 
+// 导入 PDF 服务
+import { extractAbstractFromPdf } from '../src/services/pdf/index';
+
 // ==================== 通用工具函数 ====================
 
 /**
@@ -339,48 +342,46 @@ export async function scaleText(text: string, mode: 'expand' | 'shrink'): Promis
 }
 
 /**
- * 提取全局知识图谱
+ * 提取全局知识图谱 (64K 满血专业版)
  * @param articlesText 多篇文章的文本内容（建议拼接后传入）
  * @returns Promise<KnowledgeGraphData> 知识图谱数据
  */
 export async function extractGlobalKnowledgeGraph(articlesText: string): Promise<KnowledgeGraphData> {
-    const systemPrompt = `你是一名船舶工程领域的知识图谱专家。请从用户提供的多篇文章内容中，提取核心技术概念及其关联性，构建知识图谱。
+    const systemPrompt = `你是一名顶级船舶工程领域的知识图谱专家，擅长从复杂的工业长文中，构建极具工程专业度、结构严谨的船舶工法图谱。
 
-### 【提取要求】
-1. **节点识别**：
-   - 提取核心技术概念（如：激光焊接、数字孪生、厚板成型等）
-   - 提取关键工艺环节（如：涂装、焊接、总装等）
-   - 提取重要材料与设备（如：高强度钢、焊接机器人等）
-   - 每个节点需分配类型：'technology'、'process'、'material'、'equipment'、'concept'
-   - 每个节点需分配权重 (1-10)：根据在文章中出现的频率和重要性
+【最高指令：全局视野、流向清晰、构建高密复杂网】
+系统为你开放了 64000 Tokens 的输出限制。你的核心任务不仅是提取硬核节点，更重要的是覆盖造船的全生命周期，并挖掘错综复杂的网状技术依赖关系！
 
-2. **关系识别**：
-   - 提取概念之间的关联关系（如：应用、包含、改进、依赖等）
-   - 每个关系需描述具体关联（如："激光焊接 应用于 薄板拼接"）
-   - 每个关系需分配强度 (1-5)：根据文章中描述的紧密程度
+### 【提取规范】
+1. **节点识别 (全生命周期覆盖，拒绝局部扎堆)**：
+   - 提取原文中最核心的技术概念、具体的工艺工法、实际的材料与硬核装备。
+   - 【最高警告】坚决剔除“数字化转型”、“精益建造”、“技能危机”等宏观管理学废话！必须是看得见摸得着的工程实体！
+   - 实体总数请控制在 25 到 40 个之间。宁可少提几个水词，也要把算力留给连线的挖掘。
+   - **【广度强制令】请在生成节点时进行全局视角的均衡采样。只要原文涉及，你的节点必须尽可能覆盖造船的多个阶段（如：设计研发 -> 材料加工 -> 分段装配/焊接 -> 管系舾装 -> 涂装防腐 -> 测试交付）。**
+   - id: 英文唯一标识
+   - name: 中文名称
+   - type: 必须在 ['technology', 'process', 'material', 'equipment', 'concept'] 中选择。
+   - weight: 节点权重(1-10)。
+   - description: 核心技术节点需提供 15-30 字硬核解释；次要或外围节点需缩减至 5-10 字极简概括。
 
-3. **输出格式**：必须输出标准的 JSON 格式，包含 nodes 和 links 数组。
+2. **关系识别 (极限深挖，强制逻辑流向)**：
+   - **【数量强制】**：关系连线（links）的总数必须是节点总数的 1.5 倍到 2 倍以上！绝对不允许出现大量孤立节点。
+   - **【视觉流向(DAG)强制令】**：为了适配系统前端“左->中->右”的流水线可视化轨道，连线的 source 和 target 必须符合底层的工业传导因果链条！
+     * \`source\`（起点）优先选择：上游动作、原材料(material)、驱动理念(concept)。
+     * \`target\`（终点）优先选择：下游产物、被加工对象、应用设备(equipment)或具体技术(technology)。
+     * **连线方向必须严格遵循：【concept / material】指向【process】，【process】指向【technology / equipment】的底层工业逻辑。绝对禁止逆向连线（如要求设备反向指向材料）！**
+   - relationship: 关系动词。推荐使用“应用于”、“驱动”、“优化”、“依赖于”等标准短动词。只要有工程关系就大胆连。
+   - strength: 关系强度 (1-5)。
 
-4. **【极度危险警告：严格 JSON 规范，否则系统崩溃】**：
-   - 绝对禁止在数组或对象的最后一个元素后添加逗号（严禁尾随逗号）！
-   - 必须一次性输出完整的 JSON 结构，确保大括号闭合。
-   - 【最关键】：属性名和属性值中，如果需要强调或引用文字，**必须且只能使用中文引号（""或''）**，绝对禁止在字符串内容中出现英文双引号（"），否则将导致 JSON 解析全面崩溃！
+3. **【极度危险警告：严格 JSON 规范，否则系统崩溃】**：
+   - 绝不允许出现尾随逗号！
+   - 仅输出纯 JSON，不要包裹 Markdown 标记。
+   - 属性名和属性值中，如需引用文字，仅可使用中文引号（“”）。`;
 
-### 【输出格式示例】
-{
-  "nodes": [
-    { "id": "node1", "name": "激光焊接", "type": "technology", "weight": 8, "description": "高精度焊接技术" },
-    { "id": "node2", "name": "薄板拼接", "type": "process", "weight": 6, "description": "船舶薄板连接工艺" }
-  ],
-  "links": [
-    { "source": "node1", "target": "node2", "relationship": "应用于", "strength": 4 }
-  ]
-}`;
-
-    const userPrompt = `请从以下文章内容中提取知识图谱：\n\n${articlesText}`;
+    const userPrompt = `请从以下文章内容中，不遗漏任何细节地提取完整的知识图谱：\n\n${articlesText}`;
 
     try {
-        console.log('[aiService] 开始提取知识图谱，文本长度:', articlesText.length);
+        console.log('[aiService] 开始提取满血版知识图谱，文本长度:', articlesText.length);
         
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -393,7 +394,8 @@ export async function extractGlobalKnowledgeGraph(articlesText: string): Promise
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt }
-                ]
+                ],
+                max_tokens: 64000 // 强制解锁 64K 输出上限
             })
         });
 
@@ -407,23 +409,66 @@ export async function extractGlobalKnowledgeGraph(articlesText: string): Promise
 
         if (data.choices?.[0]?.message?.content) {
             let text = data.choices[0].message.content;
-            // 使用深度清洗函数处理可能的推理标签
             const cleanedText = extractJsonFromReasoning(text);
             
             let graphData: KnowledgeGraphData;
+            
+            // 【核心：JSON 智能暴力自愈引擎】
             try {
                 graphData = JSON.parse(cleanedText) as KnowledgeGraphData;
             } catch (parseError) {
-                console.error('[aiService] JSON 解析致命失败！大模型输出的原始截断字符串为：\n', cleanedText);
-                throw new Error('大模型返回的 JSON 格式损坏，请重新点击提取。');
+                console.warn('[aiService] 检测到 JSON 截断或语法损坏，启动暴力自愈引擎...', parseError);
+                let healedText = cleanedText.trim();
+                
+                // 1. 抹除尾随逗号
+                healedText = healedText.replace(/,$/, '');
+                
+                // 2. 统计括号与引号数量，强制闭合
+                const leftBraces = (healedText.match(/\{/g) || []).length;
+                const rightBraces = (healedText.match(/\}/g) || []).length;
+                const leftBrackets = (healedText.match(/\[/g) || []).length;
+                const rightBrackets = (healedText.match(/\]/g) || []).length;
+                const quotes = (healedText.match(/"/g) || []).length;
+                
+                if (quotes % 2 !== 0) healedText += '"';
+                
+                // 假设大模型是在写 links 数组时断掉的，强行补齐层级
+                if (leftBraces > rightBraces) healedText += '}';
+                if (leftBrackets > rightBrackets) healedText += ']';
+                if (leftBraces > rightBraces + 1) healedText += '}'; 
+                
+                try {
+                    console.log('[aiService] 尝试解析自愈后的 JSON...');
+                    graphData = JSON.parse(healedText) as KnowledgeGraphData;
+                    console.log('[aiService] JSON 自愈成功！成功抢救回大模型生成的巨量节点数据。');
+                } catch (secondError) {
+                    console.error('[aiService] 自愈失败，彻底放弃。原始文本：\n', cleanedText);
+                    throw new Error('大模型输出数据严重截断且系统抢救失败，请稍后重试。');
+                }
             }
             
-            // 验证数据格式
+            // 【架构级修复：柔性结构校验与兜底】
+            // 1. 如果大模型截断太严重，连 links 都没开始写，自愈引擎闭合后 links 为 undefined，我们直接补齐为空数组！
+            if (!graphData.nodes) graphData.nodes = [];
+            if (!graphData.links) graphData.links = [];
+
+            // 2. 靶向修复大模型幻觉：有时候它会在外面多套一层，比如 {"graph": {"nodes": [], "links": []}}
+            if (!Array.isArray(graphData.nodes)) {
+                const possibleRoot = Object.values(graphData).find(val => val && typeof val === 'object' && Array.isArray((val as any).nodes));
+                if (possibleRoot) {
+                    console.log('[aiService] 识别到大模型外层嵌套幻觉，已自动剥离外壳。');
+                    graphData = possibleRoot as KnowledgeGraphData;
+                    if (!graphData.links) graphData.links = []; // 再次兜底
+                }
+            }
+
+            // 3. 最终死线校验
             if (!Array.isArray(graphData.nodes) || !Array.isArray(graphData.links)) {
-                throw new Error('知识图谱数据格式异常：缺少 nodes 或 links 数组');
+                console.error('[aiService] 无法抢救的畸形数据结构:', graphData);
+                throw new Error('知识图谱数据格式异常：无法识别 nodes 或 links 结构');
             }
             
-            console.log('[aiService] 知识图谱提取成功，节点数:', graphData.nodes.length, '关系数:', graphData.links.length);
+            console.log('[aiService] 知识图谱提取成功，共生成节点:', graphData.nodes.length, '个，关系:', graphData.links.length, '条');
             return graphData;
         } else {
             console.error('[aiService] AI 服务返回数据格式异常:', data);
@@ -514,7 +559,7 @@ export async function batchEvaluateArticles(
   const inputData = JSON.stringify(articlesToEvaluate.map(a => ({
     id: a.id,
     title: a.title,
-    content: a.content.replace(/[#*\\[\\]!>]/g, '').replace(/\\s+/g, ' ').substring(0, 3000)
+    content: a.content.replace(/[#*\[\]!>]/g, '').replace(/\s+/g, ' ').substring(0, 3000)
   })));
 
   const systemPrompt = `你是一位拥有20年经验的顶级船舶制造总工和《工法情报》期刊总编。
@@ -662,4 +707,40 @@ export async function translateAndFormatAcademic(article: { title: string, conte
     console.error("[aiService] 学术编译失败:", error);
     throw new Error("编译失败");
   }
+}
+
+/**
+ * 组装喂给 64K 图谱引擎的超级上下文 (支持 PDF 暴力静默抽字)
+ */
+export async function buildSuperContextForGraph(articles: any[]): Promise<string> {
+    console.log(`[aiService] 开始为 ${articles.length} 篇文章组装超级上下文...`);
+    let combinedText = '';
+
+    for (let i = 0; i < articles.length; i++) {
+        const article = articles[i];
+        combinedText += `\n\n【${i + 1}. 文献标题】${article.title || '未知标题'}\n`;
+
+        // 核心：如果有 PDF 附件，启动底层 Worker 强行静默抽字！
+        if (article.pdfData) {
+            console.log(`[aiService] 发现 PDF 核心资产：${article.title}，启动静默抽字...`);
+            try {
+                // 深度提取前 30 页的核心工法数据
+                const pdfResult = await extractAbstractFromPdf(article.pdfData, 30);
+                if (pdfResult.success && pdfResult.fullText) {
+                    combinedText += `【文献核心全文 (自动抽取)】\n${pdfResult.fullText}\n`;
+                    console.log(`[aiService] PDF 抽字成功，获得 ${pdfResult.textLength} 字干货！`);
+                } else {
+                    combinedText += `【文献摘要】\n${article.abstract || 'PDF 抽字失败，缺乏文本层'}\n`;
+                }
+            } catch (error) {
+                console.warn(`[aiService] PDF 抽字异常，退化为摘要模式：`, error);
+                combinedText += `【文献摘要】\n${article.abstract || article.content}\n`;
+            }
+        } else {
+            // 普通文章，直接使用原始正文
+            combinedText += `【文献正文】\n${article.content || article.abstract || ''}\n`;
+        }
+    }
+
+    return combinedText;
 }

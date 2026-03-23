@@ -178,6 +178,29 @@ const AppContent: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
+  // 监听来自知识图谱 iframe 的溯源检索信号
+  useEffect(() => {
+    const handleGraphMessage = (event: MessageEvent) => {
+      // 验证信号类型
+      if (event.data && event.data.type === 'GRAPH_SEARCH_KEYWORD') {
+        const keyword = event.data.keyword;
+        console.log('[架构连通] 接收到图谱溯源请求，开始全页查找:', keyword);
+        
+        // 调用浏览器原生 Ctrl+F 级别的查找能力
+        // 参数: 关键词, 非大小写敏感, 向下查找, 开启循环查找
+        const found = window.find(keyword, false, false, true, false, false, false);
+        
+        // 如果向下没找到，强行向上再找一圈兜底
+        if (!found) {
+          window.find(keyword, false, true, true, false, false, false);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleGraphMessage);
+    return () => window.removeEventListener('message', handleGraphMessage);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

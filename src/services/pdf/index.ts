@@ -32,6 +32,7 @@ export interface PdfExtractionResult {
     pagesCount?: number;
     textLength?: number;
     keywords?: string[];
+    fullText?: string; // 【新增】供 64K 图谱引擎生啃的完整纯文本
 }
 
 /**
@@ -39,7 +40,7 @@ export interface PdfExtractionResult {
  */
 export async function extractAbstractFromPdf(
     pdfData: string,
-    maxPages: number = 5,
+    maxPages: number = 30,
     timeoutMs: number = 30000
 ): Promise<PdfExtractionResult> {
 
@@ -129,6 +130,7 @@ export async function extractAbstractFromPdf(
                 pagesCount: totalPages,
                 textLength: fullText.length,
                 keywords,
+                fullText, // 【新增】将几万字的原生纯文本交出去
             };
 
         } catch (error) {
