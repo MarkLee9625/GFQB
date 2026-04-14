@@ -107,6 +107,24 @@ export const CONSTANTS = {
         display: block; margin: 24px auto !important; max-width: 100%; height: auto;
         border-radius: 4px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-indent: 0 !important;
     }
+    .editor-area img:hover {
+        outline: 1px dashed #93c5fd;
+        outline-offset: 3px;
+        cursor: pointer;
+    }
+    .editor-area img.img-selected {
+        outline: 2px solid #005596;
+        outline-offset: 3px;
+    }
+    .sws-prose .image-caption {
+        text-align: center !important;
+        font-size: 14px !important;
+        color: #6b7280 !important;
+        font-style: italic !important;
+        text-indent: 0 !important;
+        margin: 4px 0 16px 0 !important;
+        line-height: 1.6 !important;
+    }
     
     /* 新增：媒体容器样式 (用于包裹视频，确保原子化删除) */
     .media-container {

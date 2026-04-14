@@ -1,16 +1,20 @@
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import { dirname, resolve, join } from 'path';
+import { fileURLToPath } from 'url';
 
-const DIST_DIR = path.resolve(__dirname, '../dist');
-const ASSETS_DIR = path.join(DIST_DIR, 'assets');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const DIST_DIR = resolve(__dirname, '../dist');
+const ASSETS_DIR = join(DIST_DIR, 'assets');
 const PLACEHOLDER = "SWS_READER_TEMPLATE_PLACEHOLDER";
 
 async function main() {
     console.log("🚀 Starting Post-Build Processing...");
 
     // 1. Read index.html
-    const indexHtmlPath = path.join(DIST_DIR, 'index.html');
+    const indexHtmlPath = join(DIST_DIR, 'index.html');
     if (!fs.existsSync(indexHtmlPath)) {
         console.error("❌ dist/index.html not found!");
         process.exit(1);
@@ -22,7 +26,7 @@ async function main() {
 
     // Inline CSS
     htmlContent = htmlContent.replace(/<link rel="stylesheet" crossorigin href="([^"]+)">/g, (match, url) => {
-        const cssPath = path.join(DIST_DIR, url);
+        const cssPath = join(DIST_DIR, url);
         if (fs.existsSync(cssPath)) {
             console.log(`   - Inlining CSS: ${url}`);
             const css = fs.readFileSync(cssPath, 'utf-8');
@@ -34,7 +38,7 @@ async function main() {
     // Inline JS (Module)
     // Vite produces <script type="module" crossorigin src="/assets/index-....js"></script>
     htmlContent = htmlContent.replace(/<script type="module" crossorigin src="([^"]+)"><\/script>/g, (match, url) => {
-        const jsPath = path.join(DIST_DIR, url);
+        const jsPath = join(DIST_DIR, url);
         if (fs.existsSync(jsPath)) {
             console.log(`   - Inlining JS: ${url}`);
             const js = fs.readFileSync(jsPath, 'utf-8');
@@ -52,8 +56,8 @@ async function main() {
 
     // Locate pdfjs files in public (now in dist root or public source)
     // Vite copies public to dist.
-    const pdfLibPath = path.resolve(__dirname, '../public/pdf.min.mjs'); // Use source public as dist might be clean
-    const pdfWorkerPath = path.resolve(__dirname, '../public/pdf.worker.min.mjs');
+    const pdfLibPath = resolve(__dirname, '../public/pdf.min.mjs'); // Use source public as dist might be clean
+    const pdfWorkerPath = resolve(__dirname, '../public/pdf.worker.min.mjs');
 
     // We cannot easily inline ES modules that import other things into a single script tag without bundling.
     // pdf.min.mjs likely has imports?

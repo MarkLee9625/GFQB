@@ -47,6 +47,33 @@ const useBlobUrl = (dataUrl: string | null | undefined) => {
   return blobUrl;
 };
 
+// IntersectionObserver 配置常量，避免每次渲染都重建配置对象（修复引用陷阱）
+const LAZY_IMAGE_OBSERVER_OPTIONS = { 
+  rootMargin: '400px', // 再次调大预加载范围
+  threshold: 0.01,
+};
+
+// 极简版直接渲染组件（彻底放弃视口监听）
+const PdfViewer: React.FC<{ pdfUrl: string }> = ({ pdfUrl }) => {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <div className="w-full h-full relative">
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
+          <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
+        </div>
+      )}
+      <iframe
+        src={`${pdfUrl}#toolbar=0&navpanes=0`}
+        className="w-full h-full border-0 relative z-0"
+        onLoad={() => setLoaded(true)}
+        title="PDF Viewer"
+      />
+    </div>
+  );
+};
+
 /** 
  * 带懒加载的图片组件
  */
@@ -57,10 +84,7 @@ const LazyImage: React.FC<{
   style?: React.CSSProperties;
   placeholder?: React.ReactNode;
 }> = ({ src, alt, className, style, placeholder }) => {
-  const { ref, inView } = useInView({
-    rootMargin: '400px', // 再次调大预加载范围
-    threshold: 0.01,
-  });
+  const { ref, inView } = useInView(LAZY_IMAGE_OBSERVER_OPTIONS);
   const [loaded, setLoaded] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -108,64 +132,27 @@ const LazyImage: React.FC<{
     return <div ref={ref as React.RefObject<HTMLDivElement>} className={className} style={style} />;
   }
 
-    return (
-      <div ref={ref as React.RefObject<HTMLDivElement>} style={{ display: 'contents' }}>
-        <img
-          src={src}
-          alt={alt}
-          className={`${className} max-w-full h-auto object-contain ${isPrinting ? 'force-print-visible' : ''}`}
-          style={{
-            ...style,
-            opacity: (loaded || isPrinting) ? 1 : 0.8, // 提高初始透明度，减少淡入闪烁感
-            transition: 'opacity 0.2s ease-out', // 缩短过渡时间
-          }}
-          onLoad={() => setLoaded(true)}
-          onError={(e) => {
-            console.error(`[LazyImage] 图片加载失败: ${src}`);
-            e.currentTarget.style.display = 'none';
-          }}
-        />
-      </div>
-  );
-};
-
-// PDF懒加载组件
-const LazyPdfViewer: React.FC<{ pdfUrl: string }> = ({ pdfUrl }) => {
-  const { ref, inView } = useInView({
-    rootMargin: '300px', // PDF文件较大，提前300px开始加载
-    threshold: 0.1,
-  });
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (inView && !loaded) {
-      // 模拟PDF加载，实际加载由浏览器处理
-      setLoaded(true);
-    }
-  }, [inView, loaded]);
-
-  if (!inView) {
-    return (
-      <div ref={ref as React.RefObject<HTMLDivElement>} className="w-full h-full flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin"></div>
-          <div className="text-gray-400 text-sm">PDF将在进入视口后加载...</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div ref={ref as React.RefObject<HTMLDivElement>} className="w-full h-full">
-      <object
-        data={pdfUrl}
-        type="application/pdf"
-        className="w-full h-full block"
+    <div ref={ref as React.RefObject<HTMLDivElement>} style={{ display: 'contents' }}>
+      <img
+        src={src}
+        alt={alt}
+        className={`${className} max-w-full h-auto object-contain ${isPrinting ? 'force-print-visible' : ''}`}
+        style={{
+          ...style,
+          opacity: (loaded || isPrinting) ? 1 : 0.8, // 提高初始透明度，减少淡入闪烁感
+          transition: 'opacity 0.2s ease-out', // 缩短过渡时间
+        }}
         onLoad={() => setLoaded(true)}
+        onError={(e) => {
+          console.error(`[LazyImage] 图片加载失败: ${src}`);
+          e.currentTarget.style.display = 'none';
+        }}
       />
     </div>
   );
 };
+
 
 const AmbientBg: React.FC<{ src: string | null | undefined }> = ({ src }) => {
   if (!src) return null;
@@ -195,7 +182,7 @@ const TechGrid: React.FC = () => (
 );
 
 export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode, onUpdate, onImageUpload, onNext, useAlternateDesign, setUseAlternateDesign }) => {
-  const [zoom, setZoom] = useState({ scale: 1, x: 0, y: 0 });
+  const [zoom, setZoom] = useState({ scale: article?.scale || 1, x: article?.posX || 0, y: article?.posY || 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, initX: 0, initY: 0 });
   const hasMoved = useRef(false);
@@ -206,16 +193,16 @@ export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode,
   const backUrl = useBlobUrl(article?.backImage);
   const pdfUrl = useBlobUrl(article?.pdfData);
 
-  // 使用渲染期同步更新 Zoom 状态，防止切换文章时的位置瞬间跳变
-  const [prevId, setPrevId] = useState(article.id);
-  if (article.id !== prevId) {
-    setPrevId(article.id);
-    setZoom({
-      scale: article.scale || 1,
-      x: article.posX || 0,
-      y: article.posY || 0
-    });
-  }
+  // 监听文章ID变化，重置缩放状态
+  useEffect(() => {
+    if (article) {
+      setZoom({
+        scale: article.scale || 1,
+        x: article.posX || 0,
+        y: article.posY || 0
+      });
+    }
+  }, [article?.id]); // 仅当文章ID变化时触发
 
   // 清理所有事件监听器（确保没有内存泄漏）
   useEffect(() => {
@@ -239,17 +226,33 @@ export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode,
     };
   }, [isDragging, hasMoved.current, article, zoom.x, zoom.y, onUpdate]);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    if (!isEditMode && !article?.category.includes('封')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    let newScale = zoom.scale * delta;
-    newScale = Math.min(Math.max(0.5, newScale), 5);
-    const newZoom = { ...zoom, scale: newScale };
-    setZoom(newZoom);
-    if (article) onUpdate(article.id, { scale: newScale });
-  };
+  const coverRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (!isEditMode && !article?.category.includes('封')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      let newScale = zoom.scale * delta;
+      newScale = Math.min(Math.max(0.5, newScale), 5);
+      const newZoom = { ...zoom, scale: newScale };
+      setZoom(newZoom);
+      if (article) onUpdate(article.id, { scale: newScale });
+    };
+
+    const coverEl = coverRef.current;
+    const backEl = backRef.current;
+
+    if (coverEl) coverEl.addEventListener('wheel', handleWheel, { passive: false });
+    if (backEl) backEl.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      if (coverEl) coverEl.removeEventListener('wheel', handleWheel);
+      if (backEl) backEl.removeEventListener('wheel', handleWheel);
+    };
+  }, [isEditMode, article, zoom, onUpdate]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!article?.category.includes('封')) return;
@@ -474,8 +477,8 @@ const DesignToggle = () => (
             </div>
             <div className="w-full min-h-[550px] h-auto shrink-0 flex justify-center items-center z-[1] relative my-4">
               <div
+                ref={coverRef}
                 className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? (article.coverImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
-                onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
@@ -701,8 +704,8 @@ const DesignToggle = () => (
             </div>
             <div className="w-full min-h-[550px] h-auto shrink-0 flex justify-center items-center z-[1] relative my-4">
               <div
+                ref={backRef}
                 className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${isEditMode ? (article.backImage ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer') : ''}`}
-                onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
@@ -837,7 +840,7 @@ const DesignToggle = () => (
                     <div className="flex-1 w-full overflow-hidden bg-white border border-gray-200 rounded-xl shadow-sm relative h-full min-h-[300px]">
                       {/* PDF内容容器 */}
                       <div className="w-full h-full overflow-auto relative min-h-[300px]">
-                        <LazyPdfViewer pdfUrl={pdfUrl} />
+                        <PdfViewer pdfUrl={pdfUrl} />
                       </div>
                     </div>
                   </div>
@@ -847,15 +850,32 @@ const DesignToggle = () => (
                     <div className="text-gray-400 text-sm">正在加载 PDF...</div>
                   </div>
                 )}
-                <a
-                  href={pdfUrl || '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="absolute bottom-4 right-4 z-10 bg-white px-3 py-1 text-xs border border-gray-300 rounded text-brand-blue no-underline flex items-center gap-1 hover:bg-gray-50"
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!pdfUrl) {
+                      alert('PDF 正在处理中，请稍后再试...');
+                      return;
+                    }
+                    try {
+                      // 纯粹的安全下载机制，杜绝使用 window.open 触发拦截
+                      const link = document.createElement('a');
+                      link.href = pdfUrl;
+                      link.download = article?.title ? `${article.title}.pdf` : 'document.pdf';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    } catch (err) {
+                      console.error('下载PDF失败', err);
+                      alert('下载失败，请重试');
+                    }
+                  }}
+                  className="absolute bottom-4 right-4 z-[20] bg-white px-3 py-2 text-xs border border-gray-300 rounded text-brand-blue cursor-pointer flex items-center gap-1 hover:bg-gray-50 shadow-md transition-colors"
                 >
-                  <Icon name="external-link" className="w-3 h-3" />
-                  无法预览？点击打开PDF
-                </a>
+                  <Icon name="download" className="w-3 h-3" />
+                  下载完整 PDF
+                </button>
               </div>
             </div>
           </div>

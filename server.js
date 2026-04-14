@@ -75,8 +75,6 @@ app.get('/api/health', (req, res) => {
 // DeepSeek API 代理端点
 app.post('/api/deepseek/generate', async (req, res) => {
   try {
-    // 安全修复：暗号鉴权机制，防止外部直接调用代理接口盗刷额度
-    // 验证请求头中的自定义密钥，证明这是来自合法前端页面的请求
     const proxySecret = process.env.PROXY_SECRET || 'my-super-secret-key';
     const requestSecret = req.headers['x-sws-proxy-secret'];
     
@@ -98,9 +96,13 @@ app.post('/api/deepseek/generate', async (req, res) => {
     }
 
     const apiUrl = DEEPSEEK_API_URL;
+    const requestedModel = req.body.model || 'unknown';
     
-    console.log(`📤 转发请求到 DeepSeek API: ${apiUrl.substring(0, 80)}...`);
-    
+    console.log(`📤 转发请求到 DeepSeek API (模型: ${requestedModel})...`);
+
+    const controller = new AbortController();
+    const upstreamTimeout = setTimeout(() => controller.abort(), 300_000);
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -108,15 +110,18 @@ app.post('/api/deepseek/generate', async (req, res) => {
         'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
       },
       body: JSON.stringify(req.body),
+      signal: controller.signal,
     });
 
-    // 透传状态码和响应头
+    clearTimeout(upstreamTimeout);
+
     const responseData = await response.json();
     
     if (!response.ok) {
       console.error('❌ DeepSeek API 错误:', {
         status: response.status,
         statusText: response.statusText,
+        model: requestedModel,
         data: responseData,
       });
       
@@ -127,10 +132,17 @@ app.post('/api/deepseek/generate', async (req, res) => {
       });
     }
 
-    console.log('✅ DeepSeek API 请求成功');
+    console.log(`✅ DeepSeek API 请求成功 (模型: ${requestedModel})`);
     res.status(response.status).json(responseData);
     
   } catch (error) {
+    if (error.name === 'AbortError') {
+      console.error('🔥 DeepSeek API 请求超时 (>300s)');
+      return res.status(504).json({
+        error: 'Gateway Timeout',
+        message: 'DeepSeek API 请求超时，请稍后重试',
+      });
+    }
     console.error('🔥 代理服务器内部错误:', error);
     res.status(500).json({
       error: 'Internal Server Error',

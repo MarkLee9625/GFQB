@@ -62,102 +62,129 @@ export const fileToDataURL = (file: File): Promise<string> => {
 };
 
 /**
- * 图片压缩优化
- * @param file 
- * @returns 
+ * 图片压缩优化（强化版）- 强制转换为WebP格式并限制物理尺寸
+ * 重构重点：移除预检逻辑，强制WebP编码，简化错误处理
+ * @param base64OrUrl 图片的Base64字符串或URL
+ * @param maxWidth 最大宽度，默认1200px
+ * @param quality WebP压缩质量，默认0.8（与阶段三要求一致）
+ * @returns 压缩后的Base64字符串（强制WebP格式）
  */
-export const compressImage = (file: File): Promise<string> => {
+export const compressImage = async (
+    base64OrUrl: string,
+    maxWidth: number = 1200,
+    quality: number = 0.8,
+    format: 'webp' | 'jpeg' | 'original' = 'webp'
+): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        if (!base64OrUrl || typeof base64OrUrl !== 'string') {
+            return reject(new Error('图片数据为空或格式错误'));
+        }
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth) {
+                const ratio = maxWidth / width;
+                width = maxWidth;
+                height = Math.floor(height * ratio);
+            }
+            
+            if (width < 50 && height < 50) {
+                resolve(base64OrUrl);
+                return;
+            }
+
+            const needsResize = width !== img.width || height !== img.height;
+            if (format === 'original' && !needsResize) {
+                resolve(base64OrUrl);
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return reject(new Error('无法获取canvas上下文'));
+            }
+            
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            try {
+                let mimeType: string;
+                if (format === 'original') {
+                    const mimeMatch = base64OrUrl.match(/data:([^;]+);/);
+                    mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                } else {
+                    mimeType = `image/${format}`;
+                }
+
+                const compressedDataUrl = canvas.toDataURL(mimeType, quality);
+                
+                if (compressedDataUrl.length < 100) {
+                    const fallbackMime = format === 'webp' ? 'image/jpeg' : 'image/jpeg';
+                    const fallbackDataUrl = canvas.toDataURL(fallbackMime, 0.8);
+                    if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+                    resolve(fallbackDataUrl);
+                    return;
+                }
+                
+                const originalSize = base64OrUrl.length;
+                const compressedSize = compressedDataUrl.length;
+                const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
+                console.log(`📊 图片压缩完成: ${originalSize} → ${compressedSize} bytes (压缩率: ${compressionRatio}%)，格式: ${mimeType}`);
+                
+                if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+                resolve(compressedDataUrl);
+            } catch (error) {
+                console.error('图片压缩失败，降级到JPEG:', error);
+                try {
+                    const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+                    resolve(jpegDataUrl);
+                } catch (jpegError) {
+                    if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+                    resolve(base64OrUrl);
+                }
+            }
+        };
+        
+        img.onerror = () => {
+            reject(new Error('图片加载失败，请检查图片地址或数据格式'));
+        };
+        
+        img.src = base64OrUrl;
+    });
+};
+
+/**
+ * 图片文件压缩（兼容旧版本）- 接收File对象，统一调用compressImage函数
+ * @param file 
+ * @returns 压缩后的Base64字符串（WebP格式）
+ */
+export const compressImageFile = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
         if (!file.type.startsWith('image/')) {
             return reject(new Error('文件不是图片类型'));
         }
 
-        // 检查文件大小，如果小于阈值直接返回
-        const MAX_SIZE_WITHOUT_COMPRESSION = 1024 * 1024; // 1MB
-        if (file.size <= MAX_SIZE_WITHOUT_COMPRESSION) {
+        const SKIP_THRESHOLD = 200 * 1024;
+        if (file.size <= SKIP_THRESHOLD && file.type === 'image/webp') {
             fileToDataURL(file).then(resolve).catch(reject);
             return;
         }
 
-        const reader = new FileReader();
-
-        reader.onload = (e) => {
-            const img = new Image();
-            img.src = e.target?.result as string;
-
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    return reject(new Error('无法获取canvas上下文'));
-                }
-
-                const maxWidth = CONSTANTS.IMAGES.MAX_WIDTH;
-                const maxHeight = maxWidth * 1.5; // 使用宽度的1.5倍作为最大高度
-                let width = img.width;
-                let height = img.height;
-
-                // 计算缩放比例
-                if (width > maxWidth || height > maxHeight) {
-                    const widthRatio = maxWidth / width;
-                    const heightRatio = maxHeight / height;
-                    const ratio = Math.min(widthRatio, heightRatio);
-
-                    width = Math.floor(width * ratio);
-                    height = Math.floor(height * ratio);
-                }
-
-                // 设置canvas尺寸
-                canvas.width = width;
-                canvas.height = height;
-
-                // 优化图片质量
-                ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
-
-                // 绘制图片
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // 根据文件类型选择压缩格式
-                let mimeType = 'image/jpeg';
-                let quality = CONSTANTS.IMAGES.QUALITY;
-
-                if (file.type === 'image/png') {
-                    mimeType = 'image/png';
-                    quality = 0.9; // PNG质量参数不同
-                } else if (file.type === 'image/webp') {
-                    mimeType = 'image/webp';
-                }
-
-                try {
-                    const compressedDataUrl = canvas.toDataURL(mimeType, quality);
-
-                    // 验证压缩结果
-                    if (compressedDataUrl.length < 100) {
-                        console.warn('压缩后图片数据异常，使用原始数据');
-                        fileToDataURL(file).then(resolve).catch(reject);
-                        return;
-                    }
-
-                    resolve(compressedDataUrl);
-                } catch (error) {
-                    console.error('图片压缩失败:', error);
-                    // 压缩失败时返回原始图片
-                    fileToDataURL(file).then(resolve).catch(reject);
-                }
-            };
-
-            img.onerror = () => {
-                console.error('图片加载失败');
-                reject(new Error('图片加载失败'));
-            };
-        };
-
-        reader.onerror = () => {
-            reject(new Error('文件读取失败'));
-        };
-
-        reader.readAsDataURL(file);
+        fileToDataURL(file)
+            .then(base64 => compressImage(base64))
+            .then(resolve)
+            .catch(reject);
     });
 };
 

@@ -1,4 +1,104 @@
 import { CONSTANTS } from '../../../../types';
+import { compressImage } from '../../../utils/fileHelpers';
+
+/**
+ * 将在线图片URL转换为Base64 Data URI（带超时与跨域容错）
+ * 【架构升级】针对微信等开启了严格 CORS 和防盗链的图床进行特化绕过
+ */
+async function fetchImageAsBase64(url: string, timeoutMs = 8000): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+            abortController.abort();
+            reject(new Error('图片下载与转码超时'));
+        }, timeoutMs);
+
+        const fetchBlob = async (targetUrl: string): Promise<Blob> => {
+            const response = await fetch(targetUrl, {
+                signal: abortController.signal,
+                referrerPolicy: 'no-referrer',
+                mode: 'cors'
+            });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.blob();
+        };
+
+        const processImage = async () => {
+            try {
+                let blob: Blob;
+                try {
+                    blob = await fetchBlob(url);
+                } catch (directErr) {
+                    console.warn(`[Export] 直接拉取图片失败，正尝试免 CORS 代理: ${url}`);
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                    blob = await fetchBlob(proxyUrl);
+                }
+
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    clearTimeout(timeoutId);
+                    resolve(reader.result as string);
+                };
+                reader.onerror = () => {
+                    clearTimeout(timeoutId);
+                    reject(new Error('FileReader 读取 Blob 失败'));
+                };
+                reader.readAsDataURL(blob);
+            } catch (error) {
+                clearTimeout(timeoutId);
+                reject(error);
+            }
+        };
+
+        processImage();
+    });
+}
+
+/**
+ * 将文章 HTML 内容中所有在线图片（http/https）转为 Base64 内联
+ * - 跳过已经是 data: 的图片（已内联）
+ * - 跳过 blob: URL
+ * - 单图最多等待 5 秒，失败则静默保留原 URL（不影响整体导出）
+ */
+export async function inlineOnlineImages(
+    content: string,
+    onProgress?: (done: number, total: number) => void
+): Promise<string> {
+    // 匹配所有 src="http(s)://..." 的 <img> 标签中的图片地址
+    const urlRegex = /<img([^>]*?)src=["'](https?:\/\/[^"']+)["']([^>]*?)>/gi;
+    const matches: Array<{ full: string; before: string; url: string; after: string }> = [];
+
+    let m: RegExpExecArray | null;
+    while ((m = urlRegex.exec(content)) !== null) {
+        matches.push({ full: m[0], before: m[1], url: m[2], after: m[3] });
+    }
+
+    if (matches.length === 0) return content; // 没有在线图片，直接返回
+
+    console.log(`[Export] 检测到 ${matches.length} 张在线图片，开始批量内联...`);
+
+    let processedContent = content;
+    let done = 0;
+
+    for (const match of matches) {
+        try {
+            const rawBase64 = await fetchImageAsBase64(match.url);
+            const base64 = await compressImage(rawBase64, 1200, 0.8).catch(() => rawBase64);
+            const newTag = `<img${match.before}src="${base64}"${match.after}>`;
+            processedContent = processedContent.replace(match.full, newTag);
+            console.log(`[Export] ✅ 图片已内联并压缩 (${++done}/${matches.length}): ${match.url.substring(0, 60)}...`);
+        } catch (err) {
+            console.warn(`[Export] ⚠️ 图片内联失败，保留原链接: ${match.url}`, err);
+            done++;
+        }
+        if (onProgress) onProgress(done, matches.length);
+    }
+
+    console.log(`[Export] 图片内联完成: 成功 ${done}/${matches.length}`);
+    return processedContent;
+}
+
+
 
 /**
  * 从视频URL提取第一帧作为base64图片
@@ -10,15 +110,20 @@ export async function extractVideoFirstFrame(videoUrl: string): Promise<string> 
         video.preload = 'metadata';
 
         video.onloadeddata = () => {
-            // 设置时间为0.1秒，确保加载了有效帧
             video.currentTime = 0.1;
         };
 
         video.onseeked = () => {
             try {
+                const MAX_DIM = 1200;
+                let w = video.videoWidth;
+                let h = video.videoHeight;
+                if (w > MAX_DIM) { h = Math.floor(h * MAX_DIM / w); w = MAX_DIM; }
+                if (h > MAX_DIM) { w = Math.floor(w * MAX_DIM / h); h = MAX_DIM; }
+
                 const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                canvas.width = w;
+                canvas.height = h;
 
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
@@ -27,8 +132,8 @@ export async function extractVideoFirstFrame(videoUrl: string): Promise<string> 
                 }
 
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const base64Image = canvas.toDataURL('image/jpeg', 0.8);
-                resolve(base64Image);
+                const rawBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                compressImage(rawBase64, 1200, 0.8).then(resolve).catch(() => resolve(rawBase64));
             } catch (error) {
                 console.error('提取视频首帧失败:', error);
                 reject(error);
@@ -42,7 +147,6 @@ export async function extractVideoFirstFrame(videoUrl: string): Promise<string> 
             reject(new Error('视频加载失败'));
         };
 
-        // 设置超时
         setTimeout(() => {
             reject(new Error('视频首帧提取超时'));
         }, 5000);
@@ -61,9 +165,15 @@ export async function extractGifFirstFrame(gifUrl: string): Promise<string> {
 
         img.onload = () => {
             try {
+                const MAX_DIM = 1200;
+                let w = img.naturalWidth || img.width;
+                let h = img.naturalHeight || img.height;
+                if (w > MAX_DIM) { h = Math.floor(h * MAX_DIM / w); w = MAX_DIM; }
+                if (h > MAX_DIM) { w = Math.floor(w * MAX_DIM / h); h = MAX_DIM; }
+
                 const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || img.width;
-                canvas.height = img.naturalHeight || img.height;
+                canvas.width = w;
+                canvas.height = h;
 
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
@@ -71,9 +181,9 @@ export async function extractGifFirstFrame(gifUrl: string): Promise<string> {
                     return;
                 }
 
-                ctx.drawImage(img, 0, 0);
-                const base64Image = canvas.toDataURL('image/png', 0.9);
-                resolve(base64Image);
+                ctx.drawImage(img, 0, 0, w, h);
+                const rawBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                compressImage(rawBase64, 1200, 0.8).then(resolve).catch(() => resolve(rawBase64));
             } catch (error) {
                 console.error('提取GIF首帧失败:', error);
                 reject(error);
@@ -84,7 +194,6 @@ export async function extractGifFirstFrame(gifUrl: string): Promise<string> {
             reject(new Error('GIF加载失败'));
         };
 
-        // 设置超时
         setTimeout(() => {
             reject(new Error('GIF首帧提取超时'));
         }, 3000);

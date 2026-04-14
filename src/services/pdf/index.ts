@@ -3,6 +3,7 @@ import { pdfjsLib, ensurePdfLibLoaded } from './wrapper';
 import { extractTitle } from './strategies/title';
 import { extractAbstract } from './strategies/abstract';
 import { extractKeywords } from './strategies/keywords';
+import { compressImage } from '../../utils/fileHelpers';
 
 // 1. 定义 Worker 地址 (指向 public 根目录)
 // 移除时间戳，确保某些环境对 .mjs 扩展名的严格匹配
@@ -153,8 +154,8 @@ export async function extractAbstractFromPdf(
  * PDF转图片配置选项
  */
 export interface PdfToImageOptions {
-    scale?: number;      // 缩放比例，默认3.0（约300 DPI）
-    quality?: number;    // JPEG质量，默认0.92
+    scale?: number;      // 缩放比例，默认2.0（约200 DPI）
+    quality?: number;    // JPEG质量，默认0.85
     format?: 'jpeg' | 'png'; // 输出格式，默认jpeg
     onProgress?: (current: number, total: number) => void; // 进度回调
 }
@@ -167,8 +168,8 @@ export const convertPdfToImages = async (
     options: PdfToImageOptions = {}
 ): Promise<string[]> => {
     const {
-        scale = 3.0,
-        quality = 0.98,
+        scale = 2.0,
+        quality = 0.85,
         format = 'jpeg',
         onProgress
     } = options;
@@ -242,12 +243,14 @@ export const convertPdfToImages = async (
 
                 // 根据配置生成图片
                 const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
-                const imageData = format === 'png'
+                const rawImageData = format === 'png'
                     ? canvas.toDataURL(mimeType)
                     : canvas.toDataURL(mimeType, quality);
 
+                const imageData = await compressImage(rawImageData, 1600, 0.82);
+
                 images.push(imageData);
-                console.log(`[PDF服务] 已生成第 ${i} 页图片 (${scale}x 采样，质量${quality})`);
+                console.log(`[PDF服务] 已生成第 ${i} 页图片 (${scale}x 采样，已压缩)`);
             }
         } catch (pageErr) {
             console.warn(`[PDF服务] 第 ${i} 页渲染失败，跳过:`, pageErr);

@@ -3,6 +3,7 @@ import { Article, CONSTANTS } from '../types';
 import { Icon } from './Icons';
 import { useBlobManager } from '../hooks/useBlobManager';
 import { fileToDataURL, compressImage } from '../src/utils/fileHelpers';
+import { cleanPastedHtml } from '../src/utils/pasteCleaner';
 import { generateArticleMeta, generateTitleOnly, scaleText } from '../services/aiService';
 import { extractAbstractFromPdf, convertPdfToImages } from '../src/services/pdf';
 import LoadingOverlay from './LoadingOverlay';
@@ -59,6 +60,12 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   const [showAiLoading, setShowAiLoading] = useState(false);
   const [showTitleLoading, setShowTitleLoading] = useState(false);
   const [isScalingText, setIsScalingText] = useState(false);
+  const [selectedImgEl, setSelectedImgEl] = useState<HTMLImageElement | null>(null);
+  const [imgToolbarPos, setImgToolbarPos] = useState<{ top: number; left: number } | null>(null);
+  const [imgCompressQuality, setImgCompressQuality] = useState(0.8);
+  const [imgCompressMaxWidth, setImgCompressMaxWidth] = useState(1200);
+  const [imgCompressFormat, setImgCompressFormat] = useState<'webp' | 'jpeg' | 'original'>('webp');
+  const imgReplaceInputRef = useRef<HTMLInputElement | null>(null);
 
   // 保存当前选区（光标位置）
   const saveSelection = useCallback(() => {
@@ -343,7 +350,8 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   };
 
   const handleScaleText = async (mode: 'expand' | 'shrink') => {
-    if (!contentRef.current) return;
+    const editorElement = contentRef.current;
+    if (!editorElement) return;
     
     // 1. 获取当前选区
     const selection = window.getSelection();
@@ -363,8 +371,8 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
       const aiResult = await scaleText(selectedText, mode);
       
       // 4. 恢复选区并进行安全替换
-      if (document.activeElement !== contentRef.current) {
-        contentRef.current.focus();
+      if (document.activeElement !== editorElement) {
+        editorElement.focus();
       }
       restoreSelection();
       
@@ -372,7 +380,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
       document.execCommand('insertText', false, aiResult);
       
       // 5. 立即同步 React 状态 (关键防丢失屏障！)
-      setFormData(prev => ({ ...prev, content: contentRef.current!.innerHTML }));
+      setFormData(prev => ({ ...prev, content: editorElement.innerHTML }));
       
       // 6. 更新选区引用
       saveSelection();
@@ -428,11 +436,12 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   };
 
   const insertHtml = (htmlOrNode: string | Node) => {
-    if (!contentRef.current) return;
+    const editorElement = contentRef.current;
+    if (!editorElement) return;
 
     // 确保编辑器获得焦点
-    if (document.activeElement !== contentRef.current) {
-      contentRef.current.focus();
+    if (document.activeElement !== editorElement) {
+      editorElement.focus();
     }
 
     // 恢复之前的选区
@@ -465,7 +474,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
         selection.removeAllRanges();
         selection.addRange(newRange);
       } else {
-        contentRef.current.appendChild(htmlOrNode);
+        editorElement.appendChild(htmlOrNode);
       }
     }
 
@@ -473,6 +482,141 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     saveSelection();
 
     // 重要：移除 setFormData 指令，防止 React 渲染擦除刚才插入的 DOM
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const clipboardData = e.clipboardData;
+
+    if (clipboardData.files && clipboardData.files.length > 0) {
+      const file = clipboardData.files[0];
+      if (file.type.startsWith('image/')) {
+        setIsProcessing(true);
+        try {
+          const base64 = await fileToDataURL(file);
+          const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
+          insertHtml(`<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box; text-align: center; display: block;"><img src="${src}" style="width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0 auto; object-fit: contain;" class="max-w-full h-auto object-contain" /></div><p><br/></p>`);
+        } catch {
+          alert('粘贴图片失败');
+        } finally {
+          setIsProcessing(false);
+        }
+        return;
+      }
+    }
+
+    const html = clipboardData.getData('text/html');
+    const text = clipboardData.getData('text/plain');
+
+    if (html) {
+      const cleaned = cleanPastedHtml(html);
+      insertHtml(cleaned);
+      setTimeout(() => handleAutoIndent(), 50);
+    } else if (text) {
+      const paragraphs = text.split(/\n\s*\n|\r\n\s*\r\n/);
+      const htmlContent = paragraphs
+        .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+        .join('');
+      insertHtml(htmlContent);
+      setTimeout(() => handleAutoIndent(), 50);
+    }
+  };
+
+  const handleEditorClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'IMG' && contentRef.current?.contains(target)) {
+      const img = target as HTMLImageElement;
+      if (selectedImgEl && selectedImgEl !== img) {
+        selectedImgEl.classList.remove('img-selected');
+      }
+      img.classList.add('img-selected');
+      setSelectedImgEl(img);
+      const rect = img.getBoundingClientRect();
+      const toolbarHeight = 40;
+      let top = rect.top - toolbarHeight - 8;
+      if (top < 8) top = rect.bottom + 8;
+      const left = rect.left + rect.width / 2;
+      setImgToolbarPos({ top, left });
+    } else {
+      if (selectedImgEl) {
+        selectedImgEl.classList.remove('img-selected');
+        setSelectedImgEl(null);
+        setImgToolbarPos(null);
+      }
+    }
+  };
+
+  const handleImgAlign = (align: 'left' | 'center' | 'right') => {
+    if (!selectedImgEl) return;
+    const container = selectedImgEl.closest('div') as HTMLElement | null;
+    if (container) {
+      container.style.textAlign = align;
+    }
+    selectedImgEl.style.margin = align === 'center' ? '0 auto' : align === 'left' ? '0 auto 0 0' : '0 0 0 auto';
+    selectedImgEl.style.display = 'block';
+  };
+
+  const handleImgSize = (size: '30%' | '60%' | '100%') => {
+    if (!selectedImgEl) return;
+    const container = selectedImgEl.closest('div') as HTMLElement | null;
+    if (container) {
+      container.style.width = size;
+      container.style.maxWidth = size;
+    }
+  };
+
+  const handleImgReplace = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedImgEl) return;
+    setIsProcessing(true);
+    try {
+      const base64 = await fileToDataURL(file);
+      const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
+      selectedImgEl.setAttribute('src', src);
+    } catch {
+      alert('替换图片失败');
+    } finally {
+      setIsProcessing(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleImgDelete = () => {
+    if (!selectedImgEl) return;
+    const container = selectedImgEl.closest('div') as HTMLElement | null;
+    if (container && container.parentElement) {
+      const nextP = container.nextElementSibling;
+      container.remove();
+      if (nextP && nextP.tagName === 'P' && (nextP.innerHTML === '<br>' || nextP.innerHTML === '')) {
+        nextP.remove();
+      }
+    } else {
+      selectedImgEl.remove();
+    }
+    setSelectedImgEl(null);
+    setImgToolbarPos(null);
+  };
+
+  const handleImgCaption = () => {
+    if (!selectedImgEl) return;
+    const container = selectedImgEl.closest('div') as HTMLElement | null;
+    if (!container) return;
+    const existingCaption = container.nextElementSibling;
+    if (existingCaption && existingCaption.classList.contains('image-caption')) {
+      existingCaption.remove();
+      return;
+    }
+    const caption = document.createElement('p');
+    caption.className = 'image-caption';
+    caption.contentEditable = 'true';
+    caption.innerHTML = '请输入图片说明...';
+    caption.style.cssText = 'text-align: center; font-size: 14px; color: #6b7280; font-style: italic; text-indent: 0; margin: 4px 0 16px 0; line-height: 1.6;';
+    container.parentElement!.insertBefore(caption, container.nextSibling);
+    const range = document.createRange();
+    range.selectNodeContents(caption);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>, type: 'img' | 'video' | 'audio' | 'pdf') => {
@@ -498,7 +642,8 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     const timeoutId = window.setTimeout(async () => {
       try {
                 if (type === 'img') {
-          const src = file.type === 'image/gif' ? await fileToDataURL(file) : await compressImage(file);
+          const base64 = await fileToDataURL(file);
+          const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
                 // 核心修复：在图片后追加 <p><br/></p>，确保光标有落脚点，且自动换行
                 insertHtml(`<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box; text-align: center; display: block;"><img src="${src}" style="width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0 auto; object-fit: contain;" class="max-w-full h-auto object-contain" /></div><p><br/></p>`);
         } else if (type === 'pdf') {
@@ -574,8 +719,9 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
               insertHtml(emptyParagraph);
 
               // [关键修复] 插入完成后立即同步状态，防止 setIsProcessing(false) 导致的重绘根据旧状态擦除 DOM
-              if (contentRef.current) {
-                setFormData(prev => ({ ...prev, content: contentRef.current.innerHTML }));
+              const editorElement = contentRef.current;
+              if (editorElement) {
+                setFormData(prev => ({ ...prev, content: editorElement.innerHTML }));
               }
             } catch (err) {
               console.error('[Editor] PDF 转换流程异常:', err);
@@ -871,20 +1017,57 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
       </div>
     </div>
             ) : (
-              <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full relative">
                 <div
                   ref={contentRef}
                   className="sws-prose editor-area min-h-full focus:outline-none"
                   contentEditable
+                  onPaste={handlePaste}
+                  onClick={handleEditorClick}
                   onMouseUp={saveSelection}
                   onKeyUp={saveSelection}
-                  onBlur={saveSelection} // [新增] 失去焦点时保存光标
+                  onBlur={saveSelection}
                   style={{
                     fontSize: `${formData.fontSize}px`,
                     lineHeight: formData.lineHeight,
                     textAlign: 'justify'
                   }}
                 />
+                {imgToolbarPos && selectedImgEl && (
+                  <div
+                    className="fixed z-[300] flex items-center gap-1 bg-white rounded-lg shadow-xl border border-gray-200 px-2 py-1.5"
+                    style={{
+                      top: `${imgToolbarPos.top}px`,
+                      left: `${imgToolbarPos.left}px`,
+                      transform: 'translateX(-50%)',
+                    }}
+                  >
+                    <button onClick={() => handleImgAlign('left')} className="p-1.5 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-800 transition-colors" title="左对齐">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+                    </button>
+                    <button onClick={() => handleImgAlign('center')} className="p-1.5 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-800 transition-colors" title="居中">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+                    </button>
+                    <button onClick={() => handleImgAlign('right')} className="p-1.5 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-800 transition-colors" title="右对齐">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
+                    </button>
+                    <div className="w-px h-4 bg-gray-200 mx-0.5"></div>
+                    <button onClick={() => handleImgSize('30%')} className="px-1.5 py-0.5 text-[10px] font-bold text-gray-500 hover:bg-gray-100 rounded hover:text-gray-800 transition-colors" title="小图 30%">S</button>
+                    <button onClick={() => handleImgSize('60%')} className="px-1.5 py-0.5 text-[10px] font-bold text-gray-500 hover:bg-gray-100 rounded hover:text-gray-800 transition-colors" title="中图 60%">M</button>
+                    <button onClick={() => handleImgSize('100%')} className="px-1.5 py-0.5 text-[10px] font-bold text-gray-500 hover:bg-gray-100 rounded hover:text-gray-800 transition-colors" title="大图 100%">L</button>
+                    <div className="w-px h-4 bg-gray-200 mx-0.5"></div>
+                    <label className="p-1.5 hover:bg-blue-50 rounded text-gray-500 hover:text-brand-blue cursor-pointer transition-colors" title="替换图片">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      <input type="file" className="hidden" accept="image/*" onChange={handleImgReplace} ref={imgReplaceInputRef} />
+                    </label>
+                    <button onClick={handleImgCaption} className="p-1.5 hover:bg-purple-50 rounded text-gray-500 hover:text-purple-600 transition-colors" title="添加/移除题注">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7h16M4 12h10M4 17h12"/></svg>
+                    </button>
+                    <button onClick={handleImgDelete} className="p-1.5 hover:bg-red-50 rounded text-gray-500 hover:text-red-500 transition-colors" title="删除图片">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1011,6 +1194,66 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
                       value={formData.lineHeight}
                       onChange={e => setFormData({ ...formData, lineHeight: parseFloat(e.target.value) })}
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Image Compression */}
+              <div className="space-y-4">
+                <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">图片压缩</h3>
+                <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 space-y-5">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
+                      <span>输出格式</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {([
+                        { value: 'webp' as const, label: 'WebP', desc: '体积最小' },
+                        { value: 'jpeg' as const, label: 'JPEG', desc: '兼容最好' },
+                        { value: 'original' as const, label: '原格式', desc: '不转码' },
+                      ]).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setImgCompressFormat(opt.value)}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                            imgCompressFormat === opt.value
+                              ? 'bg-brand-blue text-white border-brand-blue shadow-sm'
+                              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {opt.label}
+                          <span className="block text-[8px] font-normal opacity-70">{opt.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
+                      <span>最大宽度</span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200">{imgCompressMaxWidth}px</span>
+                    </div>
+                    <input
+                      type="range" min="400" max="2400" step="100"
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                      value={imgCompressMaxWidth}
+                      onChange={e => setImgCompressMaxWidth(parseInt(e.target.value))}
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
+                      <span>压缩质量</span>
+                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200">{Math.round(imgCompressQuality * 100)}%</span>
+                    </div>
+                    <input
+                      type="range" min="0.3" max="1.0" step="0.05"
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-blue"
+                      value={imgCompressQuality}
+                      onChange={e => setImgCompressQuality(parseFloat(e.target.value))}
+                    />
+                    <div className="flex justify-between text-[8px] text-gray-400">
+                      <span>体积小</span>
+                      <span>质量高</span>
+                    </div>
                   </div>
                 </div>
               </div>

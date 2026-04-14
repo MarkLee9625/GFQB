@@ -17,8 +17,8 @@ import AiCurationModal from './src/components/AiCurationModal';
 import { UniversalArticleMeta } from './src/types/intelligence';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor';
 import { useJournal } from './hooks/useJournal';
-import { generateForeword, extractGlobalKnowledgeGraph } from './services/aiService';
-import { generateReaderHTML, generatePrintableHTML, exportToPdf, PdfExportOptions } from './src/services/export';
+import { generateForeword, extractGlobalKnowledgeGraph, buildSuperContextForGraph, validateGraphQuality, GraphQualityReport } from './services/aiService';
+import { generateReaderHTML, generatePrintableHTML, exportToPdf, exportReaderHTML, PdfExportOptions } from './src/services/export';
 import { generateGraphHtml } from './src/utils/graphRenderer';
 import MainLayout from './src/components/Layout/MainLayout';
 
@@ -188,11 +188,35 @@ const AppContent: React.FC = () => {
         
         // 调用浏览器原生 Ctrl+F 级别的查找能力
         // 参数: 关键词, 非大小写敏感, 向下查找, 开启循环查找
+        // @ts-ignore
         const found = window.find(keyword, false, false, true, false, false, false);
         
         // 如果向下没找到，强行向上再找一圈兜底
         if (!found) {
+          // @ts-ignore
           window.find(keyword, false, true, true, false, false, false);
+        }
+      }
+
+      // 2. 知识图谱数据请求信号 (针对 Iframe 受限无法直接访问 parent DOM 时的回流)
+      if (event.data && event.data.type === 'GRAPH_REQUEST_DATA' && event.data.uid) {
+        const uid = event.data.uid;
+        console.log('[架构联通] 收到图谱数据请求, UID:', uid);
+        const dataEl = document.getElementById('data-' + uid);
+        if (dataEl) {
+          const iframe = document.getElementById('iframe-' + uid) as HTMLIFrameElement;
+          if (iframe && iframe.contentWindow) {
+            console.log('[架构联通] 成功定位 iframe，进行数据回流...');
+            iframe.contentWindow.postMessage({
+              type: 'GRAPH_DATA_RESPONSE',
+              uid: uid,
+              dataB64: dataEl.textContent
+            }, '*');
+          } else {
+            console.warn('[架构联通] 未能定位到 iframe 节点:', uid);
+          }
+        } else {
+          console.warn('[架构联通] 未能定位到数据节点 data-' + uid);
         }
       }
     };
@@ -444,45 +468,47 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // 生成知识图谱业务流
+  // 生成知识图谱业务流 (支持 PDF 深度抽取)
   const handleGenerateGraph = async () => {
-    // 1. 获取所有正文文本
-    const validArticles = articles.filter(a => a.category !== '封面' && a.category !== '封底' && a.content);
-    if (validArticles.length === 0) return alert("当前无有效内容，无法提取图谱！");
+    const validArticles = articles.filter(a => 
+      a.category !== '封面' && 
+      a.category !== '封底' && 
+      (a.content || a.pdfData)
+    );
+    
+    if (validArticles.length === 0) {
+      return alert("当前无有效内容或 PDF 附件，无法提取图谱！");
+    }
 
-    const allText = validArticles.map((a, index) => {
-      // 1. 尝试提取正文纯文本
-      let pureText = (a.content || '').replace(/<[^>]+>/g, '').trim();
-      
-      // 2. 如果正文文本太短（说明可能是纯图片/PDF构成的文章），则使用摘要和标签作为数据补偿
-      if (pureText.length < 50) {
-        pureText = `本文摘要：${a.abstract || ''}。本文核心关键词：${(a.tags || []).join('、')}。`;
-      }
-      
-      return `【文章 ${index + 1}：${a.title}】\n${pureText}`;
-    }).join('\n\n---\n\n').slice(0, 150000);
-
-    setImportProgress({ stage: 'generating', details: 'DeepSeek 正在进行全局知识点提取与拓扑计算，请稍候 (约 20-40 秒)...' });
+    setImportProgress({ stage: 'generating', details: '正在深度解析 PDF 与全刊内容，构建超级上下文...' });
 
     try {
-      // 2. 调用 AI 提取结构化图谱
-      const graphData = await extractGlobalKnowledgeGraph(allText);
-      
-      // 3. 转化为原生 SVG
+      const allText = await buildSuperContextForGraph(validArticles);
+      const finalContext = allText.slice(0, 150000);
+
+      const graphData = await extractGlobalKnowledgeGraph(finalContext, (stage, detail) => {
+        setImportProgress({ stage: 'generating', details: `[${stage}] ${detail}` });
+      });
+
+      const qualityReport = validateGraphQuality(graphData);
+      console.log('[App] 图谱质量报告:', qualityReport);
+
       const htmlContent = generateGraphHtml(graphData);
 
-      // 4. 创建专属于图谱的页面
       const newArt = await createArticle({
         title: '本期技术知识图谱',
         category: '特别报道',
         content: htmlContent,
-        abstract: '本图谱由 AI 引擎根据全刊内容自动提炼，展示了本期收录的核心工艺、材料与设备之间的技术拓扑关系。',
+        abstract: '本图谱由 AI 引擎根据全刊内容(含深度解析的PDF文献)自动提炼，展示了本期收录的核心工艺、材料与设备之间的技术拓扑关系。',
         isPublished: true
       });
 
       if (newArt) {
         setCurrentId(newArt.id);
-        setTimeout(() => alert('🕸️ 知识图谱生成成功！'), 100);
+        const qualityMsg = qualityReport.isValid
+          ? `✅ 质量校验通过！节点 ${qualityReport.nodeCount} 个，关系 ${qualityReport.linkCount} 条，连通率 ${(qualityReport.connectivityRatio * 100).toFixed(0)}%`
+          : `⚠️ 质量提示：\n${qualityReport.warnings.join('\n')}`;
+        setTimeout(() => alert(`🕸️ 知识图谱生成成功！\n\n${qualityMsg}`), 100);
       }
     } catch (err) {
       alert('生成图谱失败: ' + (err instanceof Error ? err.message : '未知错误'));
@@ -527,13 +553,25 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentId) return;
-    fileToDataURL(file).then(base64 => {
-      if (uploadTypeRef.current === 'cover') updateArticle(currentId, { coverImage: base64 as string });
-      else updateArticle(currentId, { backImage: base64 as string });
-    });
+    
+    try {
+      // 阶段三要求：所有图片都必须经过压缩管道，包括封面和封底
+      const base64 = await fileToDataURL(file);
+      const compressedBase64 = await compressImage(base64);
+      
+      if (uploadTypeRef.current === 'cover') {
+        updateArticle(currentId, { coverImage: compressedBase64 });
+      } else {
+        updateArticle(currentId, { backImage: compressedBase64 });
+      }
+    } catch (error) {
+      console.error('图片压缩失败:', error);
+      alert('图片上传压缩失败，请重试');
+    }
+    
     e.target.value = '';
   };
 
@@ -636,18 +674,13 @@ const AppContent: React.FC = () => {
           logo: logo // 传递Logo信息
         };
         await exportToPdf(articles, pdfOptions);
+      } else if (options.exportType === 'reader') {
+        // 使用新的 ZIP 导出功能
+        await exportReaderHTML(articles, options, { logo, sidebarMeta });
       } else {
-        let htmlContent: string;
-        let fileName: string;
-
-        if (options.exportType === 'printable') {
-          htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
-          fileName = `SWS_Printable_${new Date().toISOString().slice(0, 10)}.html`;
-        } else {
-          htmlContent = await generateReaderHTML(articles, options, { logo, sidebarMeta });
-          fileName = `SWS_Reader_${new Date().toISOString().slice(0, 10)}.html`;
-        }
-
+        // 打印版仍然使用原来的 HTML 导出方式
+        const htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
+        const fileName = `SWS_Printable_${new Date().toISOString().slice(0, 10)}.html`;
         const url = createExportBlob(htmlContent);
         const a = document.createElement('a');
         a.href = url;
@@ -828,7 +861,7 @@ const AppContent: React.FC = () => {
           <input type="file" ref={importInputRef} className="hidden" accept=".html,.json" onChange={handleImport} />
           <input type="file" ref={logoInputRef} className="hidden" accept="image/*" onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) fileToDataURL(f).then((b64) => setLogo(b64 as string));
+            if (f) fileToDataURL(f).then((b64) => compressImage(b64 as string, 400, 0.8)).then((compressed) => setLogo(compressed));
           }} />
           <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
         </>

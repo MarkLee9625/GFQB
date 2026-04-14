@@ -5,13 +5,14 @@ description: 性能优化指南，重点关注内存管理（Blob URLs）和渲�
 
 # 性能优化指南 (Performance Optimization)
 
-此 Skill 针对项目的特定性能瓶颈（如大型文件处理、React 渲染）提供解决方案。
+此 Skill 针对项目的特定性能瓶颈（如大型文件处理、React 19 渲染）提供解决方案。
 
 ## 何时使用
 
 - 处理视频、PDF 或大型图片上传/导出时
 - 页面响应变慢或浏览器内存占用过高时
 - 编写复杂的交互组件时
+- 优化 React 19 应用性能时
 
 ## 1. 内存管理 (关键: Blob URL)
 
@@ -38,32 +39,42 @@ useEffect(() => {
 ```
 
 ### 工具: `useBlobManager`
-请检查项目中的 `src/hooks/useBlobManager.ts`（如文档所述），优先使用它来统一管理 Blob 生命周期，避免手动维护带来的泄漏泄漏风险。
+请检查项目中的 `src/hooks/useBlobManager.ts`（如文档所述），优先使用它来统一管理 Blob 生命周期，避免手动维护带来的泄漏风险。
 
 ## 2. 多媒体渲染优化 (Media Extraction)
 处理打印或导出长图大文件时，大量动态资源会导致浏览器 OOM（Out Of Memory）。
 - **静态降维**：对页面内的 Video 和 GIF，在执行导出或打印操作前，利用 Canvas 提取它们的第一帧 (`extractVideoFirstFrame`, `extractGifFirstFrame`)，将其替换为静态 `<img>` 标签。这不仅保证了打印的一致性，还极大地减轻了渲染引擎的内存压力。
 
-## 3. React 渲染优化
+## 3. React 19 渲染优化
 
 ### 避免不必要的重渲染
 - **useMemo**: 缓存复杂的计算结果（如过滤大型列表）。
 - **useCallback**: 缓存传递给子组件的回调函数，防止子组件无意义重渲染（尤其是配合 React.memo 使用时）。
+- **React 19 新特性**: 利用 `useTransition` 和 `useDeferredValue` 优化大型状态更新，避免 UI 阻塞。
 
 ```tsx
-const filteredList = useMemo(() => {
-  return heavyComputation(items, filter);
-}, [items, filter]);
+// React 19 优化示例
+const [isPending, startTransition] = useTransition();
+const deferredValue = useDeferredValue(filteredList);
 
-const handleItemClick = useCallback((id: string) => {
-  // ... logic
-}, []); // 依赖项为空表示函数引用永远不变
+const handleFilterChange = (newFilter) => {
+  startTransition(() => {
+    setFilter(newFilter);
+  });
+};
+
+return (
+  <div>
+    {isPending && <div>加载中...</div>}
+    <List items={deferredValue} />
+  </div>
+);
 ```
 
 ### 列表虚拟化
 如果需要渲染长列表（>100 项），考虑使用 `react-window` 或 `react-virtuoso` 仅渲染可视区域的元素。
 
-## 3. 资源懒加载 (Lazy Loading)
+## 4. 资源懒加载 (Lazy Loading)
 
 对于非首屏的大型组件或路由，使用 `React.lazy` 和 `Suspense`。
 
@@ -76,10 +87,23 @@ const HeavyChart = React.lazy(() => import('./HeavyChart'));
 </Suspense>
 ```
 
-## 4. 数据库操作 (IndexedDB)
+## 5. Tailwind CSS 4 性能优化
+
+- **使用 JIT 模式**: Tailwind CSS 4 默认使用 JIT 模式，确保只生成使用的 CSS 类。
+- **避免过度使用变体**: 减少不必要的响应式变体，只在需要时使用。
+- **使用自定义工具类**: 对于重复使用的样式组合，创建自定义工具类。
+- **优化构建输出**: 确保在生产构建中正确配置 Tailwind，移除未使用的样式。
+
+## 6. 数据库操作 (IndexedDB)
 - **批量处理**: 不要在一个循环中多次调用 `db.put()`。尽量构建一个数组，使用 `db.bulkPut()` 或事务（Transaction）一次性写入。
 - **异步非阻塞**: 确保数据库操作不会阻塞 UI 线程。
+
+## 7. 网络性能优化
+- **资源压缩**: 确保所有静态资源（JS、CSS、图片）都经过适当压缩。
+- **缓存策略**: 合理设置缓存头，减少重复请求。
+- **CDN 使用**: 考虑使用 CDN 加速静态资源加载。
 
 ## 性能监控
 - 使用 Chrome DevTools 的 **Performance** 面板录制操作过程，分析 Main Thread 阻塞情况。
 - 使用 **Memory** 面板检查 Heap Snapshot，查找未释放的 Detached DOM 节点或 Blob 对象。
+- 使用 React DevTools 的 **Profiler** 分析组件渲染性能。
