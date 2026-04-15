@@ -235,6 +235,25 @@
 
 ## 📅 更新日志 (Changelog)
 
+### v1.6.5 (2026-04-15) - 测试框架集成与技能文件重构
+*   **【测试框架集成】Vitest 单元测试覆盖**:
+    *   新增 `vitest.config.ts` 配置文件，集成 Vitest 测试框架，支持 JS DOM 环境模拟。
+    *   新增 `src/__tests__/testSetup.ts` 测试设置文件，提供全局 Mock（Image、FileReader 等）。
+    *   新增 `src/utils/fileHelpers.test.ts` 单元测试，全面覆盖文件操作辅助函数的各种场景。
+    *   新增 `src/utils/pasteCleaner.test.ts` 单元测试，验证 HTML 粘贴净化功能的正确性。
+    *   新增 `npm test`、`npm run test:watch`、`npm run test:coverage` 脚本命令，支持测试运行、监听和覆盖率报告。
+*   **【技能文件重构】统一技能管理架构**:
+    *   将 AI 开发助手技能文件从 `.agent/skills/` 和 `.cline/skills/` 目录统一迁移到 `.trae/skills/` 目录。
+    *   保留全部 10 个专业技能模块：AI 功能集成、代码风格检查、组件创建、工程人设提示、导出模板统一、PDF 服务维护、性能优化、React 19 特性、安全最佳实践、Tailwind CSS v4 工具类优化。
+    *   简化项目结构，消除冗余文件，提升 AI 协作规范的集中管理效率。
+*   **【样式优化】专业中文排版引擎增强**:
+    *   在 `src/index.css` 中新增 125+ 行样式规则，进一步强化中文期刊排版效果。
+    *   优化字体渲染、行距控制和段落间距，提升阅读体验。
+*   **【代码质量提升】组件与 Hook 优化**:
+    *   重构 `App.tsx`、`components/Editor.tsx`、`components/PaperView.tsx` 等核心组件，修复已知问题。
+    *   优化 `hooks/useBlobManager.ts`、`hooks/useInView.ts`、`hooks/useJournal.ts` 等自定义 Hook，提升性能和稳定性。
+    *   更新 `package.json` 依赖，确保开发工具链的兼容性和安全性。
+
 ### v1.6.4 (2026-04-14) - 新增智能缓存系统与性能优化工具
 *   **【智能缓存系统】Blob 缓存管理**:
     *   新增 `src/services/export/blobCache.ts` 模块，实现 LRU（最近最少使用）缓存策略，用于管理媒体资源的 Blob URL，避免频繁滚动时的重复解码，最大容量为 5 个条目。
@@ -551,4 +570,4 @@ o-referrer 剥离身份标识试图直通；若遭遇硬核 CORS 拦截，二档
 *   **IndexedDB V2**: 实现文章级原子化存储，大幅提升大数据量下的稳定性。
 
 ---
-最后更新：2026-04-14
+最后更新：2026-04-15
