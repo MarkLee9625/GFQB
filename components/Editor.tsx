@@ -62,10 +62,32 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   const [isScalingText, setIsScalingText] = useState(false);
   const [selectedImgEl, setSelectedImgEl] = useState<HTMLImageElement | null>(null);
   const [imgToolbarPos, setImgToolbarPos] = useState<{ top: number; left: number } | null>(null);
-  const [imgCompressQuality, setImgCompressQuality] = useState(0.8);
-  const [imgCompressMaxWidth, setImgCompressMaxWidth] = useState(1200);
-  const [imgCompressFormat, setImgCompressFormat] = useState<'webp' | 'jpeg' | 'original'>('webp');
+  const [imgCompressQuality, setImgCompressQuality] = useState(() => {
+    const saved = localStorage.getItem('SWS_IMG_COMPRESS_QUALITY');
+    return saved ? parseFloat(saved) : 0.8;
+  });
+  const [imgCompressMaxWidth, setImgCompressMaxWidth] = useState(() => {
+    const saved = localStorage.getItem('SWS_IMG_COMPRESS_MAX_WIDTH');
+    return saved ? parseInt(saved) : 1200;
+  });
+  const [imgCompressFormat, setImgCompressFormat] = useState<'webp' | 'jpeg' | 'original'>(() => {
+    const saved = localStorage.getItem('SWS_IMG_COMPRESS_FORMAT');
+    return (saved as 'webp' | 'jpeg' | 'original') || 'webp';
+  });
   const imgReplaceInputRef = useRef<HTMLInputElement | null>(null);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('SWS_IMG_COMPRESS_QUALITY', String(imgCompressQuality));
+  }, [imgCompressQuality]);
+
+  useEffect(() => {
+    localStorage.setItem('SWS_IMG_COMPRESS_MAX_WIDTH', String(imgCompressMaxWidth));
+  }, [imgCompressMaxWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('SWS_IMG_COMPRESS_FORMAT', imgCompressFormat);
+  }, [imgCompressFormat]);
 
   // 保存当前选区（光标位置）
   const saveSelection = useCallback(() => {
@@ -84,35 +106,50 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     }
   }, []);
 
+  const prevArticleIdRef = useRef<number | null>(null);
+  const wasOpenRef = useRef(false);
+
   useEffect(() => {
     if (isOpen) {
-      setFormData({
-        title: article.title || '',
-        date: article.date || new Date().toISOString().split('T')[0],
-        category: article.category || (categories[0] || '默认'),
-        content: article.content || '',
-        id: article.id,
-        abstract: article.abstract || '',
-        tags: article.tags || [],
-        fontSize: article.fontSize || 18,
-        lineHeight: article.lineHeight || 2.0,
-        isPublished: article.isPublished || false // 核心修复：恢复状态记忆
-      });
-      if (article.pdfData) {
-        setTempPdf({ name: 'Existing PDF', data: article.pdfData });
-      } else {
-        setTempPdf(null);
-      }
-      if (contentRef.current) {
-        contentRef.current.innerHTML = article.content || '';
+      const articleId = article.id;
+      const justOpened = !wasOpenRef.current;
+      wasOpenRef.current = true;
+      if (prevArticleIdRef.current !== articleId || justOpened) {
+        prevArticleIdRef.current = articleId;
+        setFormData({
+          title: article.title || '',
+          date: article.date || new Date().toISOString().split('T')[0],
+          category: article.category || (categories[0] || '默认'),
+          content: article.content || '',
+          id: article.id,
+          abstract: article.abstract || '',
+          tags: article.tags || [],
+          fontSize: article.fontSize || 18,
+          lineHeight: article.lineHeight || 2.0,
+          isPublished: article.isPublished || false
+        });
+        if (article.pdfData) {
+          setTempPdf({ name: 'Existing PDF', data: article.pdfData });
+        } else {
+          setTempPdf(null);
+        }
+        if (contentRef.current) {
+          contentRef.current.innerHTML = article.content || '';
+        }
       }
     } else {
+      wasOpenRef.current = false;
       objectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
       objectUrlsRef.current = [];
     }
-  }, [isOpen, article, categories]);
+  }, [isOpen, article.id, categories]);
 
   const timeoutIdsRef = useRef<number[]>([]);
+
+  const formDataRef = useRef(formData);
+  formDataRef.current = formData;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
 
   useEffect(() => {
     const handleKeys = (e: KeyboardEvent) => {
@@ -121,7 +158,11 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 's') {
           e.preventDefault();
-          onSave({ ...formData, content: contentRef.current?.innerHTML || '' });
+          const data = { ...formDataRef.current, content: contentRef.current?.innerHTML || '' };
+          if (!data.title) return;
+          onSaveRef.current(data);
+          setSaveToast('已自动保存');
+          setTimeout(() => setSaveToast(null), 1500);
         }
       }
 
@@ -258,12 +299,10 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     window.addEventListener('keydown', handleKeys);
     return () => {
       window.removeEventListener('keydown', handleKeys);
-      objectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
-      objectUrlsRef.current = [];
       timeoutIdsRef.current.forEach(id => clearTimeout(id));
       timeoutIdsRef.current = [];
     };
-  }, [isOpen, formData, onSave]);
+  }, [isOpen]);
 
   const execCmd = (cmd: string, val?: string) => {
     document.execCommand(cmd, false, val);
@@ -640,6 +679,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
     setIsProcessing(true);
     const timeoutId = window.setTimeout(async () => {
+      if (!contentRef.current) return;
       try {
                 if (type === 'img') {
           const base64 = await fileToDataURL(file);
@@ -678,19 +718,16 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
           );
 
           if (insertAsContent) {
-            setIsProcessing(true);
             try {
               const images = await convertPdfToImages(file);
               console.log(`[Editor] PDF 转换完成，准备分页插入 (${images.length} 页)...`);
 
               for (let i = 0; i < images.length; i++) {
                 const dataUrl = images[i];
-                // 使用 Blob 管理器转换为轻量级 URL
                 const blobUrl = blobManager.getBlobUrl(dataUrl);
                 if (blobUrl) {
-                  blobToDataMap.current.set(blobUrl, dataUrl); // 记录映射
+                  blobToDataMap.current.set(blobUrl, dataUrl);
 
-                  // 手动构造 DOM 以确保稳定性（不使用大字符串）
                   const container = document.createElement('div');
                   container.className = 'media-container pdf-page-container overflow-hidden';
                   container.contentEditable = 'false';
@@ -712,13 +749,10 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
 
               console.log('[Editor] PDF 所有页面已成功流式插入');
 
-              // [关键修复] 在所有 PDF 页面插入后，仅在最末尾追加一个空段落用作光标落脚点
-              // 解决之前每页后都插入 <p><br></p> 导致的打印分页断层问题
               const emptyParagraph = document.createElement('p');
               emptyParagraph.innerHTML = '<br>';
               insertHtml(emptyParagraph);
 
-              // [关键修复] 插入完成后立即同步状态，防止 setIsProcessing(false) 导致的重绘根据旧状态擦除 DOM
               const editorElement = contentRef.current;
               if (editorElement) {
                 setFormData(prev => ({ ...prev, content: editorElement.innerHTML }));
@@ -726,8 +760,6 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
             } catch (err) {
               console.error('[Editor] PDF 转换流程异常:', err);
               alert(`PDF 转换失败: ${err instanceof Error ? err.message : '未知错误'}\n\n请尝试刷新页面重试。`);
-            } finally {
-              setIsProcessing(false);
             }
           } else {
             // 原有的附件逻辑 (仅设置 PDF 数据)
@@ -763,15 +795,15 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
     if (blobToDataMap.current.size > 0) {
       const parser = new DOMParser();
       const doc = parser.parseFromString(finalContent, 'text/html');
-      const imgs = doc.querySelectorAll('img');
+      const mediaElements = doc.querySelectorAll('img, video, audio, source');
       let replacedCount = 0;
 
-      imgs.forEach(img => {
-        const src = img.getAttribute('src');
+      mediaElements.forEach(el => {
+        const src = el.getAttribute('src');
         if (src && src.startsWith('blob:')) {
           const dataUrl = blobToDataMap.current.get(src);
           if (dataUrl) {
-            img.setAttribute('src', dataUrl);
+            el.setAttribute('src', dataUrl);
             replacedCount++;
           }
         }
@@ -795,7 +827,6 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
 
   return (
       <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-[100] flex items-center justify-center p-0 md:p-6 overflow-hidden w-full">
-      <style>{CONSTANTS.UNIFIED_STYLES}</style>
 
       {/* AI 摘要生成 Loading */}
       {showAiLoading && (
@@ -817,6 +848,12 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
         <div className="absolute inset-0 z-[200] bg-white/50 flex flex-col items-center justify-center backdrop-blur-[2px]">
           <div className="w-10 h-10 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin mb-3"></div>
           <div className="text-brand-blue font-bold text-sm">正在上传资源...</div>
+        </div>
+      )}
+
+      {saveToast && (
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[300] bg-emerald-500 text-white px-5 py-2.5 rounded-lg shadow-lg text-sm font-bold animate-in fade-in slide-in-from-top-2 duration-300">
+          {saveToast}
         </div>
       )}
 
@@ -1132,9 +1169,9 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
                           className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-gray-400"
                           placeholder={(formData.tags || []).length === 0 ? "点击输入标签，回车或空格分隔..." : "继续输入..."}
                           onBlur={(e) => {
-                            const val = e.currentTarget.value.trim().replace(/[,，\s]+/g, ' ');
+                            const val = e.currentTarget.value.trim().replace(/[,，]/g, ' ');
                             if (val) {
-                              const newTags = val.split(' ').filter(t => t && !(formData.tags || []).includes(t));
+                              const newTags = val.split(/\s+/).filter(t => t && !(formData.tags || []).includes(t));
                               if (newTags.length > 0) {
                                 setFormData({ ...formData, tags: [...(formData.tags || []), ...newTags] });
                                 e.currentTarget.value = '';
@@ -1150,7 +1187,6 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
                                 e.currentTarget.value = '';
                               }
                             }
-                            // 退格键删除最后一个标签
                             if (e.key === 'Backspace' && e.currentTarget.value === '' && (formData.tags || []).length > 0) {
                               const newTags = (formData.tags || []).slice(0, -1);
                               setFormData({ ...formData, tags: newTags });

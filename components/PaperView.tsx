@@ -17,22 +17,17 @@ interface PaperViewProps {
 
 const useBlobUrl = (dataUrl: string | null | undefined) => {
   const blobManager = useBlobManager();
-
-  // 使用当前状态记录 dataUrl，以便检测变化
-  const [prevDataUrl, setPrevDataUrl] = useState(dataUrl);
-  // 同步初始化/更新状态
+  const prevDataUrlRef = useRef(dataUrl);
   const [blobUrl, setBlobUrl] = useState<string | null>(() => {
     return dataUrl ? blobManager.getBlobUrl(dataUrl) : null;
   });
 
-  // 在渲染期间同步更新，确保切换瞬间 URL 即刻就位，防止 useEffect 带来的滞后闪烁
-  if (dataUrl !== prevDataUrl) {
-    setPrevDataUrl(dataUrl);
+  if (dataUrl !== prevDataUrlRef.current) {
+    prevDataUrlRef.current = dataUrl;
     const newUrl = dataUrl ? blobManager.getBlobUrl(dataUrl) : null;
     setBlobUrl(newUrl);
   }
 
-  // 这里的 useEffect 仅作为防线
   useEffect(() => {
     if (dataUrl) {
       const currentUrl = blobManager.getBlobUrl(dataUrl);
@@ -42,7 +37,7 @@ const useBlobUrl = (dataUrl: string | null | undefined) => {
     } else if (blobUrl !== null) {
       setBlobUrl(null);
     }
-  }, [dataUrl, blobManager, blobUrl]);
+  }, [dataUrl, blobManager]);
 
   return blobUrl;
 };
@@ -181,7 +176,32 @@ const TechGrid: React.FC = () => (
   />
 );
 
-export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode, onUpdate, onImageUpload, onNext, useAlternateDesign, setUseAlternateDesign }) => {
+const DesignToggle: React.FC<{
+  isEditMode: boolean;
+  useAlternateDesign: boolean;
+  setUseAlternateDesign: (value: boolean) => void;
+}> = ({ isEditMode, useAlternateDesign, setUseAlternateDesign }) => {
+  if (!isEditMode) return null;
+  return (
+    <div className="DesignToggle fixed top-4 right-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-md border border-gray-200">
+      <span className="text-xs font-medium text-gray-600">设计模式:</span>
+      <button
+        onClick={() => setUseAlternateDesign(false)}
+        className={`px-2 py-1 text-xs rounded ${!useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+      >
+        原版
+      </button>
+      <button
+        onClick={() => setUseAlternateDesign(true)}
+        className={`px-2 py-1 text-xs rounded ${useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+      >
+        杂志风
+      </button>
+    </div>
+  );
+};
+
+const PaperViewComponent: React.FC<PaperViewProps> = ({ article, logo, isEditMode, onUpdate, onImageUpload, onNext, useAlternateDesign, setUseAlternateDesign }) => {
   const [zoom, setZoom] = useState({ scale: article?.scale || 1, x: article?.posX || 0, y: article?.posY || 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, initX: 0, initY: 0 });
@@ -204,42 +224,46 @@ export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode,
     }
   }, [article?.id]); // 仅当文章ID变化时触发
 
-  // 清理所有事件监听器（确保没有内存泄漏）
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const articleRef = useRef(article);
+  articleRef.current = article;
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       if (isDragging) {
         setIsDragging(false);
-        if (hasMoved.current && article) {
-          onUpdate(article.id, { posX: zoom.x, posY: zoom.y });
+        if (hasMoved.current && articleRef.current) {
+          onUpdateRef.current(articleRef.current.id, { posX: zoomRef.current.x, posY: zoomRef.current.y });
         }
       }
     };
 
-    // 添加全局mouseup事件监听器，确保即使在元素外部释放鼠标也能清理
     document.addEventListener('mouseup', handleGlobalMouseUp);
     document.addEventListener('mouseleave', handleGlobalMouseUp);
 
     return () => {
-      // 组件卸载时清理全局事件监听器
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.removeEventListener('mouseleave', handleGlobalMouseUp);
     };
-  }, [isDragging, hasMoved.current, article, zoom.x, zoom.y, onUpdate]);
+  }, [isDragging]);
 
   const coverRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (!isEditMode && !article?.category.includes('封')) return;
+      if (!isEditMode && !articleRef.current?.category.includes('封')) return;
       e.preventDefault();
       e.stopPropagation();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      let newScale = zoom.scale * delta;
+      let newScale = zoomRef.current.scale * delta;
       newScale = Math.min(Math.max(0.5, newScale), 5);
-      const newZoom = { ...zoom, scale: newScale };
+      const newZoom = { ...zoomRef.current, scale: newScale };
       setZoom(newZoom);
-      if (article) onUpdate(article.id, { scale: newScale });
+      if (articleRef.current) onUpdateRef.current(articleRef.current.id, { scale: newScale });
     };
 
     const coverEl = coverRef.current;
@@ -252,7 +276,7 @@ export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode,
       if (coverEl) coverEl.removeEventListener('wheel', handleWheel);
       if (backEl) backEl.removeEventListener('wheel', handleWheel);
     };
-  }, [isEditMode, article, zoom, onUpdate]);
+  }, [isEditMode]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!article?.category.includes('封')) return;
@@ -276,40 +300,19 @@ export const PaperView: React.FC<PaperViewProps> = ({ article, logo, isEditMode,
     if (isDragging) {
       setIsDragging(false);
       if (hasMoved.current && article) {
-        onUpdate(article.id, { posX: zoom.x, posY: zoom.y });
+        onUpdate(article.id, { posX: zoomRef.current.x, posY: zoomRef.current.y });
       }
     }
   };
 
   if (!article) return null;
 
-  // 备用设计切换按钮（仅在编辑模式显示）
-const DesignToggle = () => (
-  isEditMode ? (
-    <div className="DesignToggle fixed top-4 right-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-md border border-gray-200">
-      <span className="text-xs font-medium text-gray-600">设计模式:</span>
-      <button
-        onClick={() => setUseAlternateDesign(false)}
-        className={`px-2 py-1 text-xs rounded ${!useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-      >
-        原版
-      </button>
-      <button
-        onClick={() => setUseAlternateDesign(true)}
-        className={`px-2 py-1 text-xs rounded ${useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-      >
-        杂志风
-      </button>
-    </div>
-  ) : null
-);
-
   if (article.category === '封面') {
     if (useAlternateDesign) {
       // 备用封面设计 - 专业杂志风格
       return (
         <>
-          <DesignToggle />
+          <DesignToggle isEditMode={isEditMode} useAlternateDesign={useAlternateDesign} setUseAlternateDesign={setUseAlternateDesign} />
           <div className="w-full min-h-[840px] flex flex-col p-[40px_60px] bg-white text-left relative overflow-hidden group magazine-cover">
             {/* 背景 - 更简洁的渐变 */}
             <div className="absolute inset-0 z-0 bg-gradient-to-br from-blue-50 via-white to-gray-50"></div>
@@ -352,7 +355,7 @@ const DesignToggle = () => (
                   onBlur={(e) => onUpdate(article.id, { dateText: e.currentTarget.innerText })}
                   suppressContentEditableWarning
                 >
-                  {article.dateText || "JAN 2025"}
+                  {article.dateText || `JAN ${new Date().getFullYear()}`}
                 </div>
               </div>
             </div>
@@ -436,7 +439,7 @@ const DesignToggle = () => (
       // 原版封面设计
       return (
         <>
-          <DesignToggle />
+          <DesignToggle isEditMode={isEditMode} useAlternateDesign={useAlternateDesign} setUseAlternateDesign={setUseAlternateDesign} />
           <div className="w-full min-h-[840px] flex flex-col p-0 bg-transparent text-left border-t-8 border-brand-blue relative overflow-hidden group">
             <div className="absolute inset-0 z-0 bg-transparent">
               <TechGrid />
@@ -471,7 +474,7 @@ const DesignToggle = () => (
                   onBlur={(e) => onUpdate(article.id, { dateText: e.currentTarget.innerText })}
                   suppressContentEditableWarning
                 >
-                  {article.dateText || "JAN 2025"}
+                  {article.dateText || `JAN ${new Date().getFullYear()}`}
                 </div>
               </div>
             </div>
@@ -536,7 +539,7 @@ const DesignToggle = () => (
       // 备用封底设计 - 专业杂志风格
       return (
         <>
-          <DesignToggle />
+          <DesignToggle isEditMode={isEditMode} useAlternateDesign={useAlternateDesign} setUseAlternateDesign={setUseAlternateDesign} />
           <div className="w-full min-h-[840px] flex flex-col p-[40px_60px] bg-white text-left relative overflow-hidden group magazine-back-cover">
             {/* 背景 - 简洁渐变 */}
             <div className="absolute inset-0 z-0 bg-gradient-to-tl from-blue-50/80 via-white to-gray-50/80"></div>
@@ -634,7 +637,7 @@ const DesignToggle = () => (
                   上海外高桥造船有限公司
                 </div>
                 <div className="mt-[10px] text-[9px] text-gray-400">
-                  © 2025 Ship Construction Method Information
+                  © {new Date().getFullYear()} Ship Construction Method Information
                 </div>
               </div>
 
@@ -672,7 +675,7 @@ const DesignToggle = () => (
                 )}
                 <div className="text-[9px] text-gray-400 text-right">
                   Official Publication<br />
-                  Volume {article.issueText || "01"} · {article.dateText || "JAN 2025"}
+                  Volume {article.issueText || "01"} · {article.dateText || `JAN ${new Date().getFullYear()}`}
                 </div>
               </div>
             </div>
@@ -688,7 +691,7 @@ const DesignToggle = () => (
       // 原版封底设计
       return (
         <>
-          <DesignToggle />
+          <DesignToggle isEditMode={isEditMode} useAlternateDesign={useAlternateDesign} setUseAlternateDesign={setUseAlternateDesign} />
           <div className="w-full min-h-[840px] flex flex-col p-0 bg-transparent text-left border-t-8 border-brand-blue relative overflow-hidden group">
             <div className="absolute inset-0 z-0 overflow-hidden bg-transparent">
               <TechGrid />
@@ -768,7 +771,6 @@ const DesignToggle = () => (
 
   return (
     <div className="flex flex-col w-full text-left bg-white relative">
-      <style>{CONSTANTS.UNIFIED_STYLES}</style>
       <div className="shrink-0 mb-[30px] text-left border-b border-gray-200 pb-[20px]">
         <h1 className="font-serif text-[32px] text-[#111] m-[0_0_15px_0] leading-[1.3] font-bold tracking-[1px]">{article.title}</h1>
         <div className="text-gray-400 text-[13px] flex flex-wrap gap-y-3 gap-x-5 font-medium font-sans uppercase tracking-[1px] items-center">
@@ -891,3 +893,5 @@ const DesignToggle = () => (
     </div>
   );
 };
+
+export const PaperView = React.memo(PaperViewComponent);

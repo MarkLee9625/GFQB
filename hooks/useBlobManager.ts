@@ -7,16 +7,25 @@ import { base64ToBlob } from '../src/utils/fileHelpers';
  */
 const globalBlobCache = new Map<string, { url: string; timestamp: number }>();
 const globalCleanupQueue: Array<() => void> = [];
+const MAX_CACHE_SIZE = 100;
 
-// 清理过期的Blob URL（超过5分钟）
 const cleanupExpiredUrls = (): void => {
   const now = Date.now();
-  const expiredTime = 5 * 60 * 1000; // 5分钟
+  const expiredTime = 5 * 60 * 1000;
 
   for (const [key, value] of globalBlobCache.entries()) {
     if (now - value.timestamp > expiredTime) {
       URL.revokeObjectURL(value.url);
       globalBlobCache.delete(key);
+    }
+  }
+
+  if (globalBlobCache.size > MAX_CACHE_SIZE) {
+    const entries = [...globalBlobCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const evictCount = globalBlobCache.size - MAX_CACHE_SIZE;
+    for (let i = 0; i < evictCount; i++) {
+      URL.revokeObjectURL(entries[i][1].url);
+      globalBlobCache.delete(entries[i][0]);
     }
   }
 };

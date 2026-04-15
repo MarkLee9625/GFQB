@@ -8,7 +8,7 @@ import { extractAbstractFromPdf } from '../src/services/pdf/index';
 const REASONER_MODEL = 'deepseek-reasoner';
 const CHAT_MODEL = 'deepseek-chat';
 const API_URL = `/api/deepseek/generate`;
-const PROXY_SECRET = 'my-super-secret-key';
+const PROXY_SECRET = import.meta.env.VITE_PROXY_SECRET || '';
 
 const API_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 3;

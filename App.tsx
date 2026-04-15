@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Article, CONSTANTS } from './types';
 import { db } from './services/db';
 import { compressImage, fileToDataURL, parseMarkdownToHtml } from './src/utils/fileHelpers';
@@ -8,6 +8,12 @@ import { Editor } from './components/Editor';
 import { ErrorBoundary, DBErrorBoundary } from './components/ErrorBoundary';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
+
+function decodeB64Utf8(b64: string): string {
+  const binary = atob(b64);
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
 import KeyboardShortcutsHelpModal from './components/KeyboardShortcutsHelpModal';
 import NavigationCapsule from './components/NavigationCapsule';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -74,6 +80,7 @@ const AppContent: React.FC = () => {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const uploadTypeRef = useRef<'cover' | 'back'>('cover');
+  const contentScrollRef = useRef<HTMLDivElement>(null);
 
   // Keyboard shortcuts state
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -89,7 +96,7 @@ const AppContent: React.FC = () => {
           try {
             // @ts-ignore
             const b64Data = window.__SWS_DATA_ARTICLES_B64__;
-            const decoded = decodeURIComponent(escape(atob(b64Data)));
+            const decoded = decodeB64Utf8(b64Data);
             const jsonData = JSON.parse(decoded);
 
             if (Array.isArray(jsonData)) {
@@ -106,7 +113,7 @@ const AppContent: React.FC = () => {
               if (window.__SWS_DATA_CONFIG_B64__) {
                 // @ts-ignore
                 const b64Config = window.__SWS_DATA_CONFIG_B64__;
-                const cfg = JSON.parse(decodeURIComponent(escape(atob(b64Config))));
+                const cfg = JSON.parse(decodeB64Utf8(b64Config));
                 if (cfg.logo) setLogo(cfg.logo);
                 if (cfg.sidebarMeta) setSidebarMeta(cfg.sidebarMeta);
                 if (cfg.alternateDesign) setUseAlternateDesign(cfg.alternateDesign);
@@ -121,8 +128,7 @@ const AppContent: React.FC = () => {
           }
         }
 
-        // 1. Normal DB Init
-        await db.init();
+        if (db.getConnectionState() !== 'connected') await db.init();
         const storedData = await db.load(CONSTANTS.KEY);
         if (storedData) {
           setLogo(storedData.logo || '');
@@ -211,7 +217,7 @@ const AppContent: React.FC = () => {
               type: 'GRAPH_DATA_RESPONSE',
               uid: uid,
               dataB64: dataEl.textContent
-            }, '*');
+            }, window.location.origin);
           } else {
             console.warn('[架构联通] 未能定位到 iframe 节点:', uid);
           }
@@ -226,9 +232,13 @@ const AppContent: React.FC = () => {
   }, []);
 
   // Keyboard shortcuts
+  const handleExportRef = useRef<((isReader: boolean) => void) | null>(null);
+  const toggleReadingModeRef = useRef<(() => void) | null>(null);
+  const handleDeleteRef = useRef<(() => void) | null>(null);
+  const handleNavigateRef = useRef<((direction: 'prev' | 'next') => void) | null>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when user is typing in inputs/textarea
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
@@ -237,75 +247,57 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      // Ctrl/Cmd + S: Save (export project)
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        handleExport(false);
+        handleExportRef.current(false);
         return;
       }
 
-      // Ctrl/Cmd + E: Export reader version
       if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
         e.preventDefault();
-        handleExport(true);
+        handleExportRef.current(true);
         return;
       }
 
-      // Ctrl/Cmd + N: New article
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault();
-        setIsEditorOpen(true);
-        setCurrentId(null);
+        if (!isEditorOpen) {
+          setIsEditorOpen(true);
+          setCurrentId(null);
+        }
         return;
       }
 
-      // Ctrl/Cmd + F: Toggle fullscreen
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
-        toggleReadingMode();
+        toggleReadingModeRef.current();
         return;
       }
 
-      // Ctrl/Cmd + H: Toggle sidebar
       if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
         e.preventDefault();
         setIsSidebarHidden(prev => !prev);
         return;
       }
 
-      // Ctrl/Cmd + S: Save
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        if (isEditorOpen) {
-          // 编辑器内部已经处理了 Ctrl+S，这里主要是全局反馈
-          console.log("Saving via Editor...");
-        } else {
-          alert("进度已自动同步至本地存储");
-        }
-        return;
-      }
-
-      // Ctrl/Cmd + /: Show shortcuts help
       if ((e.ctrlKey || e.metaKey) && e.key === '/') {
         e.preventDefault();
         setShowShortcutsHelp(true);
         return;
       }
 
-      // Arrow keys for navigation
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        handleNavigate('prev');
+        handleNavigateRef.current('prev');
         return;
       }
 
       if (e.key === 'ArrowRight') {
         e.preventDefault();
-        handleNavigate('next');
+        handleNavigateRef.current('next');
         return;
       }
 
-      // Escape: Close modals or exit fullscreen
       if (e.key === 'Escape') {
         if (isEditorOpen) {
           setIsEditorOpen(false);
@@ -319,10 +311,9 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      // Delete key for deleting current article
       if (e.key === 'Delete' && currentId) {
         e.preventDefault();
-        handleDelete();
+        handleDeleteRef.current();
         return;
       }
     };
@@ -334,13 +325,11 @@ const AppContent: React.FC = () => {
   }, [currentId, isEditorOpen, isCatManagerOpen, showShortcutsHelp]);
 
   // Persistence Helper
-  const saveToDB = async (data: Article[], l: string, meta: string) => {
-    await db.save(CONSTANTS.KEY, { data, logo: l, sidebarMetaText: meta });
-  };
-
   useEffect(() => {
-    if (!loading) saveToDB(articles, logo, sidebarMeta);
-  }, [articles, logo, sidebarMeta, loading]);
+    if (!loading) {
+      db.save(CONSTANTS.KEY, { logo, sidebarMetaText: sidebarMeta }).catch(console.error);
+    }
+  }, [logo, sidebarMeta, loading]);
 
   useEffect(() => {
     localStorage.setItem('SWS_CATS_REACT', JSON.stringify(categories));
@@ -351,7 +340,12 @@ const AppContent: React.FC = () => {
     return articles.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [articles, searchQuery]);
 
-  const currentArticle = articles.find(a => a.id === currentId);
+  const currentArticle = useMemo(() => articles.find(a => a.id === currentId), [articles, currentId]);
+
+  const editorArticle = useMemo(() => {
+    if (!currentId) return {};
+    return articles.find(a => a.id === currentId) || {};
+  }, [articles, currentId]);
 
   // 切换文章发布状态
   const handleTogglePublish = useCallback(() => {
@@ -364,16 +358,16 @@ const AppContent: React.FC = () => {
   const handleSaveArticle = async (updated: Partial<Article>) => {
     if (updated.id) {
       updateArticle(updated.id, updated);
+      setIsEditorOpen(false);
     } else {
       const newArt = await createArticle(updated);
-      if (newArt) setIsEditorOpen(false); // 成功后关闭
+      if (newArt) setIsEditorOpen(false);
     }
-    setIsEditorOpen(false); // 确保关闭
   };
 
   const handleReset = () => {
     if (!window.confirm("⚠️ 警告：这将清空所有数据并开始新一期！确定吗？")) return;
-    const now = Date.now();
+    const now = Date.now() + Math.floor(Math.random() * 1000);
     const fresh: Article[] = [
       { id: now, title: "封面", category: "封面", content: "", issueText: "NO.01", dateText: "JAN " + new Date().getFullYear() },
       { id: now + 1, title: "封底", category: "封底", content: "" }
@@ -403,6 +397,15 @@ const AppContent: React.FC = () => {
 
   // 注意：normalizeArticles 函数已移除，因为 useJournal 的 enforceOrder 已经处理排序
 
+  const handleImageUploadTrigger = useCallback((type: 'cover' | 'back') => {
+    uploadTypeRef.current = type;
+    coverInputRef.current?.click();
+  }, []);
+
+  const handleNextArticle = useCallback(() => {
+    handleNavigateRef.current('next');
+  }, []);
+
   const handleSelectArticle = (id: any) => {
     const numId = Number(id);
     setCurrentId(numId);
@@ -415,6 +418,10 @@ const AppContent: React.FC = () => {
     } else {
       setIsImmersive(false);
       setIsSidebarHidden(false);
+    }
+
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollTop = 0;
     }
   };
 
@@ -596,12 +603,12 @@ const AppContent: React.FC = () => {
         const b64ArticlesMatch = text.match(/window\.__SWS_DATA_ARTICLES_B64__\s*=\s*"(.*?)";/);
         if (b64ArticlesMatch && b64ArticlesMatch[1]) {
           try {
-            const decoded = decodeURIComponent(escape(atob(b64ArticlesMatch[1])));
+            const decoded = decodeB64Utf8(b64ArticlesMatch[1]);
             setArticlesAction(JSON.parse(decoded));
 
             const configMatch = text.match(/window\.__SWS_DATA_CONFIG_B64__\s*=\s*"(.*?)";/);
             if (configMatch && configMatch[1]) {
-              const cfg = JSON.parse(decodeURIComponent(escape(atob(configMatch[1]))));
+              const cfg = JSON.parse(decodeB64Utf8(configMatch[1]));
               if (cfg.logo) setLogo(cfg.logo);
               if (cfg.sidebarMeta) setSidebarMeta(cfg.sidebarMeta);
             }
@@ -717,6 +724,11 @@ const AppContent: React.FC = () => {
     if (currentId) deleteArticle(currentId);
   };
 
+  handleExportRef.current = handleExport;
+  toggleReadingModeRef.current = toggleReadingMode;
+  handleDeleteRef.current = handleDelete;
+  handleNavigateRef.current = handleNavigate;
+
   // 重命名分类：更新所有文章中的分类名称并更新本地分类列表
   const handleRenameCategory = (oldName: string, newName: string) => {
     // 更新文章中的分类
@@ -736,6 +748,7 @@ const AppContent: React.FC = () => {
       isSidebarHidden={isSidebarHidden}
       isImmersive={isImmersive}
       onFloatMenuClick={() => setIsSidebarHidden(false)}
+      contentScrollRef={contentScrollRef}
       sidebar={
         <Sidebar
           articles={articles}
@@ -786,11 +799,8 @@ const AppContent: React.FC = () => {
                 logo={logo}
                 isEditMode={isEditMode}
                 onUpdate={updateArticle}
-                onImageUpload={(type) => {
-                  uploadTypeRef.current = type;
-                  coverInputRef.current?.click();
-                }}
-                onNext={() => handleNavigate('next')}
+                onImageUpload={handleImageUploadTrigger}
+                onNext={handleNextArticle}
                 useAlternateDesign={useAlternateDesign}
                 setUseAlternateDesign={setUseAlternateDesign}
               />
@@ -827,7 +837,7 @@ const AppContent: React.FC = () => {
           />
           <Editor
             isOpen={isEditorOpen}
-            article={currentId ? (articles.find(a => a.id === currentId) || {}) : {}}
+            article={editorArticle}
             categories={categories}
             onClose={() => setIsEditorOpen(false)}
             onSave={handleSaveArticle}

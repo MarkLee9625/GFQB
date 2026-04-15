@@ -35,20 +35,21 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
  * 检查是否为有效的 Base64 PDF 数据
  */
 function isValidPdfData(data: string): boolean {
-  if (!data) return false;
-  // 简单检查：Base64 PDF 通常以特定模式开头
-  const base64Pattern = /^[A-Za-z0-9+/]+={0,2}$/;
-  if (!base64Pattern.test(data)) return false;
-  // 更精确的检查：尝试解析为二进制
-  try {
-    const buffer = base64ToArrayBuffer(data);
-    // PDF 文件的前几个字节应该是 "%PDF"
-    const header = new Uint8Array(buffer.slice(0, 4));
-    const headerStr = String.fromCharCode(...header);
-    return headerStr === '%PDF';
-  } catch {
-    return false;
-  }
+    if (!data) return false;
+    let rawBase64 = data;
+    if (data.includes('base64,')) {
+        rawBase64 = data.split('base64,')[1];
+    }
+    const base64Pattern = /^[A-Za-z0-9+/]+={0,2}$/;
+    if (!base64Pattern.test(rawBase64)) return false;
+    try {
+        const buffer = base64ToArrayBuffer(rawBase64);
+        const header = new Uint8Array(buffer.slice(0, 4));
+        const headerStr = String.fromCharCode(...header);
+        return headerStr === '%PDF';
+    } catch {
+        return false;
+    }
 }
 
 /**

@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 
-/**
- * 检测元素是否进入视口的自定义Hook
- * 用于实现懒加载等优化
- */
 export function useInView(options?: IntersectionObserverInit) {
   const ref = useRef<HTMLElement>(null);
   const [inView, setInView] = useState(false);
+
+  const stableOptions = useMemo(() => ({
+    root: options?.root,
+    rootMargin: options?.rootMargin,
+    threshold: options?.threshold
+  }), [options?.root, options?.rootMargin, options?.threshold]);
 
   useEffect(() => {
     const element = ref.current;
@@ -14,14 +16,14 @@ export function useInView(options?: IntersectionObserverInit) {
 
     const observer = new IntersectionObserver(([entry]) => {
       setInView(entry.isIntersecting);
-    }, options);
+    }, stableOptions);
 
     observer.observe(element);
 
     return () => {
       observer.unobserve(element);
     };
-  }, [options]);
+  }, [stableOptions]);
 
   return { ref, inView };
 }

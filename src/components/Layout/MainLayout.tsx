@@ -3,19 +3,17 @@ import { Icon } from '../../../components/Icons';
 import LoadingOverlay from '../../../components/LoadingOverlay';
 
 interface MainLayoutProps {
-    // 状态标志
     isLoading: boolean;
     loadingMessage?: string;
     isSidebarHidden: boolean;
     isImmersive: boolean;
-    // 动作回调
     onFloatMenuClick: () => void;
-    // 插槽 (Slots)
+    contentScrollRef?: React.RefObject<HTMLDivElement>;
     sidebar: React.ReactNode;
     toolbar: React.ReactNode;
     content: React.ReactNode;
-    modals: React.ReactNode;       // 包含所有 Modal 组件
-    hiddenInputs: React.ReactNode; // 包含所有 input[type="file"]
+    modals: React.ReactNode;
+    hiddenInputs: React.ReactNode;
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({
@@ -24,6 +22,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     isSidebarHidden,
     isImmersive,
     onFloatMenuClick,
+    contentScrollRef,
     sidebar,
     toolbar,
     content,
@@ -56,7 +55,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                 {toolbar}
 
             {/* Content Area Slot */}
-            <div className="flex-1 flex flex-col min-h-0 w-full overflow-y-auto relative">
+            <div ref={contentScrollRef} className="flex-1 flex flex-col min-h-0 w-full overflow-y-auto relative">
                 <div className="flex-1 flex flex-col min-h-0 min-w-0 w-full h-full p-4 md:p-6 lg:p-8 scroll-smooth overscroll-none scrollbar-thin box-border">
                     {content}
                 </div>

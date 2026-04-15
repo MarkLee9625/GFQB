@@ -13,7 +13,6 @@ interface AiCurationModalProps {
 export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCurationModalProps) {
   const [articles, setArticles] = useState<UniversalArticleMeta[]>([]);
   const [activeSource, setActiveSource] = useState<SourceType>('wechat');
-  const [manualUrl, setManualUrl] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   // 【新增】记录 AI 阅卷进度文本
   const [progressText, setProgressText] = useState('');
@@ -279,18 +278,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
             </div>
           </div>
 
-          {/* 👑 总编特权：手动追加 */}
           <div className="flex items-center gap-2">
-            <input 
-              type="text" 
-              placeholder="🔗 粘贴外部文章链接..." 
-              className="w-64 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={manualUrl}
-              onChange={(e) => setManualUrl(e.target.value)}
-            />
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm transition-colors">
-              ➕ 强制采纳
-            </button>
             <button onClick={onClose} className="ml-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-colors">
               ✕
             </button>

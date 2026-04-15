@@ -124,17 +124,19 @@ export function useJournal() {
     });
   }, [debouncedSaveArticle, enforceOrder]);
 
+  const articlesRef = useRef(articles);
+  articlesRef.current = articles;
+
   const createArticle = useCallback(async (articleData: Partial<Article>) => {
-    // 修复：计算最大 order 以防止新文章视觉置顶
-    const maxOrder = articles.length > 0
-      ? Math.max(...articles.map(a => Number(a.order) || 0))
+    const maxOrder = articlesRef.current.length > 0
+      ? Math.max(...articlesRef.current.map(a => Number(a.order) || 0))
       : 0;
 
     // 移除 articleData 中可能存在的无效 id，确保不覆盖 Date.now()
     const { id: _, ...restData } = articleData;
 
     const newArt: Article = {
-      id: Date.now(), // 生成唯一毫秒 ID
+      id: Date.now() + Math.floor(Math.random() * 1000),
       title: restData.title || '无标题',
       category: restData.category || '工艺工法',
       content: restData.content || '',
@@ -150,7 +152,7 @@ export function useJournal() {
     } catch (e) {
       console.error('Create failed', e);
     }
-  }, [articles, enforceOrder]);
+  }, [enforceOrder]);
 
   const deleteArticle = useCallback(async (id: number) => {
     // 查找时使用 String 转换，确保能找到 NaN ID 的文章
