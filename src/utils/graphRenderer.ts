@@ -1,8 +1,14 @@
 import { KnowledgeGraphData } from '../../services/aiService';
 
 export function generateGraphHtml(data: KnowledgeGraphData): string {
-  // 【架构级安检门：清洗大模型幻觉产生的“幽灵连线”】
-  // 确保所有连线的 source 和 target 都真实存在于 nodes 数组中
+  data.nodes.forEach(n => {
+    n.id = String(n.id).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  });
+  data.links.forEach(l => {
+    l.source = String(l.source).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    l.target = String(l.target).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  });
+
   const validNodeIds = new Set(data.nodes.map(n => n.id));
   const originalLinkCount = data.links.length;
   
@@ -24,10 +30,15 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
   // 计算全局最大最小权重用于字体大小计算
   let minWeight = Infinity;
   let maxWeight = -Infinity;
-  data.nodes.forEach(node => {
-    if (node.weight < minWeight) minWeight = node.weight;
-    if (node.weight > maxWeight) maxWeight = node.weight;
-  });
+  if (data.nodes.length === 0) {
+    minWeight = 0;
+    maxWeight = 1;
+  } else {
+    data.nodes.forEach(node => {
+      if (node.weight < minWeight) minWeight = node.weight;
+      if (node.weight > maxWeight) maxWeight = node.weight;
+    });
+  }
 
   const svgNodes = data.nodes.map((n, i) => {
     const angle = (i / data.nodes.length) * 2 * Math.PI;
@@ -38,12 +49,14 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
     return { ...n, x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle), fontSize };
   });
 
+  const svgNodeMap = new Map(svgNodes.map(n => [n.id, n]));
+
   const linksHtml = data.links.map(link => {
-    const source = svgNodes.find(n => n.id === link.source);
-    const target = svgNodes.find(n => n.id === link.target);
+    const source = svgNodeMap.get(link.source);
+    const target = svgNodeMap.get(link.target);
     if (!source || !target) return '';
     return `
-      <line x1="${source.x}" y1="${source.y}" x2="${target.x}" y2="${target.y}" stroke="#cbd5e1" stroke-width="${Math.min(link.strength, 3)}" opacity="0.3" />
+      <line x1="${source.x}" y1="${source.y}" x2="${target.x}" y2="${target.y}" stroke="#cbd5e1" stroke-width="${Math.min(link.strength, 3)}" opacity="0.3" marker-end="url(#arrowhead)" />
     `;
   }).join('');
 
@@ -67,6 +80,11 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
 
   const staticSvgHtml = `
     <svg viewBox="0 0 800 800" style="width: 100%; max-width: 800px; height: auto; margin: 0 auto; display: block;">
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+        </marker>
+      </defs>
       ${linksHtml}
       ${nodesHtml}
       <circle cx="${cx}" cy="${cy}" r="45" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
@@ -87,6 +105,27 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         }
         .tooltip .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 6px; }
         
+        .legend-panel {
+          position: absolute; top: 20px; right: 20px; z-index: 10;
+          background: rgba(255,255,255,0.9); backdrop-filter: blur(4px);
+          padding: 8px 14px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+          border: 1px solid #e2e8f0; font-size: 12px; color: #475569;
+          display: flex; gap: 12px; align-items: center;
+        }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .search-box {
+          position: absolute; top: 60px; right: 20px; z-index: 10;
+          background: rgba(255,255,255,0.95); backdrop-filter: blur(4px);
+          padding: 6px 10px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+          border: 1px solid #e2e8f0;
+        }
+        .search-box input {
+          border: none; outline: none; font-size: 12px; width: 160px;
+          background: transparent; color: #334155;
+        }
+        .search-box input::placeholder { color: #94a3b8; }
+
         /* 呼吸动画 */
         @keyframes pulse {
           0% { opacity: 0.7; }
@@ -109,10 +148,14 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         .drawer-header { margin: 0 0 20px 0; border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; }
         .drawer-title { font-size: 20px; font-weight: 900; color: #0f172a; margin: 10px 0 5px 0; }
         .drawer-desc { font-size: 13px; color: #475569; line-height: 1.6; }
+        .drawer-desc.line-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; }
         .drawer-section-title { font-size: 12px; font-weight: bold; color: #94a3b8; text-transform: uppercase; margin: 15px 0 10px 0; letter-spacing: 1px; }
         .relation-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8fafc; border-radius: 6px; margin-bottom: 8px; font-size: 12px; border: 1px solid #e2e8f0; cursor: pointer; transition: background 0.2s;}
         .relation-item:hover { background: #f1f5f9; }
         .rel-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #e0e7ff; color: #4f46e5; font-weight: bold; }
+        .rel-strength { display: inline-flex; gap: 2px; margin-left: 6px; align-items: center; }
+        .rel-dot { width: 6px; height: 6px; border-radius: 50%; background: #64748b; }
+        .rel-dot.active { background: #3b82f6; }
         .action-btn { margin-top: auto; width: 100%; padding: 12px; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; gap: 8px; align-items: center; transition: background 0.2s;}
         .action-btn:hover { background: #1e293b; }
 
@@ -133,6 +176,16 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
   `;
   const loaderSkeletonHtml = `
       <canvas id="graphCanvas"></canvas>
+      <div class="legend-panel">
+        <div class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>技术</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#10b981"></span>工艺</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>材料</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#8b5cf6"></span>设备</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#64748b"></span>理念</div>
+      </div>
+      <div class="search-box">
+        <input id="searchInput" type="text" placeholder="🔍 搜索节点..." />
+      </div>
       <div style="position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); padding: 8px 14px; border-radius: 8px; font-size: 12px; color: #334155; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; pointer-events: none; z-index: 5; font-weight: 500;">
         💡 <strong>交互提示：</strong>支持滚轮缩放与拖拽；<strong>双击</strong>带虚线圈的节点可下钻/收缩工艺细节。
       </div>
@@ -155,6 +208,7 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
       </div>
       <div class="zoom-controls">
         <button id="toggleExpand" class="zoom-btn zoom-text" title="展开/收起全部" style="width: auto; padding: 0 12px; margin-right: 10px;">展开全部</button>
+        <button id="toggleLinks" class="zoom-btn zoom-text" title="切换连线密度" style="width: auto; padding: 0 12px; margin-right: 5px;">核心链路</button>
         <button id="zoomOut" class="zoom-btn" title="缩小">-</button>
         <button id="zoomReset" class="zoom-btn zoom-text" title="重置视图">100%</button>
         <button id="zoomIn" class="zoom-btn" title="放大">+</button>
@@ -185,51 +239,123 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
 
         // 【架构升级：渐进式下钻状态管理】
         let isAllExpanded = false;
+        let nodeMap = new Map();
+        let adjacencyMap = new Map();
+        let visibleNodesCache = [];
+        let visibleLinksCache = [];
+        let sortedNodesCache = [];
+        let visualLinksCache = [];
+        let visibilityDirty = true;
+        let isSleeping = false;
+
+        function markDirty() { visibilityDirty = true; isSleeping = false; }
+
         function updateLinksVisibility() {
           data.links.forEach(link => {
-            let source = data.nodes.find(n => n.id === link.source);
-            let target = data.nodes.find(n => n.id === link.target);
-            // 只有当线的两端节点都可见时，线才可见
+            let source = nodeMap.get(link.source);
+            let target = nodeMap.get(link.target);
             link.visible = source && target && source.visible && target.visible;
           });
+          markDirty();
+        }
+
+        function rebuildVisibilityCache() {
+          if (!visibilityDirty) return;
+          visibleNodesCache.length = 0;
+          visibleLinksCache.length = 0;
+          for (let i = 0; i < data.nodes.length; i++) {
+            if (data.nodes[i].visible) visibleNodesCache.push(data.nodes[i]);
+          }
+          for (let i = 0; i < data.links.length; i++) {
+            if (data.links[i].visible) visibleLinksCache.push(data.links[i]);
+          }
+          sortedNodesCache = [...visibleNodesCache].sort((a, b) => (a.weight || 0) - (b.weight || 0));
+
+          const vlm = {};
+          visibleLinksCache.forEach(link => {
+            const key = link.source < link.target ? link.source + '||' + link.target : link.target + '||' + link.source;
+            if (!vlm[key]) {
+              vlm[key] = { source: link.source, target: link.target, _sourceNode: link._sourceNode, _targetNode: link._targetNode, strength: link.strength, relationships: new Set([link.relationship]) };
+            } else {
+              vlm[key].relationships.add(link.relationship);
+              if (link.strength > vlm[key].strength) vlm[key].strength = link.strength;
+            }
+          });
+          visualLinksCache = Object.values(vlm);
+          if (visualLinksCache.length > MAX_VISIBLE_LINKS && !showAllLinks) {
+            visualLinksCache.sort((a, b) => b.strength - a.strength);
+            visualLinksCache = visualLinksCache.slice(0, MAX_VISIBLE_LINKS);
+          }
+
+          data.nodes.forEach(node => {
+            const neighbors = adjacencyMap.get(node.id) || [];
+            node._hasHiddenNeighbors = neighbors.some(nid => { const n = nodeMap.get(nid); return n && !n.visible; });
+          });
+
+          visibilityDirty = false;
         }
 
         function initNodes() {
           let minWeight = Infinity; let maxWeight = -Infinity;
           
-          // 按权重从大到小排序，优先展示核心
           data.nodes.sort((a, b) => b.weight - a.weight);
+          const topWeight = data.nodes[0]?.weight || 10;
           
+          nodeMap.clear();
+          adjacencyMap.clear();
+
           data.nodes.forEach((node, index) => {
             if (node.weight < minWeight) minWeight = node.weight;
             if (node.weight > maxWeight) maxWeight = node.weight;
             
-            // 【核心策略：初始只显示 Top 6 权重的核心节点】
-            node.visible = index < 6;
+            node.visible = index < 12;
             
             node.y = height / 2 + (Math.random() - 0.5) * 200; 
             node.vx = 0; node.vy = 0;
-            node.radius = 10 + (node.weight * 1.8); 
+            node.radius = 8 + (node.weight * 2.2); 
             node.color = colors[node.type]?.main || colors.default.main;
             node.typeTag = colors[node.type]?.tag || colors.default.tag;
             
             const fontSizeRange = 15 - 9;
             const weightRatio = maxWeight === minWeight ? 0.5 : (node.weight - minWeight) / (maxWeight - minWeight);
             node.fontSize = 9 + weightRatio * fontSizeRange;
+            node.roundedFontSize = Math.round(node.fontSize);
 
             if (node.type === 'concept' || node.type === 'material') {
-              node.targetX = width * 0.3; 
+              node.targetX = width * 0.25; 
             } else if (node.type === 'process') {
               node.targetX = width * 0.5;
             } else {
-              node.targetX = width * 0.7;
+              node.targetX = width * 0.75;
             }
+
+            const wRatio = topWeight > 1 ? (node.weight - 1) / (topWeight - 1) : 0.5;
+            if (wRatio >= 0.7) {
+              node.targetY = height * 0.5;
+            } else if (wRatio >= 0.4) {
+              node.targetY = height * (index % 2 === 0 ? 0.35 : 0.65);
+            } else {
+              node.targetY = height * (0.2 + (index * 0.03) % 0.6);
+            }
+
             node.x = node.targetX + (Math.random() - 0.5) * 100;
+            node.y = node.targetY + (Math.random() - 0.5) * 50;
+
+            nodeMap.set(node.id, node);
+            adjacencyMap.set(node.id, []);
+          });
+
+          data.links.forEach(link => {
+            link._sourceNode = nodeMap.get(link.source);
+            link._targetNode = nodeMap.get(link.target);
+            if (link._sourceNode && link._targetNode) {
+              adjacencyMap.get(link.source)?.push(link.target);
+              adjacencyMap.get(link.target)?.push(link.source);
+            }
           });
           
           updateLinksVisibility();
           
-          // 渲染时按权重从小到大，确保大节点在最上层
           data.nodes.sort((a, b) => a.weight - b.weight);
         }
 
@@ -242,6 +368,12 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         const GRAVITY = 0.003;      // 轻微的中心向心力
 
         let draggedNode = null, hoveredNode = null, selectedNode = null, mouseX = 0, mouseY = 0;
+        let destroyed = false;
+        let heartbeatIntervalId = null;
+        let resizeObserverRef = null;
+        let searchKeyword = '';
+        const MAX_VISIBLE_LINKS = 40;
+        let showAllLinks = false;
         
         // 【架构升级：摄像机镜头系统 (Viewport)】
         let cameraScale = 1;
@@ -260,29 +392,25 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         }
 
         function simulate() {
-          // 过滤可见节点和可见连线
-          const visibleNodes = data.nodes.filter(n => n.visible);
-          const visibleLinks = data.links.filter(l => l.visible);
+          rebuildVisibilityCache();
           
-          // 1. 斥力模拟
-          for (let i = 0; i < visibleNodes.length; i++) {
-            for (let j = i + 1; j < visibleNodes.length; j++) {
-              let node1 = visibleNodes[i], node2 = visibleNodes[j];
+          for (let i = 0; i < visibleNodesCache.length; i++) {
+            for (let j = i + 1; j < visibleNodesCache.length; j++) {
+              let node1 = visibleNodesCache[i], node2 = visibleNodesCache[j];
               let dx = node2.x - node1.x, dy = node2.y - node1.y;
-              let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+              let distSq = dx * dx + dy * dy;
+              let dist = Math.sqrt(distSq) || 1;
               
-              if (dist < 600) {
-                let force = REPULSION / (dist * dist);
+              if (distSq < 360000) {
+                let force = REPULSION / distSq;
                 let fx = (dx / dist) * force, fy = (dy / dist) * force;
                 node1.vx -= fx; node1.vy -= fy; node2.vx += fx; node2.vy += fy;
               }
 
-              // 【核心修复：柔性防重叠碰撞，彻底消除抽搐】
               let minDistance = node1.radius + node2.radius + 45; 
               if (dist < minDistance && dist > 0) {
                 let overlap = minDistance - dist;
-                // 绝对禁止修改 node.x / node.y！改用施加相反的加速度 (vx/vy) 去温柔地推开
-                let pushForce = overlap * 0.03; // 极其轻柔的排斥系数
+                let pushForce = overlap * 0.03;
                 let nx = (dx / dist) * pushForce;
                 let ny = (dy / dist) * pushForce;
                 
@@ -292,10 +420,9 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
             }
           }
 
-          // 2. 引力/弹簧模拟
-          visibleLinks.forEach(link => {
-            let source = data.nodes.find(n => n.id === link.source);
-            let target = data.nodes.find(n => n.id === link.target);
+          visibleLinksCache.forEach(link => {
+            let source = link._sourceNode;
+            let target = link._targetNode;
             if (!source || !target) return;
             let dx = target.x - source.x, dy = target.y - source.y;
             let dist = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -304,24 +431,19 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
             source.vx += fx; source.vy += fy; target.vx -= fx; target.vy -= fy;
           });
 
-          // 3. 【行业标准流向：紧凑型微重力 (Cohesive Drift)】
-          visibleNodes.forEach(node => {
-            // X轴：轻柔引导至左中右轨道，但不强制，允许弹簧把它们拉偏
+          visibleNodesCache.forEach(node => {
             let dx = node.targetX - node.x;
             node.vx += dx * GRAVITY;
             
-            // Y轴：【核心恢复】强力的向心聚拢力！防止节点上下散得太开，形成紧凑的图谱生态
-            let dy = height / 2 - node.y;
+            let dy = (node.targetY !== undefined ? node.targetY : height / 2) - node.y;
             node.vy += dy * GRAVITY;
           });
 
-          // 4. 更新位置与阻尼
-          visibleNodes.forEach(node => {
+          visibleNodesCache.forEach(node => {
             if (node !== draggedNode) {
               node.vx *= DAMPING; node.vy *= DAMPING; 
               node.x += node.vx * ALPHA; node.y += node.vy * ALPHA;
               
-              // 边界防护 (Bounding Box)
               if (node.x < node.radius) node.x = node.radius;
               if (node.x > width - node.radius) node.x = width - node.radius;
               if (node.y < node.radius) node.y = node.radius;
@@ -333,76 +455,69 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         function draw() {
           ctx.clearRect(0, 0, width, height);
           
-          // 过滤可见节点和可见连线
-          const visibleNodes = data.nodes.filter(n => n.visible);
-          const visibleLinks = data.links.filter(l => l.visible);
-          
-          // 【架构升级：应用摄像机镜头矩阵】
           ctx.save();
           ctx.translate(cameraOffsetX, cameraOffsetY);
           ctx.scale(cameraScale, cameraScale);
-          
-          // --- 画连线 (引入多重边合并防重叠算法) ---
-          
-          // 1. 在视觉渲染前，将相同起点和终点的连线合并为一条物理线
-          const visualLinksMap = {};
-          // 【核心修复 1】必须遍历 visibleLinks，严禁渲染隐藏的连线！
-          visibleLinks.forEach(link => {
-            const key = [link.source, link.target].sort().join('||');
-            if (!visualLinksMap[key]) {
-              visualLinksMap[key] = { 
-                source: link.source, target: link.target, strength: link.strength,
-                relationships: new Set([link.relationship]) 
-              };
-            } else {
-              visualLinksMap[key].relationships.add(link.relationship);
-              if (link.strength > visualLinksMap[key].strength) visualLinksMap[key].strength = link.strength;
-            }
-          });
-          
-          const visualLinks = Object.values(visualLinksMap);
 
-          // 2. 遍历合并后的线条进行绘制
-          visualLinks.forEach(link => {
-            let source = data.nodes.find(n => n.id === link.source);
-            let target = data.nodes.find(n => n.id === link.target);
+          ctx.globalAlpha = 0.035;
+          ctx.fillStyle = '#f59e0b';
+          ctx.fillRect(0, 0, width * 0.38, height);
+          ctx.fillStyle = '#10b981';
+          ctx.fillRect(width * 0.38, 0, width * 0.24, height);
+          ctx.fillStyle = '#3b82f6';
+          ctx.fillRect(width * 0.62, 0, width * 0.38, height);
+          ctx.globalAlpha = 1;
+
+          // 连线绘制（独立 alpha 状态）
+          ctx.save();
+          visualLinksCache.forEach(link => {
+            let source = link._sourceNode || nodeMap.get(link.source);
+            let target = link._targetNode || nodeMap.get(link.target);
             if (!source || !target) return;
             
             let isHighlight = hoveredNode === source || hoveredNode === target || selectedNode === source || selectedNode === target;
             let isFaded = (hoveredNode || selectedNode) && !isHighlight;
 
-            // 【视觉核武：动态寻航箭头 (Directed Arrow)】
-            // 1. 计算两点之间的角度
+            if (searchKeyword) {
+              const sourceMatch = source.name.toLowerCase().includes(searchKeyword) || (source.description || '').toLowerCase().includes(searchKeyword);
+              const targetMatch = target.name.toLowerCase().includes(searchKeyword) || (target.description || '').toLowerCase().includes(searchKeyword);
+              if (!sourceMatch && !targetMatch) isFaded = true;
+              else isFaded = false;
+            }
+
             let angle = Math.atan2(target.y - source.y, target.x - source.x);
-            
-            // 2. 计算目标节点的动态半径边界（包含 hover 时的扩大圈）
             let isTargetHovered = hoveredNode === target || selectedNode === target;
             let targetRadius = target.radius + (isTargetHovered ? 8 : 4) + 2; 
-            
-            // 3. 计算箭头应该停留在的精确坐标（正好碰到目标球的边缘）
             let arrowX = target.x - Math.cos(angle) * targetRadius;
             let arrowY = target.y - Math.sin(angle) * targetRadius;
-            
-            // 4. 随着摄像机自适应缩放的箭头大小
             let arrowSize = 8 / cameraScale;
 
-            // 5. 绘制主干连线
+            const dist = Math.sqrt((target.x - source.x) ** 2 + (target.y - source.y) ** 2);
+            const relCount = link.relationships.size;
+            const curvature = relCount > 1 ? 20 : 0;
+
             ctx.beginPath();
             ctx.moveTo(source.x, source.y);
-            ctx.lineTo(arrowX, arrowY); // 线只画到箭头处，不穿透球体
+            if (curvature > 0 && dist > 0) {
+              const midX = (source.x + target.x) / 2;
+              const midY = (source.y + target.y) / 2;
+              const perpX = -(target.y - source.y) / dist * curvature;
+              const perpY = (target.x - source.x) / dist * curvature;
+              ctx.quadraticCurveTo(midX + perpX, midY + perpY, arrowX, arrowY);
+            } else {
+              ctx.lineTo(arrowX, arrowY);
+            }
             ctx.strokeStyle = isHighlight ? '#3b82f6' : '#cbd5e1'; 
             ctx.lineWidth = isHighlight ? 2 / cameraScale : 1 / cameraScale;
             ctx.globalAlpha = isFaded ? 0.05 : (isHighlight ? 0.8 : 0.4); 
             ctx.stroke();
 
-            // 6. 绘制实心箭头头部
             ctx.beginPath();
             ctx.moveTo(arrowX, arrowY);
             ctx.lineTo(arrowX - arrowSize * Math.cos(angle - Math.PI / 6), arrowY - arrowSize * Math.sin(angle - Math.PI / 6));
             ctx.lineTo(arrowX - arrowSize * Math.cos(angle + Math.PI / 6), arrowY - arrowSize * Math.sin(angle + Math.PI / 6));
             ctx.closePath();
             ctx.fillStyle = isHighlight ? '#3b82f6' : '#cbd5e1';
-            // 箭头透明度比连线稍微深一点，更显眼
             ctx.globalAlpha = isFaded ? 0.05 : (isHighlight ? 1 : 0.6); 
             ctx.fill();
 
@@ -418,28 +533,39 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
               ctx.fillText(combinedText, textX, textY);
             }
           });
+          ctx.restore(); // 连线 alpha 状态结束
 
-          // --- 画节点 (引入 Z轴排序与纯白护城河) ---
-          // 【核心修复 2】必须使用 visibleNodes 进行排序和渲染，严禁画出僵尸球！
-          const sortedNodes = [...visibleNodes].sort((a, b) => (a.weight || 0) - (b.weight || 0));
-          
-          sortedNodes.forEach(node => {
+          const focusNode = hoveredNode || selectedNode;
+          const focusNeighbors = focusNode ? (adjacencyMap.get(focusNode.id) || []) : [];
+
+          // 节点绘制（独立 alpha 状态）
+          ctx.save();
+          sortedNodesCache.forEach(node => {
             let isHovered = hoveredNode === node || selectedNode === node;
-            let isConnected = (hoveredNode || selectedNode) ? data.links.some(l => (l.source === (hoveredNode || selectedNode).id && l.target === node.id) || (l.target === (hoveredNode || selectedNode).id && l.source === node.id)) : false;
-            let isFaded = (hoveredNode || selectedNode) && !isHovered && !isConnected;
+            let isConnected = focusNode ? focusNeighbors.includes(node.id) : false;
+            let isFaded = focusNode && !isHovered && !isConnected;
 
-            // 【视觉暗示：判断是否有潜伏的子节点】
-            const hasHiddenNeighbors = data.links.some(l => {
-              const targetNode = data.nodes.find(n => n.id === l.target);
-              const sourceNode = data.nodes.find(n => n.id === l.source);
-              return (l.source === node.id && targetNode && !targetNode.visible) ||
-                     (l.target === node.id && sourceNode && !sourceNode.visible);
-            });
+            if (searchKeyword) {
+              const match = node.name.toLowerCase().includes(searchKeyword) || (node.description || '').toLowerCase().includes(searchKeyword);
+              if (!match) isFaded = true;
+              else isFaded = false;
+            }
 
-            if (hasHiddenNeighbors) {
+            if (node._hasHiddenNeighbors) {
               ctx.beginPath(); ctx.arc(node.x, node.y, node.radius + 8, 0, Math.PI * 2);
               ctx.strokeStyle = node.color; ctx.lineWidth = 1.5 / cameraScale;
               ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+            }
+
+            if (node.weight >= 8 && !isFaded) {
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, node.radius + 14, 0, Math.PI * 2);
+              const gradient = ctx.createRadialGradient(node.x, node.y, node.radius, node.x, node.y, node.radius + 14);
+              gradient.addColorStop(0, node.color + '30');
+              gradient.addColorStop(1, node.color + '00');
+              ctx.fillStyle = gradient;
+              ctx.globalAlpha = 1;
+              ctx.fill();
             }
 
             ctx.globalAlpha = isFaded ? 0.1 : 1;
@@ -449,34 +575,71 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
             ctx.fillStyle = node.color; ctx.globalAlpha = isFaded ? 0.2 : 1; ctx.fill();
             ctx.lineWidth = 2 / cameraScale; ctx.strokeStyle = '#ffffff'; ctx.stroke();
 
+            const showLabel = cameraScale > 0.5 || node.weight >= 7 || isHovered;
+            if (showLabel) {
             ctx.globalAlpha = 1;
-            const fontSize = Math.round(node.fontSize);
-            ctx.font = (isHovered ? "bold" : "normal") + " " + fontSize + "px sans-serif";
+            ctx.font = (isHovered ? "bold" : "normal") + " " + node.roundedFontSize + "px sans-serif";
             ctx.fillStyle = isHovered ? "#0f172a" : "#1e293b";
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
             ctx.lineWidth = 5 / cameraScale; ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineJoin = 'round';
-            ctx.strokeText(node.name, node.x, node.y + node.radius + 14);
-            ctx.fillText(node.name, node.x, node.y + node.radius + 14);
+            
+            var maxTextWidth = 140;
+            var displayName = node.name;
+            if (ctx.measureText(displayName).width > maxTextWidth) {
+              while (ctx.measureText(displayName + '\u2026').width > maxTextWidth && displayName.length > 1) {
+                displayName = displayName.slice(0, -1);
+              }
+              displayName += '\u2026';
+            }
+            ctx.strokeText(displayName, node.x, node.y + node.radius + 14);
+            ctx.fillText(displayName, node.x, node.y + node.radius + 14);
+            }
           });
           
-          ctx.restore();
-          ctx.globalAlpha = 1;
+          ctx.restore(); // 节点 alpha 状态结束
+          ctx.restore(); // 相机变换结束
         }
 
-        function loop() { simulate(); draw(); requestAnimationFrame(loop); }
+        function loop() {
+          if (destroyed) return;
+          if (isSleeping) {
+            requestAnimationFrame(loop);
+            return;
+          }
+          simulate();
+          draw();
+          let totalEnergy = 0;
+          for (let i = 0; i < visibleNodesCache.length; i++) {
+            totalEnergy += Math.abs(visibleNodesCache[i].vx) + Math.abs(visibleNodesCache[i].vy);
+          }
+          if (totalEnergy < 0.01 && !draggedNode) {
+            isSleeping = true;
+          }
+          requestAnimationFrame(loop);
+        }
 
         // 【架构升级：镜头平移、缩放与抓取综合交互】
+        let lastTooltipNodeId = null;
+        let lastTooltipX = 0, lastTooltipY = 0;
+
         canvas.addEventListener('mousedown', e => {
           let rect = canvas.getBoundingClientRect(); 
           let screenX = e.clientX - rect.left; 
           let screenY = e.clientY - rect.top;
           let worldPos = screenToWorld(screenX, screenY);
           
-          // 【核心修复 3】禁止抓取不可见的幽灵节点
-          draggedNode = data.nodes.find(n => n.visible && Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < n.radius + 5);
+          draggedNode = null;
+          for (let i = visibleNodesCache.length - 1; i >= 0; i--) {
+            const n = visibleNodesCache[i];
+            if (Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < n.radius + 5) {
+              draggedNode = n;
+              break;
+            }
+          }
           
           if(draggedNode) { 
             draggedNode.vx = 0; draggedNode.vy = 0; 
+            isSleeping = false;
           } else {
             isPanning = true; startPanX = screenX - cameraOffsetX; startPanY = screenY - cameraOffsetY;
             canvas.style.cursor = 'grabbing';
@@ -496,40 +659,52 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
             if (draggedNode) { 
               draggedNode.x = worldPos.x; 
               draggedNode.y = worldPos.y; 
+              isSleeping = false;
             }
             
-            // 【核心修复 4】禁止高亮不可见的幽灵节点
-            hoveredNode = data.nodes.find(n => n.visible && Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < n.radius + 5);
-            
-            // 任务 2：重写鼠标悬停的 Tooltip 智能提示
-            if (hoveredNode && hoveredNode.description) {
-              // 探测当前悬停的节点是否有隐藏的子节点
-              const hasHiddenNeighbors = data.links.some(l => {
-                const targetNode = data.nodes.find(n => n.id === l.target);
-                const sourceNode = data.nodes.find(n => n.id === l.source);
-                return (l.source === hoveredNode.id && targetNode && !targetNode.visible) ||
-                       (l.target === hoveredNode.id && sourceNode && !sourceNode.visible);
-              });
-
-              // 组装金色呼吸高亮提示
-              let hintHtml = '';
-              if (hasHiddenNeighbors) {
-                hintHtml = '<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.2); color:#fbbf24; font-weight:bold; font-size:11px; display:flex; align-items:center; gap:4px; animation: pulse 2s infinite;">' + 
-                           '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>' +
-                           '双击节点，下钻展开隐藏工艺</div>';
+            hoveredNode = null;
+            for (let i = visibleNodesCache.length - 1; i >= 0; i--) {
+              const n = visibleNodesCache[i];
+              if (Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < n.radius + 5) {
+                hoveredNode = n;
+                break;
               }
-
-              tooltip.style.opacity = 1; tooltip.style.transform = "translateY(0)";
-              tooltip.style.left = (e.clientX + 20) + 'px'; tooltip.style.top = (e.clientY + 20) + 'px';
-              // 将提示追加到原有的 description 下方
-              tooltip.innerHTML = '<span class="tag" style="background:' + hoveredNode.color + '20; color:' + hoveredNode.color + '">' + hoveredNode.typeTag + '</span><br/><strong>' + hoveredNode.name + '</strong><br/><span style="color:#cbd5e1; font-size:11px;">' + hoveredNode.description + '</span>' + hintHtml;
+            }
+            
+            if (hoveredNode && hoveredNode.description) {
+              if (hoveredNode.id !== lastTooltipNodeId) {
+                lastTooltipNodeId = hoveredNode.id;
+                const hasHidden = hoveredNode._hasHiddenNeighbors;
+                const neighborCount = (adjacencyMap.get(hoveredNode.id) || []).length;
+                const statsLine = '<div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.15); color:#94a3b8; font-size:11px;">权重: ' + hoveredNode.weight + '/10 | 关联: ' + neighborCount + ' 个节点</div>';
+                let hintHtml = '';
+                if (hasHidden) {
+                  hintHtml = '<div style="margin-top:10px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.2); color:#fbbf24; font-weight:bold; font-size:11px; display:flex; align-items:center; gap:4px; animation: pulse 2s infinite;">' + 
+                             '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>' +
+                             '双击节点，下钻展开隐藏工艺</div>';
+                }
+                tooltip.innerHTML = '<span class="tag" style="background:' + hoveredNode.color + '20; color:' + hoveredNode.color + '">' + hoveredNode.typeTag + '</span><br/><strong>' + hoveredNode.name + '</strong><br/><span style="color:#cbd5e1; font-size:11px;">' + hoveredNode.description + '</span>' + statsLine + hintHtml;
+                tooltip.style.opacity = 1; tooltip.style.transform = "translateY(0)";
+              }
+              let ttLeft = e.clientX + 20;
+              let ttTop = e.clientY + 20;
+              const ttWidth = tooltip.offsetWidth || 280;
+              const ttHeight = tooltip.offsetHeight || 150;
+              if (ttLeft + ttWidth > window.innerWidth) ttLeft = e.clientX - ttWidth - 10;
+              if (ttTop + ttHeight > window.innerHeight) ttTop = e.clientY - ttHeight - 10;
+              tooltip.style.left = ttLeft + 'px'; tooltip.style.top = ttTop + 'px';
             } else { 
               tooltip.style.opacity = 0; tooltip.style.transform = "translateY(5px)";
+              lastTooltipNodeId = null;
             }
           }
         });
 
         window.addEventListener('mouseup', () => {
+          if (draggedNode) {
+            draggedNode.vx += (Math.random() - 0.5) * 2;
+            draggedNode.vy += (Math.random() - 0.5) * 2;
+          }
           draggedNode = null;
           isPanning = false;
           canvas.style.cursor = 'grab';
@@ -544,6 +719,7 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         // 鼠标滚轮无极缩放 (向鼠标指针中心缩放)
         canvas.addEventListener('wheel', e => {
           e.preventDefault();
+          isSleeping = false;
           const zoomSensitivity = 0.001;
           const delta = -e.deltaY * zoomSensitivity;
           let newScale = cameraScale * (1 + delta);
@@ -564,8 +740,14 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         }, { passive: false });
 
         // 左下角面板按钮控制
+        const zoomResetBtn = document.getElementById('zoomReset');
+        const drawerTitleEl = document.getElementById('drawerTitle');
+        const drawerDescEl = document.getElementById('drawerDesc');
+        const drawerTagEl = document.getElementById('drawerTag');
+        const drawerLinksEl = document.getElementById('drawerLinks');
+
         function updateZoomText() {
-          document.getElementById('zoomReset').innerText = Math.round(cameraScale * 100) + '%';
+          if (zoomResetBtn) zoomResetBtn.innerText = Math.round(cameraScale * 100) + '%';
         }
 
         document.getElementById('zoomIn').addEventListener('click', () => {
@@ -583,7 +765,7 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         });
 
         document.getElementById('zoomReset').addEventListener('click', () => {
-          cameraScale = 1; cameraOffsetX = 0; cameraOffsetY = 0; updateZoomText();
+          cameraScale = 1; cameraOffsetX = 0; cameraOffsetY = 0; isSleeping = false; updateZoomText();
         });
 
         // 【架构师重构：延迟渲染与响应式引力重算】
@@ -623,12 +805,14 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
           canvas.height = height * window.devicePixelRatio || 1;
           canvas.style.width = width + 'px';
           canvas.style.height = height + 'px';
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
 
           if (!hasInitialized) {
-            initNodes(); // 在具备真实物理尺寸时才初始化坐标
+            initNodes();
             hasInitialized = true;
-            loop();      // 唤醒物理引擎
+            loop();
+            if (heartbeatIntervalId) { clearInterval(heartbeatIntervalId); heartbeatIntervalId = null; }
           } else {
             // 响应式重算：如果窗口发生变化，动态更新引力点防止节点跑偏
             data.nodes.forEach(node => {
@@ -644,13 +828,14 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         }
 
         const resizeObserver = new ResizeObserver(() => resizeCanvas());
+        resizeObserverRef = resizeObserver;
         resizeObserver.observe(document.body);
         setTimeout(() => { resizeCanvas(); }, 100); // 仅触发尺寸检测，由 resizeCanvas 内部决定是否启动引擎
 
         // 【终极防御：心跳探针】
         // 针对 Chrome/Edge 在 iframe 父级从 display: none 切为 block 时可能发生的 ResizeObserver 死寂(哑火) bug
         // 我们注入一个极其轻量的守护进程：只要发现还没开始渲染，且屏幕具备了物理尺寸，就强行打火！
-        setInterval(() => {
+        heartbeatIntervalId = setInterval(() => {
           if (!hasInitialized && document.body.clientWidth > 0 && document.body.clientHeight > 0) {
             console.log('[SWS Graph] 守护进程被激活：发现隐身恢复，强行引燃物理沙盘引擎...');
             resizeCanvas();
@@ -681,29 +866,50 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         });
 
         function openDrawer(node) {
-          document.getElementById('drawerTitle').innerText = node.name;
-          document.getElementById('drawerDesc').innerText = node.description || '暂无详细描述';
-          const tagEl = document.getElementById('drawerTag');
-          tagEl.innerText = node.typeTag;
-          tagEl.style.color = node.color;
-          tagEl.style.background = node.color + '20';
+          if (drawerTitleEl) drawerTitleEl.innerText = node.name;
+          if (drawerDescEl) {
+            drawerDescEl.innerText = node.description || '暂无详细描述';
+            drawerDescEl.classList.add('line-clamp');
+          }
+          if (drawerTagEl) {
+            drawerTagEl.innerText = node.typeTag;
+            drawerTagEl.style.color = node.color;
+            drawerTagEl.style.background = node.color + '20';
+          }
           
-          // 查找与之相连的上下文链路
+          const neighbors = adjacencyMap.get(node.id) || [];
           const linksHtml = data.links.filter(l => l.source === node.id || l.target === node.id).map(l => {
             const isSource = l.source === node.id;
             const otherNodeId = isSource ? l.target : l.source;
-            const otherNode = data.nodes.find(n => n.id === otherNodeId);
+            const otherNode = nodeMap.get(otherNodeId);
             if(!otherNode) return '';
             const direction = isSource ? '→ 输出至' : '← 来源于';
+            const strength = l.strength || 1;
+            const dots = [1,2,3,4,5].map(i => '<span class="rel-dot' + (i <= strength ? ' active' : '') + '"></span>').join('');
             return '<div class="relation-item">' +
               '<span style="font-weight:bold; color:#334155;">' + otherNode.name + '</span>' +
               '<span class="rel-badge">' + direction + ': ' + l.relationship + '</span>' +
+              '<span class="rel-strength">' + dots + '</span>' +
             '</div>';
           }).join('');
           
-          document.getElementById('drawerLinks').innerHTML = linksHtml || '<div style="color:#94a3b8; font-size:12px; text-align:center; margin-top:20px;">暂无直接关联</div>';
+          if (drawerLinksEl) drawerLinksEl.innerHTML = linksHtml || '<div style="color:#94a3b8; font-size:12px; text-align:center; margin-top:20px;">暂无直接关联</div>';
           drawer.classList.add('open');
         }
+
+        drawerLinksEl.addEventListener('click', (e) => {
+          const item = e.target.closest('.relation-item');
+          if (item && selectedNode) {
+            const otherName = item.querySelector('span[style*="font-weight"]')?.textContent?.trim();
+            const target = data.nodes.find(n => n.name === otherName);
+            if (target) openDrawer(target);
+          }
+        });
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+          searchKeyword = (e.target.value || '').trim().toLowerCase();
+          isSleeping = false;
+        });
 
         // 离线溯源通信：点击搜索按钮，向外层阅读器发送 postMessage
         document.getElementById('traceBtn').addEventListener('click', () => {
@@ -734,33 +940,25 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         canvas.addEventListener('dblclick', e => {
           if (!hoveredNode) return;
           
-          // 1. 获取所有与当前双击节点直接相连的邻居节点
           let neighbors = [];
-          data.links.forEach(link => {
-            if (link.source === hoveredNode.id) {
-              let targetNode = data.nodes.find(n => n.id === link.target);
-              if (targetNode) neighbors.push(targetNode);
-            }
-            if (link.target === hoveredNode.id) {
-              let sourceNode = data.nodes.find(n => n.id === link.source);
-              if (sourceNode) neighbors.push(sourceNode);
-            }
+          const neighborIds = adjacencyMap.get(hoveredNode.id) || [];
+          neighborIds.forEach(nid => {
+            const n = nodeMap.get(nid);
+            if (n) neighbors.push(n);
           });
 
-          // 2. 状态判定：只要有一个邻居是隐藏的，当前操作就是"展开"；如果全可见，就是"收起"
           const hasHidden = neighbors.some(n => !n.visible);
 
           if (hasHidden) {
-            // ================= 展开逻辑 (Expand) =================
             let hasSpawned = false;
-            neighbors.forEach(otherNode => {
-              if (!otherNode.visible) {
-                otherNode.visible = true;
-                // 让子节点在父节点体内出生，然后被物理斥力炸开
-                otherNode.x = hoveredNode.x + (Math.random() - 0.5) * 10;
-                otherNode.y = hoveredNode.y + (Math.random() - 0.5) * 10;
-                hasSpawned = true;
-              }
+            const hiddenNeighbors = neighbors.filter(n => !n.visible);
+            const spawnRadius = 80;
+            hiddenNeighbors.forEach((otherNode, i) => {
+              const angle = (i / hiddenNeighbors.length) * 2 * Math.PI;
+              otherNode.x = hoveredNode.x + Math.cos(angle) * spawnRadius;
+              otherNode.y = hoveredNode.y + Math.sin(angle) * spawnRadius;
+              otherNode.visible = true;
+              hasSpawned = true;
             });
             
             if (hasSpawned) {
@@ -769,24 +967,18 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
               hoveredNode.vy += (Math.random() - 0.5) * 5;
             }
           } else {
-            // ================= 收起逻辑 (Collapse) =================
             let hasCollapsed = false;
             
             neighbors.forEach(otherNode => {
-              // 算法核心：孤岛检测 (Orphan Detection)
-              // 检查这个邻居节点，除了连接我们双击的 hoveredNode 之外，是否还连着其他【可见】的节点？
               let visibleConnections = 0;
-              data.links.forEach(l => {
-                if (l.source === otherNode.id || l.target === otherNode.id) {
-                  let connectedId = l.source === otherNode.id ? l.target : l.source;
-                  let connectedNode = data.nodes.find(n => n.id === connectedId);
-                  if (connectedNode && connectedNode.visible) {
-                    visibleConnections++;
-                  }
+              const otherNeighborIds = adjacencyMap.get(otherNode.id) || [];
+              otherNeighborIds.forEach(connectedId => {
+                const connectedNode = nodeMap.get(connectedId);
+                if (connectedNode && connectedNode.visible) {
+                  visibleConnections++;
                 }
               });
 
-              // 如果它连着的可见节点数 <= 1，说明它【只】连着当前双击的父节点，可以安全收缩。
               if (visibleConnections <= 1) {
                 otherNode.visible = false;
                 hasCollapsed = true;
@@ -803,6 +995,12 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         document.getElementById('toggleExpand').addEventListener('click', (e) => {
           isAllExpanded = !isAllExpanded;
           e.target.innerText = isAllExpanded ? "重置收起" : "展开全部";
+
+        document.getElementById('toggleLinks').addEventListener('click', (e) => {
+          showAllLinks = !showAllLinks;
+          e.target.innerText = showAllLinks ? "全部链路" : "核心链路";
+          markDirty();
+        });
           
           if (isAllExpanded) {
             data.nodes.forEach(n => {
@@ -815,16 +1013,31 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
           } else {
             // 收起：重新走一遍初始化逻辑
             let sorted = [...data.nodes].sort((a, b) => b.weight - a.weight);
-            sorted.forEach((n, i) => n.visible = i < 6);
+            sorted.forEach((n, i) => {
+              n.visible = i < 12;
+              if (n.visible) {
+                if (n.type === 'concept' || n.type === 'material') n.targetX = width * 0.3;
+                else if (n.type === 'process') n.targetX = width * 0.5;
+                else n.targetX = width * 0.7;
+                n.x = n.targetX + (Math.random() - 0.5) * 100;
+                n.y = height / 2 + (Math.random() - 0.5) * 200;
+              }
+            });
           }
           updateLinksVisibility();
+        });
+
+        window.addEventListener('beforeunload', () => {
+          destroyed = true;
+          if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
+          if (resizeObserverRef) resizeObserverRef.disconnect();
         });
       };
   `;
 
   // ================= 3. 终极兼容性封装 (影子容器架构) =================
   // 使用函数顶部已计算好的 b64Data
-  const graphUid = 'sws-graph-' + Math.random().toString(36).substr(2, 9);
+  const graphUid = 'sws-graph-' + Math.random().toString(36).substring(2, 11);
 
   // Iframe 内部渲染引擎脚本 (完全剥离数据后的纯 Loader)
   const loaderInternalHtml = `
@@ -994,7 +1207,7 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         <iframe id="iframe-${graphUid}" allowfullscreen="true" sandbox="allow-scripts allow-same-origin allow-popups" srcdoc="${safeSrcdoc}" style="width: 100%; height: 750px; border: none; display: block;" scrolling="no"></iframe>
       </div>
       
-      <div class="sws-graph-print" style="padding: 2rem 0; background: #ffffff;">
+      <div class="sws-graph-print" style="display: none !important; padding: 2rem 0; background: #ffffff;">
         ${staticSvgHtml}
         <p style="color:#64748b; font-size:12px; margin-top:20px; margin-bottom:0; text-align: center;">* 本图谱由 AI 根据全文自动提取渲染</p>
       </div>

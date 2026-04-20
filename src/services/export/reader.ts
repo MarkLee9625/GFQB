@@ -1,7 +1,12 @@
-import { Article, CONSTANTS } from '../../../types';
+import { Article } from '../../types/models';
+import { CONSTANTS } from '../../constants';
 import { getReaderSkeleton } from './templates';
 import { saveAs } from 'file-saver';
 import { compressData, uint8ArrayToBase64 } from './compression';
+
+function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 // 引入自动生成的模板 (运行 npm run build 后会更新此文件)
 const READER_TEMPLATE = "SWS_READER_TEMPLATE_PLACEHOLDER" as string;
@@ -40,18 +45,23 @@ export async function generateReaderHTML(
 
     // 2. 处理文章数据，保持 PDF 数据以便在离线阅读器中显示
     console.log('[Export] 开始处理文章数据，保留PDF数据以支持离线阅读器...');
-    const processedArticles = sortedArticles.map((article) => {
+    const processedArticles = sortedArticles.map((article, idx) => {
         try {
-            // 使用深拷贝，避免修改原始数据，但保留 pdfData 字段以便在离线阅读器中显示
             const articleCopy = structuredClone ? structuredClone(article) : JSON.parse(JSON.stringify(article));
             
-            // 注意：不再删除 pdfData 字段，以便离线阅读器可以显示PDF内容
-            // 这样保持了旧版本的兼容性，同时确保PDF内容在导出后仍然可用
+            if (article.category === '封面' && !articleCopy.coverImage) {
+                console.warn(`[Export] 文章 #${idx} "${article.title}" (封面) coverImage 为空`);
+            }
+            if (article.category === '封底' && !articleCopy.backImage) {
+                console.warn(`[Export] 文章 #${idx} "${article.title}" (封底) backImage 为空`);
+            }
+            if (article.pdfData && !articleCopy.pdfData) {
+                console.error(`[Export] 文章 #${idx} "${article.title}" pdfData 在深拷贝后丢失！`);
+            }
             
             return articleCopy;
         } catch (err) {
             console.warn(`[Export] 文章 "${article.title}" 深拷贝失败，使用浅拷贝:`, err);
-            // 降级为浅拷贝，但仍然保留 pdfData
             return { ...article };
         }
     });
@@ -74,16 +84,17 @@ export async function generateReaderHTML(
     console.log(`[Export] 序列化完成，字符串长度: ${(rawArticlesJson.length / 1024 / 1024).toFixed(2)} MB。`);
     
     console.time('compress-data');
-    // 【性能优化】使用 CompressionStream API 压缩 JSON 数据，大幅减小体积
-    const compressedArticles = await compressData(rawArticlesJson, 'gzip');
-    const articlesB64 = uint8ArrayToBase64(compressedArticles);
+    const articlesResult = await compressData(rawArticlesJson, 'gzip');
+    const articlesB64 = uint8ArrayToBase64(articlesResult.data);
     
-    // 配置也进行压缩处理
     const configJson = JSON.stringify(config);
-    const compressedConfig = await compressData(configJson, 'gzip');
-    const configB64 = uint8ArrayToBase64(compressedConfig);
+    const configResult = await compressData(configJson, 'gzip');
+    const configB64 = uint8ArrayToBase64(configResult.data);
+
+    const compressionMethod = articlesResult.method === 'none' && configResult.method === 'none' ? 'none' : articlesResult.method;
+
     console.timeEnd('compress-data');
-    console.log(`[Export] 数据压缩完成，原始大小: ${(rawArticlesJson.length / 1024 / 1024).toFixed(2)} MB，压缩后: ${(compressedArticles.length / 1024 / 1024).toFixed(2)} MB，压缩率: ${((compressedArticles.length / rawArticlesJson.length) * 100).toFixed(1)}%`);
+    console.log(`[Export] 数据压缩完成，原始大小: ${(rawArticlesJson.length / 1024 / 1024).toFixed(2)} MB，压缩后: ${(articlesResult.data.length / 1024 / 1024).toFixed(2)} MB，压缩率: ${((articlesResult.data.length / rawArticlesJson.length) * 100).toFixed(1)}%`);
     console.log(`[Export] 数据 Base64 转码完成。正在拼装 HTML...`);
 
     // 4. 如果是开发模式 (模板未被替换)，则使用内置的 Skeleton 模板
@@ -93,24 +104,28 @@ export async function generateReaderHTML(
         // 生成简易目录 HTML
         const tocListHtml = processedArticles
             .filter(a => a.category !== '封面' && a.category !== '封底')
-            .map((a, i) => `<li class="toc-item"><span class="toc-title">${a.title}</span><span class="toc-dots"></span><span class="toc-page">${i + 1}</span></li>`)
+            .map((a, i) => `<li class="toc-item"><span class="toc-title">${escapeHtml(a.title)}</span><span class="toc-dots"></span><span class="toc-page">${i + 1}</span></li>`)
             .join('');
 
         return getReaderSkeleton({
             sidebarMeta: config.sidebarMeta,
             logo: config.logo,
             tocListHtml,
-            articlesJson: articlesB64, // 注意：此处在 skeleton 内部将被赋给 B64 变量
-            configJson: configB64
+            articlesJson: articlesB64,
+            configJson: configB64,
+            compressionMethod
         });
     }
 
     // 5. 构建环境下，注入到编译好的 READER_TEMPLATE 中 (在 </body> 之前)
+    const safeArticlesB64 = articlesB64.replace(/<\//g, '<\\/');
+    const safeConfigB64 = configB64.replace(/<\//g, '<\\/');
+
     const injectionScript = `
     <script>
-    window.__SWS_DATA_ARTICLES_B64__ = "${articlesB64}";
-    window.__SWS_DATA_CONFIG_B64__ = "${configB64}";
-    window.__SWS_COMPRESSION_METHOD__ = "gzip";
+    window.__SWS_DATA_ARTICLES_B64__ = "${safeArticlesB64}";
+    window.__SWS_DATA_CONFIG_B64__ = "${safeConfigB64}";
+    window.__SWS_COMPRESSION_METHOD__ = "${compressionMethod}";
     </script>
     `;
 

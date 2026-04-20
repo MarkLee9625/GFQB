@@ -40,12 +40,22 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
           const title = titleMatch ? titleMatch[1].trim() : file.name.replace(/\.[^/.]+$/, "");
 
           resolve({
-            id: Math.random().toString(36).substr(2, 9),
+            id: Math.random().toString(36).substring(2, 11),
             sourceType: 'wechat',
             sourceName: '本地导入(.md)',
             title,
             content: text,
             decision: 'pending',
+          });
+        };
+        reader.onerror = () => {
+          resolve({
+            id: Math.random().toString(36).substring(2, 11),
+            sourceType: 'wechat',
+            sourceName: '本地导入(.md)',
+            title: `读取失败: ${file.name}`,
+            content: '',
+            decision: 'reject' as const,
           });
         };
         reader.readAsText(file);
@@ -377,10 +387,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
                       const isAdopted = adoptedIds.has(article.id);
                       return (
                         <button 
-                          onClick={() => {
-                            if (onAdopt) onAdopt(article);
-                            setAdoptedIds(prev => new Set(prev).add(article.id));
-                          }}
+                          onClick={() => handleAdoptArticle(article)}
                           className={`flex-shrink-0 px-4 py-2 border rounded-lg text-sm font-bold transition-all shadow-sm hover:shadow-md
                             ${isAdopted 
                               ? 'bg-green-50 text-green-600 border-green-200 hover:bg-green-600 hover:text-white' 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { PDFDocument } from 'pdf-lib';
-import { Article } from '../../../types';
+import { Article } from '../../types/models';
 import { MyDocument } from './pdfComponents';
 
 /**
@@ -86,7 +86,11 @@ async function loadPdfAttachment(pdfData: string): Promise<PDFDocument> {
       throw new Error('无效的PDF数据格式');
     }
 
-    const buffer = base64ToArrayBuffer(pdfData);
+    let rawBase64 = pdfData;
+    if (pdfData.includes('base64,')) {
+        rawBase64 = pdfData.split('base64,')[1];
+    }
+    const buffer = base64ToArrayBuffer(rawBase64);
     const pdfDoc = await PDFDocument.load(buffer);
     
     // 验证 PDF 文档是否有效
@@ -156,7 +160,7 @@ function downloadPdfFile(pdfBytes: Uint8Array, fileName: string = '工法情报_
     document.body.removeChild(link);
     
     // 清理 URL 对象
-    setTimeout(() => URL.revokeObjectURL(url), 100);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
     
     console.log(`[PDF Engine] PDF文件已生成: ${fileName} (${pdfBytes.length} 字节)`);
   } catch (error) {
@@ -218,7 +222,10 @@ function generateFileName(articles: Article[], options: PdfExportOptions): strin
     // 查找封面文章以获取期号和日期
     const coverArticle = articles.find(article => article.category === '封面');
     const issueText = coverArticle?.issueText || 'NO-01';
-    const dateText = coverArticle?.dateText || 'JAN-2025';
+    const dateText = coverArticle?.dateText || (() => {
+      const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      return `${months[new Date().getMonth()]}-${new Date().getFullYear()}`;
+    })();
     
     // 清理文本，移除无效字符
     const cleanIssue = issueText.replace(/[^\w\s-]/gi, '').replace(/\s+/g, '-');
@@ -234,9 +241,11 @@ function generateFileName(articles: Article[], options: PdfExportOptions): strin
 /**
  * 预览PDF（生成Blob URL，用于iframe预览）
  * 
+ * ⚠️ 调用者负责在不需要时调用 URL.revokeObjectURL(url) 释放内存
+ * 
  * @param articles 文章数组
  * @param options 导出选项
- * @returns Promise<string> Blob URL
+ * @returns Promise<string> Blob URL（需手动释放）
  */
 export async function previewPdf(
   articles: Article[],

@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Article } from '../../../types';
-import { Icon } from '../../Icons';
-import { useBlobManager } from '../../../hooks/useBlobManager';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Article } from '../../src/types/models';
+import { Icon } from '../Icons';
+import { useBlobManager } from '../../hooks/useBlobManager';
 import { ArticleRendererBaseProps } from './ArticleRenderer';
+import { htmlToBlocks } from '../../src/utils/blockParser';
+import { BlockRenderer } from '../../src/components/renderers/blocks/BlockRenderer';
+import { ContentBlock } from '../../src/types/blocks';
 
 interface ContentRendererProps extends ArticleRendererBaseProps {
   mode: 'edit' | 'read' | 'print';
@@ -10,33 +13,6 @@ interface ContentRendererProps extends ArticleRendererBaseProps {
   logo?: string;
 }
 
-// 懒加载图片组件
-const LazyImage: React.FC<{
-  src: string | null;
-  alt: string;
-  className: string;
-  style?: React.CSSProperties;
-}> = ({ src, alt, className, style }) => {
-  const [loaded, setLoaded] = useState(false);
-  const blobManager = useBlobManager();
-  const blobUrl = src ? blobManager.getBlobUrl(src) : null;
-
-  return (
-    <img
-      src={blobUrl || src}
-      alt={alt}
-      className={`${className} ${loaded ? 'loaded' : ''}`}
-      style={{
-        ...style,
-        opacity: loaded ? 1 : 0.8,
-        transition: 'opacity 0.2s ease-out',
-      }}
-      onLoad={() => setLoaded(true)}
-    />
-  );
-};
-
-// PDF 查看器组件
 const PdfViewer: React.FC<{ pdfUrl: string }> = ({ pdfUrl }) => {
   const [loaded, setLoaded] = useState(false);
 
@@ -71,47 +47,39 @@ const PdfViewer: React.FC<{ pdfUrl: string }> = ({ pdfUrl }) => {
  * - read: 只读模式，优化显示效果
  * - print: 打印模式，应用打印样式
  */
-export const ContentRenderer: React.FC<ContentRendererProps> = ({
+export const ContentRenderer = React.memo<ContentRendererProps>(({
   article,
   mode,
   logo,
   isEditable = false
 }) => {
   const blobManager = useBlobManager();
-  const pdfUrl = article.pdfData ? blobManager.getBlobUrl(article.pdfData) : null;
-
-  // 使用 IntersectionObserver 实现图片懒加载
-  const [lazyImages, setLazyImages] = useState<Set<number>>(new Set());
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (mode === 'print' || mode === 'read') {
-      // 打印和阅读模式下，预加载所有图片
-      const imgCount = (article.content.match(/<img[^>]*>/g) || []).length;
-      const allImages = new Set(Array.from({ length: imgCount }, (_, i) => i));
-      setLazyImages(allImages);
+    if (!article.pdfData) {
+      setPdfUrl(null);
+      return;
     }
-  }, [mode, article.content]);
+    const timer = setTimeout(() => {
+      const url = blobManager.getBlobUrl(article.pdfData);
+      setPdfUrl(url);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [article.pdfData, blobManager]);
 
-  // 提取文章中的媒体元素并渲染
-  const renderContent = () => {
-    if (!article.content) return null;
+  const blocks: ContentBlock[] = useMemo(() => {
+    if (article.blocks && article.blocks.length > 0) {
+      return article.blocks;
+    }
+    if (article.content) {
+      return htmlToBlocks(article.content);
+    }
+    return [];
+  }, [article.blocks, article.content]);
 
-    // 创建临时容器解析 HTML
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = article.content;
-
-    // 处理所有图片，添加懒加载
-    const images = tempDiv.querySelectorAll('img');
-    images.forEach((img, index) => {
-      const src = img.getAttribute('src');
-      if (src && !src.startsWith('blob:')) {
-        // 非 blob URL 的图片，转为 blob
-        const blobUrl = blobManager.getBlobUrl(src);
-        if (blobUrl) {
-          img.setAttribute('src', blobUrl);
-        }
-      }
-    });
+  const renderBlockContent = () => {
+    if (blocks.length === 0) return null;
 
     return (
       <div
@@ -120,8 +88,19 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
           fontSize: `${article.fontSize || 18}px`,
           lineHeight: article.lineHeight || 2.0
         }}
-        dangerouslySetInnerHTML={{ __html: tempDiv.innerHTML }}
-      />
+      >
+        {blocks.map(block => {
+          const isHeading = block.type === 'heading';
+          return (
+            <div
+              key={block.id}
+              className={`sws-block-wrapper print-avoid-break ${isHeading ? 'print-avoid-break-after' : ''}`}
+            >
+              <BlockRenderer block={block} mode={mode} />
+            </div>
+          );
+        })}
+      </div>
     );
   };
 
@@ -163,7 +142,7 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
 
       {/* 文章正文 */}
       <div className="flex flex-col w-full">
-        {renderContent()}
+        {renderBlockContent()}
 
         {/* PDF 附件 */}
         {article.pdfData && (
@@ -265,4 +244,4 @@ export const ContentRenderer: React.FC<ContentRendererProps> = ({
       )}
     </div>
   );
-};
+});

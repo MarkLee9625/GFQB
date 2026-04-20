@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Icon } from './Icons';
 
 interface ToolbarProps {
@@ -19,7 +19,7 @@ interface ToolbarProps {
   onOpenAiCuration?: () => void;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({
+const Toolbar = React.memo<ToolbarProps>(({
   currentId,
   isFullscreen,
   onNewArticle,
@@ -36,7 +36,23 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onGenerateGraph,
   onOpenAiCuration,
 }) => {
-  if (isFullscreen) return null;
+  if (isFullscreen) {
+    return (
+      <div className="no-print fixed top-4 right-4 bg-white/90 backdrop-blur rounded-xl flex items-center gap-1 px-3 py-2 shadow-xl shadow-black/5 z-[50] border border-gray-100">
+        <button onClick={onExportReader} className="flex items-center gap-1.5 px-2.5 py-1.5 text-gray-700 hover:bg-gray-100 rounded-lg text-xs font-medium transition-all" title="导出阅读版">
+          <Icon name="download" className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={onExportProject} className="flex items-center gap-1.5 px-2.5 py-1.5 text-gray-700 hover:bg-gray-100 rounded-lg text-xs font-medium transition-all" title="保存工程">
+          <Icon name="save" className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={onToggleFullscreen} className="flex items-center gap-1.5 px-2.5 py-1.5 text-gray-700 hover:bg-gray-100 rounded-lg text-xs font-medium transition-all" title="退出全屏">
+          <Icon name="minimize" className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   return (
     <div className="no-print absolute top-5 right-5 bg-white/90 backdrop-blur rounded-xl flex items-center justify-end px-4 py-2 gap-2 shadow-xl shadow-black/5 z-[50] border border-gray-100">
@@ -64,16 +80,16 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="w-px h-4 bg-gray-100 mx-1"></div>
 
       {/* 2. 数据接入组 */}
-      <div className="relative group">
-        <button 
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
+      <div className="relative group" onClick={() => setOpenDropdown(openDropdown === 'data' ? null : 'data')} onBlur={() => setTimeout(() => setOpenDropdown(null), 150)}>
+        <button
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg text-xs font-medium transition-all"
           title="导入外部数据"
         >
           <Icon name="upload" className="w-3.5 h-3.5" />
           <span>数据接入</span>
           <Icon name="arrow-right" className="w-3 h-3 rotate-90" />
         </button>
-        <div className="absolute left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+        <div className={`absolute left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-xl transition-all z-50 overflow-hidden ${openDropdown === 'data' ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
           <button 
             onClick={onImport} 
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
@@ -85,7 +101,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             </div>
           </button>
           <button 
-            onClick={onImport} 
+            onClick={onOpenAiCuration} 
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
           >
             <Icon name="image" className="w-4 h-4 text-green-500" />
@@ -100,13 +116,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="w-px h-4 bg-gray-100 mx-1"></div>
 
       {/* 3. AI 情报中枢 */}
-      <div className="relative group">
+      <div className="relative group" onClick={() => setOpenDropdown(openDropdown === 'ai' ? null : 'ai')} onBlur={() => setTimeout(() => setOpenDropdown(null), 150)}>
         <button className="flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-sm hover:shadow-md transition-all">
           <Icon name="refresh" className="w-3.5 h-3.5" />
           <span>AI 情报中枢</span>
           <Icon name="arrow-right" className="w-3 h-3 rotate-90" />
         </button>
-        <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+        <div className={`absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-xl transition-all z-50 overflow-hidden ${openDropdown === 'ai' ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
           {onOpenAiCuration && (
             <button 
               onClick={onOpenAiCuration} 
@@ -213,6 +229,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export default Toolbar;

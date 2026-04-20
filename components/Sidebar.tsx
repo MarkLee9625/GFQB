@@ -1,6 +1,6 @@
 import React from 'react';
 import { Icon } from './Icons';
-import { Article } from '../types';
+import { Article } from '../src/types/models';
 
 interface SidebarProps {
   articles: Article[];
@@ -37,36 +37,42 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   // Filter articles but PRESERVE array order (except for Search)
   const displayArticles = React.useMemo(() => {
-    return articles.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    return articles.filter(a => (a.title ?? '').toLowerCase().includes(searchQuery.toLowerCase()));
   }, [articles, searchQuery]);
 
   // Drag and Drop Logic
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [dragOverId, setDragOverId] = React.useState<number | null>(null);
 
-  const handleDragStart = (e: React.DragEvent, id: number) => {
+  const handleDragStart = (e: React.DragEvent<HTMLUListElement>) => {
+    const target = (e.target as HTMLElement).closest('li[data-id]');
+    if (!target) return;
+    const id = Number((target as HTMLElement).dataset.id);
     setDraggedId(id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragOver = (e: React.DragEvent, id: number) => {
+  const handleDragOver = (e: React.DragEvent<HTMLUListElement>) => {
     e.preventDefault();
+    const target = (e.target as HTMLElement).closest('li[data-id]');
+    if (!target) return;
+    const id = Number((target as HTMLElement).dataset.id);
     if (draggedId === id) return;
     setDragOverId(id);
   };
 
-  const handleDrop = (e: React.DragEvent, targetId: number) => {
+  const handleDrop = (e: React.DragEvent<HTMLUListElement>) => {
     e.preventDefault();
+    const target = (e.target as HTMLElement).closest('li[data-id]');
+    if (!target) return;
+    const targetId = Number((target as HTMLElement).dataset.id);
     if (draggedId === null || draggedId === targetId) return;
 
     const newArticles = [...articles];
     const draggedIndex = newArticles.findIndex(a => a.id === draggedId);
     const targetIndex = newArticles.findIndex(a => a.id === targetId);
 
-    if (draggedIndex === -1 || targetIndex === -1) {
-      console.warn("拖拽定位失败：ID 匹配异常");
-      return;
-    }
+    if (draggedIndex === -1 || targetIndex === -1) return;
 
     const [draggedItem] = newArticles.splice(draggedIndex, 1);
     newArticles.splice(targetIndex, 0, draggedItem);
@@ -74,6 +80,18 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     setDraggedId(null);
     setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleListClick = (e: React.MouseEvent<HTMLUListElement>) => {
+    const target = (e.target as HTMLElement).closest('li[data-id]');
+    if (!target) return;
+    const id = Number((target as HTMLElement).dataset.id);
+    onSelectArticle(id);
   };
 
   return (
@@ -97,7 +115,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onToggleSidebar}
           className="absolute top-[45px] right-[30px] text-gray-400 hover:text-brand-blue transition-colors"
-          title="Hide Sidebar"
+          title="隐藏侧边栏"
         >
           <Icon name="menu" className="w-4 h-4" />
         </button>
@@ -117,23 +135,26 @@ const Sidebar: React.FC<SidebarProps> = ({
           <Icon name="search" className="w-4 h-4 text-gray-400 mr-2" />
           <input
             className="bg-transparent border-none w-full outline-none text-[13px] text-gray-900"
-            placeholder="Search..."
+            placeholder="搜索文章..."
             value={searchQuery}
             onChange={e => onSearchChange(e.target.value)}
           />
         </div>
       </div>
 
-      <ul className="flex-1 overflow-y-auto px-[15px] m-0 list-none scrollbar-hide">
+      <ul
+        className="flex-1 overflow-y-auto px-[15px] m-0 list-none scrollbar-hide"
+        onClick={handleListClick}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onDragEnd={handleDragEnd}
+      >
         {displayArticles.map(article => (
           <li
             key={article.id}
-            draggable={!searchQuery && !['封面', '封底'].includes(article.category)} // 封面封底禁止拖拽
-            onDragStart={(e) => handleDragStart(e, article.id)}
-            onDragOver={(e) => handleDragOver(e, article.id)}
-            onDrop={(e) => handleDrop(e, article.id)}
-            onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
-            onClick={() => onSelectArticle(article.id)}
+            data-id={article.id}
+            draggable={!searchQuery && !['封面', '封底'].includes(article.category)}
             className={`p-[14px_15px] rounded cursor-pointer transition-all mb-[2px] border-l-2 ${currentId === article.id ? 'bg-blue-50 border-brand-blue' : 'border-transparent hover:bg-gray-100'} ${dragOverId === article.id ? 'border-t-4 border-t-brand-blue' : ''} ${draggedId === article.id ? 'opacity-40' : ''}`}
           >
             <div className={`text-[14px] font-semibold mb-1 leading-[1.4] font-sans ${currentId === article.id ? 'text-brand-blue' : 'text-gray-700'} ${['封面', '封底'].includes(article.category) ? 'text-brand-blue font-bold' : ''}`}>

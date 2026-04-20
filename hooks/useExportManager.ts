@@ -1,0 +1,107 @@
+import { useCallback, useRef, useEffect } from 'react';
+import { Article } from '../src/types/models';
+import { generateReaderHTML, generatePrintableHTML, exportToPdf, exportReaderHTML, PdfExportOptions } from '../src/services/export';
+
+interface UseExportManagerOptions {
+  articles: Article[];
+  logo: string;
+  sidebarMeta: string;
+  useAlternateDesign: boolean;
+  openExportOptionsModal: () => void;
+}
+
+export function useExportManager({
+  articles,
+  logo,
+  sidebarMeta,
+  useAlternateDesign,
+  openExportOptionsModal,
+}: UseExportManagerOptions) {
+  const exportBlobUrls = useRef<string[]>([]);
+  const exportTimers = useRef<NodeJS.Timeout[]>([]);
+
+  const addTemporaryBlobUrl = useCallback((url: string) => {
+    exportBlobUrls.current.push(url);
+    const timer = setTimeout(() => {
+      URL.revokeObjectURL(url);
+      exportBlobUrls.current = exportBlobUrls.current.filter(u => u !== url);
+      const index = exportTimers.current.indexOf(timer);
+      if (index > -1) {
+        exportTimers.current.splice(index, 1);
+      }
+    }, 5 * 60 * 1000);
+    exportTimers.current.push(timer);
+  }, []);
+
+  const cleanupTemporaryBlobUrls = useCallback(() => {
+    exportBlobUrls.current.forEach(url => URL.revokeObjectURL(url));
+    exportBlobUrls.current = [];
+    exportTimers.current.forEach(timer => clearTimeout(timer));
+    exportTimers.current = [];
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cleanupTemporaryBlobUrls();
+    };
+  }, [cleanupTemporaryBlobUrls]);
+
+  const createExportBlob = useCallback((content: string) => {
+    const blob = new Blob([content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    addTemporaryBlobUrl(url);
+    return url;
+  }, [addTemporaryBlobUrl]);
+
+  const handleExportWithOptions = useCallback(async (options: {
+    useAlternateDesign: boolean;
+    includeImages: boolean;
+    optimizeForPrint: boolean;
+    exportType: 'reader' | 'printable' | 'pdf';
+  }) => {
+    try {
+      if (options.exportType === 'pdf') {
+        const pdfOptions: PdfExportOptions = {
+          useAlternateDesign: options.useAlternateDesign,
+          includeImages: options.includeImages,
+          optimizeForPrint: options.optimizeForPrint,
+          logo
+        };
+        await exportToPdf(articles, pdfOptions);
+      } else if (options.exportType === 'reader') {
+        await exportReaderHTML(articles, options, { logo, sidebarMeta });
+      } else {
+        const htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
+        const url = createExportBlob(htmlContent);
+        window.open(url, '_blank');
+      }
+    } catch (error) {
+      console.error('导出失败:', error);
+      alert('导出过程中发生错误，请查看控制台。');
+    }
+  }, [articles, logo, sidebarMeta, createExportBlob]);
+
+  const handleExport = useCallback((isReader: boolean, categories: string[]) => {
+    if (isReader) {
+      openExportOptionsModal();
+      return;
+    }
+
+    const safeArticles = JSON.stringify(articles).replace(/-->/g, '--\\u003e');
+    const safeCategories = JSON.stringify(categories).replace(/-->/g, '--\\u003e');
+    const content = `<!-- DATA START ${safeArticles} DATA END -->` +
+      `<!-- LOGO START ${logo} LOGO END -->` +
+      `<!-- CAT START ${safeCategories} CAT END -->` +
+      `<!-- META START ${sidebarMeta} META END -->`;
+    const url = createExportBlob(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SWS_Project_${new Date().toISOString().slice(0, 10)}.html`;
+    a.click();
+  }, [articles, logo, sidebarMeta, createExportBlob, openExportOptionsModal]);
+
+  return {
+    handleExport,
+    handleExportWithOptions,
+  };
+}

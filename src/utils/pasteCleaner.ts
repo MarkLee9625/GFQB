@@ -8,6 +8,7 @@ const PRESERVE_TAGS = new Set([
   'table', 'thead', 'tbody', 'tr', 'th', 'td',
   'pre', 'code',
   'figure', 'figcaption',
+  'video', 'audio', 'source',
 ]);
 const STRIP_STYLE_PROPS = [
   'margin', 'margin-top', 'margin-bottom', 'margin-left', 'margin-right',
@@ -115,10 +116,12 @@ function cleanNode(node: Node, parent: Node): void {
     return;
   }
 
+const DATA_ATTR_WHITELIST = new Set(['data-caption']);
+
   const attrsToRemove: string[] = [];
   for (let i = 0; i < el.attributes.length; i++) {
     const attr = el.attributes[i];
-    if (attr.name.startsWith('data-') || attr.name === 'id' || attr.name === 'class') {
+    if ((attr.name.startsWith('data-') && !DATA_ATTR_WHITELIST.has(attr.name)) || attr.name === 'id' || attr.name === 'class') {
       attrsToRemove.push(attr.name);
     }
   }
@@ -137,7 +140,7 @@ function cleanNode(node: Node, parent: Node): void {
 
   if (tag === 'a') {
     const href = el.getAttribute('href') || '';
-    if (href.startsWith('javascript:') || href === '#') {
+    if (href.toLowerCase().startsWith('javascript:') || href === '#') {
       unwrapElement(el, parent);
       return;
     }

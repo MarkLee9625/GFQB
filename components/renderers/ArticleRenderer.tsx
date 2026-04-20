@@ -1,5 +1,5 @@
 import React from 'react';
-import { Article } from '../../types';
+import { Article } from '../../src/types/models';
 import { CoverRenderer } from './CoverRenderer';
 import { BackRenderer } from './BackRenderer';
 import { ContentRenderer } from './ContentRenderer';
@@ -70,7 +70,7 @@ export type ArticleRendererProps =
  *   mode="print"
  * />
  */
-export const ArticleRenderer: React.FC<ArticleRendererProps> = ({
+export const ArticleRenderer = React.memo<ArticleRendererProps>(({
   article,
   mode,
   logo,
@@ -107,7 +107,6 @@ export const ArticleRenderer: React.FC<ArticleRendererProps> = ({
     );
   }
 
-  // 普通文章
   return (
     <ContentRenderer
       article={article}
@@ -116,7 +115,7 @@ export const ArticleRenderer: React.FC<ArticleRendererProps> = ({
       isEditable={mode === 'edit'}
     />
   );
-};
+});
 
 // 导出辅助组件，供 PaperView 等组件迁移时使用
 export { CoverRenderer } from './CoverRenderer';

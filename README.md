@@ -46,48 +46,37 @@
 工法情报编辑器/
 ├── .cursorrules                    # Cursor IDE 项目规则
 ├── .gitignore                      # Git 忽略文件
-├── .agent/                         # AI 开发助手技能规范
-│   ├── skills/
-│   │   ├── ai-feature-integration/  # AI 功能集成
-│   │   ├── code-style-check/        # 代码风格检查
-│   │   ├── component-creation/      # 组件创建
-│   │   ├── engineering-persona-prompting/ # 工程人设提示
-│   │   ├── export-template-unification/ # 导出模板统一
-│   │   ├── pdf-service-maintenance/ # PDF 服务维护
-│   │   ├── performance-optimization/ # 性能优化
-│   │   ├── react19-features/       # React 19 特性
-│   │   ├── security-best-practices/ # 安全最佳实践
-│   │   └── tailwind4-utilization/  # Tailwind CSS v4 工具类优化
+├── .trae/                          # AI 开发助手技能规范
+│   ├── documents/                  # 项目文档
+│   │   └── print-feature-review-and-optimization.md  # 打印功能审查与优化计划
+│   └── skills/
+│       ├── ai-feature-integration/  # AI 功能集成
+│       ├── code-style-check/        # 代码风格检查
+│       ├── component-creation/      # 组件创建
+│       ├── engineering-persona-prompting/ # 工程人设提示
+│       ├── export-template-unification/ # 导出模板统一
+│       ├── pdf-service-maintenance/ # PDF 服务维护
+│       ├── performance-optimization/ # 性能优化
+│       ├── react19-features/       # React 19 特性
+│       ├── security-best-practices/ # 安全最佳实践
+│       └── tailwind4-utilization/  # Tailwind CSS v4 工具类优化
 ├── App.tsx                         # 应用主入口（逻辑层）
 ├── index.html                      # HTML 入口
 ├── index.tsx                       # React 渲染入口
 ├── package.json                    # 项目依赖与脚本
 ├── package-lock.json               # 依赖锁文件
 ├── README.md                       # 项目说明文档
-├── tailwind.config.js.bak          # Tailwind 配置备份
 ├── tsconfig.json                   # TypeScript 配置
-├── types.ts                        # 全局类型定义
 ├── vite.config.ts                  # Vite 构建配置
 ├── vite-env.d.ts                   # Vite 环境类型
-├── metadata.json                   # 项目元数据
-├── build_output.txt                # 构建输出日志
-├── build_debug.txt                 # 调试构建日志
-├── build_detailed_error.txt        # 详细错误日志
-├── error_log.txt                   # 错误日志
-├── "AI 季度智能选题库 (AI Curation Dashboard) 开发规划.md"  # AI选题库开发规划
-├── "全渠道工法情报矩阵 (Omni-Channel Intelligence Matrix) 开发规划.md"  # 全渠道矩阵开发规划
-├── ai-upgrade-plan.md              # AI升级计划
-├── extract*.js / .mjs              # PDF 提取相关脚本
-├── test_*.js                       # 测试脚本
-├── services_aiService_full_old.ts   # AI 服务完整旧版备份（编码损坏恢复用）
-├── services_aiService_full_old_utf8.ts # AI 服务 UTF-8 格式备份
-├── services_aiService_recovery.ts   # AI 服务恢复模块
-├── services_aiService_recovery_utf8.ts # AI 服务恢复模块 UTF-8 格式
+├── vitest.config.ts                # Vitest 测试配置
+├── server.js                       # BFF 代理服务器
+├── styles/                         # 样式目录
+│   └── article-renderer.css        # 文章渲染样式
 │
 ├── components/                     # React 组件
-│   ├── Editor.tsx                  # 核心富文本编辑器
+│   ├── Editor.tsx                  # 核心富文本编辑器（重构为使用 ArticleRenderer）
 │   ├── PaperView.tsx               # 杂志风渲染引擎
-│   ├── PaperView.backup.tsx        # 渲染引擎备份
 │   ├── Sidebar.tsx                 # 侧边栏导航
 │   ├── Toolbar.tsx                 # 编辑器工具栏（已重构为下拉菜单式）
 │   ├── Icons.tsx                   # 自定义 SVG 图标系统
@@ -96,18 +85,40 @@
 │   ├── NavigationCapsule.tsx       # 导航胶囊组件
 │   ├── CategoryManagerModal.tsx    # 分类管理弹窗
 │   ├── ExportOptionsModal.tsx      # 导出选项弹窗
-│   └── KeyboardShortcutsHelpModal.tsx  # 快捷键帮助弹窗
+│   ├── KeyboardShortcutsHelpModal.tsx  # 快捷键帮助弹窗
+│   ├── editor/                     # 编辑器模块
+│   │   └── hooks/                  # 编辑器相关 Hooks
+│   │       ├── useEditorCommands.ts    # 编辑器命令
+│   │       ├── useEditorKeyboard.ts    # 键盘快捷键
+│   │       ├── useEditorState.ts       # 编辑器状态
+│   │       ├── useFileUpload.ts        # 文件上传
+│   │       ├── useImageToolbar.ts      # 图片工具栏
+│   │       └── useSelectionManager.ts   # 选择管理
+│   └── renderers/                  # 渲染器模块
+│       ├── ArticleRenderer.tsx     # 文章渲染器
+│       ├── BackRenderer.tsx        # 封底渲染器
+│       ├── ContentRenderer.tsx     # 内容渲染器
+│       ├── CoverRenderer.tsx       # 封面渲染器
+│       ├── SharedComponents.tsx    # 共享组件
+│       └── index.ts                # 渲染器导出入口
 │
 ├── hooks/                          # 自定义 React Hooks
 │   ├── useJournal.ts               # 文章数据管理（IndexedDB CRUD）
 │   ├── useBlobManager.ts           # Blob 内存管理
 │   ├── useInView.ts                # 视图内检测
-│   └── useMemoryMonitor.ts         # 内存监控
+│   ├── useMemoryMonitor.ts         # 内存监控
+│   ├── useAiFeatures.ts            # AI 功能集成
+│   ├── useAppInitialization.ts     # 应用初始化
+│   ├── useArticleNavigation.ts     # 文章导航
+│   ├── useExportManager.ts         # 导出管理
+│   ├── useImportManager.ts         # 导入管理
+│   ├── useKeyboardShortcuts.ts      # 快捷键管理
+│   └── usePanZoom.ts               # 缩放平移
 │
 ├── services/                       # 业务服务层
 │   ├── aiService.ts                # Gemini + DeepSeek AI 服务（含批量评审接口+学术文献编译引擎）
 │   ├── db.ts                       # IndexedDB 封装（V2 原子化存储）
-│   └── aiService.ts.backup         # AI 服务备份文件
+│   └── graphCache.ts               # 图谱缓存服务
 │
 ├── scripts/                        # 构建脚本
 │   ├── post-build.js               # 构建后处理（资源内联与注入）
@@ -115,13 +126,17 @@
 │
 ├── src/                            # 源码目录（Vite 主源）
 │   ├── index.css                   # 全局样式（含专业中文期刊排版引擎）
+│   ├── constants.ts                # 常量定义
 │   ├── pdf-worker.d.ts             # PDF Worker 类型定义
 │   │
 │   ├── components/                 # 源码组件
-│   │   ├── Toolbar.tsx
 │   │   ├── AiCurationModal.tsx     # AI全渠道选题工作台（支持多数据源）
-│   │   └── Layout/
-│   │       └── MainLayout.tsx      # 主布局组件
+│   │   ├── Layout/
+│   │   │   └── MainLayout.tsx      # 主布局组件
+│   │   └── renderers/              # 源码渲染器
+│   │       └── blocks/             # 区块渲染器
+│   │           ├── BlockRenderer.tsx
+│   │           └── BlockRenderer.test.tsx
 │   │
 │   ├── services/                   # 源码服务
 │   │   ├── export/                 # 导出模块
@@ -130,14 +145,21 @@
 │   │   │   ├── templates.ts        # HTML 模板
 │   │   │   ├── pdfComponents.tsx   # PDF渲染组件
 │   │   │   ├── pdfEngine.ts        # PDF生成引擎
-│   │   │   ├── print.ts            # 打印服务
-│   │   │   ├── reader.ts           # 阅读器服务
-│   │   │   ├── data.ts             # 数据服务
-│   │   │   └── utils/              # 导出工具
-│   │   │       ├── file.ts         # 文件工具
-│   │   │       ├── media.ts        # 媒体工具
-│   │   │       ├── blobCache.ts    # Blob 缓存管理 (LRU 实现)
-│   │   │       └── compression.ts  # 高性能数据压缩解压工具
+│   │   │   ├── compression.ts      # 高性能数据压缩解压工具
+│   │   │   ├── pdf/                # PDF 导出子模块
+│   │   │   │   ├── index.ts        # PDF 导出入口
+│   │   │   │   ├── pdfStyles.ts    # PDF 样式
+│   │   │   │   ├── PdfDocument.tsx
+│   │   │   │   ├── PdfCover.tsx
+│   │   │   │   ├── PdfBackCover.tsx
+│   │   │   │   ├── PdfTOC.tsx
+│   │   │   │   └── PdfArticlePage.tsx
+│   │   │   ├── print/              # 打印导出子模块
+│   │   │   │   └── printableSkeleton.ts  # 打印骨架模板
+│   │   │   └── reader/             # 阅读器导出子模块
+│   │   │       ├── readerSkeleton.ts     # 阅读器骨架
+│   │   │       ├── readerTemplates.ts    # 阅读器模板
+│   │   │       └── clientScript.ts      # 客户端脚本
 │   │   │
 │   │   ├── pdf/                    # PDF 解析模块
 │   │   │   ├── index.ts            # PDF 服务入口
@@ -147,19 +169,29 @@
 │   │   │       ├── keywords.ts     # 关键词提取策略
 │   │   │       └── title.ts        # 标题提取策略
 │   │   │
-│   │   └── fetchers/               # 【新增】多源数据抓取引擎
+│   │   └── fetchers/               # 多源数据抓取引擎
 │   │       ├── rssFetcher.ts       # RSS资讯抓取（支持双引擎代理）
 │   │       └── patentFetcher.ts    # 专利文献检索
 │   │
 │   ├── types/                      # 类型定义
+│   │   ├── index.ts                # 类型统一导出
+│   │   ├── blocks.ts               # 区块类型定义
 │   │   ├── models.ts               # 数据模型类型
 │   │   ├── ui.ts                   # UI 组件类型
-│   │   └── intelligence.ts         # 【新增】全渠道情报统一接口定义
+│   │   └── intelligence.ts         # 全渠道情报统一接口定义
 │   │
-│   └── utils/                      # 工具函数
-│       ├── fileHelpers.ts          # 文件操作辅助
-│       ├── graphRenderer.ts        # 知识图谱渲染引擎
-│       └── pasteCleaner.ts         # HTML 粘贴内容净化工具
+│   ├── utils/                      # 工具函数
+│   │   ├── fileHelpers.ts          # 文件操作辅助
+│   │   ├── graphRenderer.ts         # 知识图谱渲染引擎
+│   │   ├── pasteCleaner.ts         # HTML 粘贴内容净化工具
+│   │   ├── blockParser.ts          # 区块解析工具
+│   │   ├── blockParser.test.ts     # 区块解析测试
+│   │   ├── encoding.ts             # 编码处理工具
+│   │   ├── fileHelpers.test.ts     # 文件操作测试
+│   │   └── pasteCleaner.test.ts    # 粘贴净化测试
+│   │
+│   └── __tests__/                  # 测试目录
+│       └── testSetup.ts            # 测试环境配置
 │
 ├── public/                         # 静态资源（Vite 公共目录）
 │   ├── pdf.min.mjs                 # PDF.js 主库
@@ -167,13 +199,6 @@
 │   ├── cmaps/                      # PDF 字体映射（多文件）
 │   ├── standard_fonts/             # PDF 标准字体
 │   └── wasm/                       # PDF.js WASM 文件
-│
-├── dist_test/                      # 测试构建输出
-│   ├── index.html                  # 测试 HTML
-│   ├── pdf.min.mjs                 # PDF.js 库
-│   ├── pdf.worker.min.mjs          # PDF.js Worker
-│   ├── assets/                     # 打包资源
-│   └── cmaps/                      # PDF 字体映射
 │
 └── dist-reader/                    # 离线阅读器构建输出
     ├── index.html                  # 单文件自包含 HTML
@@ -185,11 +210,13 @@
 ```
 
 ### 关键组件说明
-*   **编辑器 (`components/Editor.tsx`)**: 集成了富文本编辑、AI 拟题、摘要生成及媒体原子化插入逻辑。
-*   **渲染引擎 (`components/PaperView.tsx`)**: 负责"杂志风格"与"经典风格"的实时物理排版模拟。
+*   **编辑器 (`components/Editor.tsx`)**: 核心富文本编辑器，现已重构为使用独立的 ArticleRenderer、CoverRenderer、BackRenderer、ContentRenderer 组件，实现组件职责分离。
+*   **渲染引擎 (`components/PaperView.tsx`)**: 负责"杂志风格"与"经典风格"的实时物理排版模拟，使用模块化的渲染器组件。
 *   **工具栏 (`components/Toolbar.tsx`)**: 重构为下拉菜单式，包含"数据接入"和"AI情报中枢"两大功能区。
 *   **AI选题工作台 (`src/components/AiCurationModal.tsx`)**: 支持微信/MD导入、RSS资讯、专利文献的多源数据筛选。
 *   **状态管理 (`hooks/useJournal.ts`)**: 统一的数据流入口，负责 IndexedDB 的并发读写与文章生命周期管理。
+*   **导出管理 (`hooks/useExportManager.ts`)**: 统一的导出流程管理，支持阅读版、打印版、PDF 三种导出模式。
+*   **导入管理 (`hooks/useImportManager.ts`)**: 统一的导入流程管理，支持微信文章抓取、Markdown 导入等功能。
 *   **构建引擎 (`scripts/post-build.js`)**: **项目灵魂**。在构建后自动内联 JS/CSS，并注入 PDF.js 核心及 Worker，实现"单文件自包含 HTML"导出。
 
 ---
@@ -214,7 +241,7 @@
 *   **响应式交互**: 优化悬浮效果和过渡动画，提升编辑体验。
 
 ### 4. AI 智能开发助手 (Agent Skills)
-项目在 `.agent/skills` 下内置了一套 AI 协作规范，确保开发过程中架构的优雅与一致性：
+项目在 `.trae/skills` 下内置了一套 AI 协作规范，确保开发过程中架构的优雅与一致性：
 *   `code-style-check`: 强化类型安全与 TailwindCSS 规范。
 *   `export-template-unification`: 确保编辑器预览与导出版视觉 100% 同位。
 *   `performance-optimization`: 专项处理大型 Base64 图片导致的内存压力（Blob Manager）。
@@ -234,6 +261,35 @@
 ---
 
 ## 📅 更新日志 (Changelog)
+
+### v1.7.0 (2026-04-20) - 编辑器组件重构与渲染引擎模块化
+*   **【编辑器重构】Phase 2 完成 - 使用 ArticleRenderer**:
+    *   将 Editor 组件重构为使用独立的 ArticleRenderer、CoverRenderer、BackRenderer、ContentRenderer 组件
+    *   新增 6 个编辑器相关 hooks：useEditorCommands、useEditorKeyboard、useEditorState、useFileUpload、useImageToolbar、useSelectionManager
+    *   实现组件职责分离，提升代码可维护性和复用性
+*   **【核心 Hooks 扩展】新增多个业务 Hook**:
+    *   `useAiFeatures.ts`: AI 功能集成 hook
+    *   `useAppInitialization.ts`: 应用初始化 hook
+    *   `useArticleNavigation.ts`: 文章导航 hook
+    *   `useExportManager.ts`: 导出管理 hook
+    *   `useImportManager.ts`: 导入管理 hook
+    *   `useKeyboardShortcuts.ts`: 快捷键管理 hook
+    *   `usePanZoom.ts`: 缩放平移 hook
+*   **【导出模块重构】模块化拆分**:
+    *   将 `src/services/export/` 拆分为 `pdf/`、`print/`、`reader/` 三个子模块
+    *   `pdf/`: 包含 PdfDocument、PdfCover、PdfBackCover、PdfTOC、PdfArticlePage 等组件
+    *   `print/`: 包含 printableSkeleton 模板
+    *   `reader/`: 包含 readerSkeleton、readerTemplates、clientScript
+*   **【类型系统增强】新增 blocks 类型**:
+    *   新增 `src/types/blocks.ts`，定义区块相关类型
+    *   新增 `src/types/index.ts` 统一导出所有类型
+    *   新增 `src/utils/blockParser.ts` 区块解析工具
+    *   新增 `src/utils/encoding.ts` 编码处理工具
+*   **【其他更新】**:
+    *   新增 `services/graphCache.ts` 图谱缓存服务
+    *   新增 `src/constants.ts` 常量定义
+    *   新增 `styles/article-renderer.css` 文章渲染样式
+    *   新增 Vitest 测试配置和测试文件
 
 ### v1.6.5 (2026-04-15) - 测试框架集成与技能文件重构
 *   **【测试框架集成】Vitest 单元测试覆盖**:

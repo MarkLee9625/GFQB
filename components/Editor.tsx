@@ -1,40 +1,19 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Article, CONSTANTS } from '../types';
+import React, { useRef, useCallback, useEffect, useMemo } from 'react';
+import { Article } from '../src/types/models';
+import { isSpecialCategory } from '../src/constants';
 import { Icon } from './Icons';
-import { useBlobManager } from '../hooks/useBlobManager';
-import { fileToDataURL, compressImage } from '../src/utils/fileHelpers';
-import { cleanPastedHtml } from '../src/utils/pasteCleaner';
-import { generateArticleMeta, generateTitleOnly, scaleText } from '../services/aiService';
-import { extractAbstractFromPdf, convertPdfToImages } from '../src/services/pdf';
 import LoadingOverlay from './LoadingOverlay';
-
-// 封面/封底预览组件
-const AmbientBg: React.FC<{ src: string | null | undefined }> = ({ src }) => {
-  if (!src) return null;
-  return (
-    <div
-      className="absolute inset-0 w-full h-full bg-cover bg-center opacity-30 pointer-events-none z-0 transition-opacity duration-700"
-      style={{
-        backgroundImage: `url('${src}')`,
-        filter: 'blur(60px) saturate(180%) brightness(1.05)',
-        transform: 'scale(1.2)',
-      }}
-    />
-  );
-};
-
-const TechGrid: React.FC = () => (
-  <div
-    className="absolute inset-0 w-full h-full pointer-events-none z-[0] opacity-[0.03]"
-    style={{
-      backgroundImage: `
-            linear-gradient(#005596 1px, transparent 1px),
-            linear-gradient(90deg, #005596 1px, transparent 1px)
-        `,
-      backgroundSize: '40px 40px'
-    }}
-  />
-);
+import { ArticleRenderer } from './renderers';
+import FormattingToolbar from './editor/FormattingToolbar';
+import ImageToolbar from './editor/ImageToolbar';
+import EditorRightPanel from './editor/EditorRightPanel';
+import EditorFooter from './editor/EditorFooter';
+import { useEditorState } from './editor/hooks/useEditorState';
+import { useSelectionManager } from './editor/hooks/useSelectionManager';
+import { useEditorCommands } from './editor/hooks/useEditorCommands';
+import { useImageToolbar } from './editor/hooks/useImageToolbar';
+import { useFileUpload } from './editor/hooks/useFileUpload';
+import { useEditorKeyboard } from './editor/hooks/useEditorKeyboard';
 
 interface EditorProps {
   isOpen: boolean;
@@ -46,753 +25,104 @@ interface EditorProps {
 }
 
 export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onClose, onSave, onManageCats }) => {
-  const [formData, setFormData] = useState<Partial<Article>>({});
   const contentRef = useRef<HTMLDivElement>(null);
-  const blobManager = useBlobManager();
-  // 建立 Blob URL 到 Data URL 的映射，用于存盘时还原，避免编辑器过重
-  const blobToDataMap = useRef<Map<string, string>>(new Map());
-  const objectUrlsRef = useRef<string[]>([]);
-  const lastRangeRef = useRef<Range | null>(null);
-  const [tempPdf, setTempPdf] = useState<{ name: string, data: string } | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
-  const [showAiLoading, setShowAiLoading] = useState(false);
-  const [showTitleLoading, setShowTitleLoading] = useState(false);
-  const [isScalingText, setIsScalingText] = useState(false);
-  const [selectedImgEl, setSelectedImgEl] = useState<HTMLImageElement | null>(null);
-  const [imgToolbarPos, setImgToolbarPos] = useState<{ top: number; left: number } | null>(null);
-  const [imgCompressQuality, setImgCompressQuality] = useState(() => {
-    const saved = localStorage.getItem('SWS_IMG_COMPRESS_QUALITY');
-    return saved ? parseFloat(saved) : 0.8;
-  });
-  const [imgCompressMaxWidth, setImgCompressMaxWidth] = useState(() => {
-    const saved = localStorage.getItem('SWS_IMG_COMPRESS_MAX_WIDTH');
-    return saved ? parseInt(saved) : 1200;
-  });
-  const [imgCompressFormat, setImgCompressFormat] = useState<'webp' | 'jpeg' | 'original'>(() => {
-    const saved = localStorage.getItem('SWS_IMG_COMPRESS_FORMAT');
-    return (saved as 'webp' | 'jpeg' | 'original') || 'webp';
-  });
   const imgReplaceInputRef = useRef<HTMLInputElement | null>(null);
-  const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem('SWS_IMG_COMPRESS_QUALITY', String(imgCompressQuality));
-  }, [imgCompressQuality]);
+  const {
+    formData, setFormData,
+    title, setTitle,
+    tempPdf, setTempPdf,
+    isProcessing,
+    isGeneratingAi,
+    isGeneratingTitle,
+    showAiLoading,
+    showTitleLoading,
+    isScalingText,
+    saveToast, setSaveToast,
+    imgCompressQuality, setImgCompressQuality,
+    imgCompressMaxWidth, setImgCompressMaxWidth,
+    imgCompressFormat, setImgCompressFormat,
+    contentAreaStyle,
+    resetForArticle,
+  } = useEditorState({ isOpen, article, categories });
 
-  useEffect(() => {
-    localStorage.setItem('SWS_IMG_COMPRESS_MAX_WIDTH', String(imgCompressMaxWidth));
-  }, [imgCompressMaxWidth]);
+  const { saveSelection, restoreSelection } = useSelectionManager();
 
-  useEffect(() => {
-    localStorage.setItem('SWS_IMG_COMPRESS_FORMAT', imgCompressFormat);
-  }, [imgCompressFormat]);
+  const {
+    execCmd,
+    handleAutoIndent,
+    handleScaleText,
+    handleAiSummary,
+    handleAiTitle,
+    insertHtml,
+  } = useEditorCommands({
+    contentRef,
+    formData,
+    setFormData,
+    setIsGeneratingAi,
+    setIsGeneratingTitle,
+    setShowAiLoading,
+    setShowTitleLoading,
+    setIsScalingText,
+    saveSelection,
+    restoreSelection,
+  });
 
-  // 保存当前选区（光标位置）
-  const saveSelection = useCallback(() => {
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      lastRangeRef.current = selection.getRangeAt(0).cloneRange();
-    }
-  }, []);
+  const {
+    selectedImgEl,
+    imgToolbarPos,
+    handleEditorClick,
+    handleImgAlign,
+    handleImgSize,
+    handleImgReplace,
+    handleImgDelete,
+    handleImgCaption,
+  } = useImageToolbar();
 
-  // 恢复之前保存的选区
-  const restoreSelection = useCallback(() => {
-    const selection = window.getSelection();
-    if (selection && lastRangeRef.current) {
-      selection.removeAllRanges();
-      selection.addRange(lastRangeRef.current);
-    }
-  }, []);
-
-  const prevArticleIdRef = useRef<number | null>(null);
-  const wasOpenRef = useRef(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      const articleId = article.id;
-      const justOpened = !wasOpenRef.current;
-      wasOpenRef.current = true;
-      if (prevArticleIdRef.current !== articleId || justOpened) {
-        prevArticleIdRef.current = articleId;
-        setFormData({
-          title: article.title || '',
-          date: article.date || new Date().toISOString().split('T')[0],
-          category: article.category || (categories[0] || '默认'),
-          content: article.content || '',
-          id: article.id,
-          abstract: article.abstract || '',
-          tags: article.tags || [],
-          fontSize: article.fontSize || 18,
-          lineHeight: article.lineHeight || 2.0,
-          isPublished: article.isPublished || false
-        });
-        if (article.pdfData) {
-          setTempPdf({ name: 'Existing PDF', data: article.pdfData });
-        } else {
-          setTempPdf(null);
-        }
-        if (contentRef.current) {
-          contentRef.current.innerHTML = article.content || '';
-        }
-      }
-    } else {
-      wasOpenRef.current = false;
-      objectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
-      objectUrlsRef.current = [];
-    }
-  }, [isOpen, article.id, categories]);
-
-  const timeoutIdsRef = useRef<number[]>([]);
+  const {
+    handlePaste,
+    handleFile,
+    blobToDataMapRef,
+  } = useFileUpload({
+    contentRef,
+    formData,
+    title,
+    setFormData,
+    setIsProcessing,
+    insertHtml,
+    handleAutoIndent,
+    imgCompressMaxWidth,
+    imgCompressQuality,
+    imgCompressFormat,
+    setTempPdf,
+    saveSelection,
+    restoreSelection,
+  });
 
   const formDataRef = useRef(formData);
   formDataRef.current = formData;
-  const onSaveRef = useRef(onSave);
-  onSaveRef.current = onSave;
+  const onSaveRef = useRef((data: any) => { handleSave(); });
+  onSaveRef.current = (data: any) => { handleSave(); };
+
+  useEditorKeyboard({
+    isOpen,
+    contentRef,
+    formDataRef,
+    onSaveRef,
+    setSaveToast,
+    execCmd,
+  });
 
   useEffect(() => {
-    const handleKeys = (e: KeyboardEvent) => {
-      if (!isOpen) return;
+    resetForArticle(contentRef);
+  }, [isOpen, article.id, categories]);
 
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === 's') {
-          e.preventDefault();
-          const data = { ...formDataRef.current, content: contentRef.current?.innerHTML || '' };
-          if (!data.title) return;
-          onSaveRef.current(data);
-          setSaveToast('已自动保存');
-          setTimeout(() => setSaveToast(null), 1500);
-        }
-      }
+  const handleSave = useCallback((targetPublishState?: boolean) => {
+    if (!title) return alert("请输入标题");
 
-      if (e.altKey && e.key === '2') {
-        e.preventDefault();
-        execCmd('formatBlock', 'h2');
-      }
-
-      // 处理 Backspace 和 Delete 键，用于删除媒体容器
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
-
-        const range = selection.getRangeAt(0);
-
-        // [新增] 情况0：处理“选中”了媒体容器的情况 (非折叠选区)
-        if (!range.collapsed) {
-          const common = range.commonAncestorContainer;
-          // 检查选区是否包含或就是 media-container
-          // 简单策略：如果选区起始节点是元素，且该位置的子节点是 media-container
-          if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
-            const startNode = (range.startContainer as HTMLElement).childNodes[range.startOffset];
-            if (startNode && startNode.nodeType === Node.ELEMENT_NODE && (startNode as HTMLElement).classList.contains('media-container')) {
-              e.preventDefault();
-              (startNode as HTMLElement).remove();
-              return;
-            }
-          }
-          // 如果是普通文本选中，交给浏览器默认处理
-          return;
-        }
-
-        // 辅助函数：检查元素是否是媒体容器
-        const isMediaContainer = (element: Element): boolean => {
-          return element.classList.contains('media-container');
-        };
-
-        // 获取光标所在的容器
-        const container = range.commonAncestorContainer;
-
-        // 情况1：光标在空的 <p> 内，且前一个兄弟节点是 media-container
-        if (container.nodeType === Node.ELEMENT_NODE && (container as HTMLElement).tagName === 'P') {
-          const p = container as HTMLElement;
-          const isEmpty = p.innerHTML === '' || p.innerHTML === '<br>' || p.children.length === 0;
-          if (isEmpty) {
-            const prev = p.previousElementSibling;
-            if (prev && isMediaContainer(prev)) {
-              e.preventDefault();
-              prev.remove();
-              // 将光标移动到之前的位置（在 p 之前）
-              const parent = p.parentNode;
-              if (parent) {
-                const newRange = document.createRange();
-                const index = Array.from(parent.childNodes).indexOf(p);
-                newRange.setStart(parent, index);
-                newRange.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(newRange);
-                p.remove(); // 移除空的 <p>
-              }
-              return;
-            }
-          }
-        }
-
-        // 情况2：光标在元素的开头，且前一个兄弟元素是 media-container
-        if (range.startOffset === 0) {
-          // 如果光标在文本节点内，检查其父元素的前一个兄弟元素
-          let targetElement: HTMLElement | null = null;
-          if (container.nodeType === Node.TEXT_NODE) {
-            const parent = container.parentNode;
-            if (parent && parent.nodeType === Node.ELEMENT_NODE) {
-              targetElement = parent as HTMLElement;
-            }
-          } else if (container.nodeType === Node.ELEMENT_NODE) {
-            targetElement = container as HTMLElement;
-          }
-
-          if (targetElement) {
-            const prev = targetElement.previousElementSibling;
-            if (prev && isMediaContainer(prev)) {
-              e.preventDefault();
-              prev.remove();
-              // 光标留在当前元素的开头
-              const newRange = document.createRange();
-              if (container.nodeType === Node.TEXT_NODE) {
-                newRange.setStart(container, 0);
-              } else {
-                newRange.setStart(targetElement, 0);
-              }
-              newRange.collapse(true);
-              selection.removeAllRanges();
-              selection.addRange(newRange);
-              return;
-            }
-          }
-        }
-
-        // 情况3：光标在媒体容器之后的 <br> 或空白处，但不在任何元素内
-        // 例如，媒体容器后面直接跟一个 <br>，光标在 <br> 之后
-        // 这种场景较难检测，我们尝试查找光标前一个可见元素
-        // 简单起见，我们检查光标所在节点的前一个兄弟元素
-        let node: Node | null = container;
-        while (node && node !== contentRef.current) {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            const element = node as HTMLElement;
-            const prev = element.previousElementSibling;
-            if (prev && isMediaContainer(prev)) {
-              // 如果光标在元素的最开头，已经由情况2处理
-              // 这里处理光标在元素中间但前面是媒体容器的情况（例如，媒体容器后跟一个 <br>，光标在 <br> 后）
-              // 实际上，这种情况可能不会发生，因为媒体容器是块级元素，后面通常跟一个块级元素
-              // 为了安全，我们仍然检查
-              if (range.startOffset === 0) {
-                // 已经在情况2处理过，这里不再重复
-                break;
-              }
-              // 如果光标不在开头，但前一个兄弟是媒体容器，我们仍然删除媒体容器，并将光标移动到当前元素的开头
-              e.preventDefault();
-              prev.remove();
-              const newRange = document.createRange();
-              newRange.setStart(element, 0);
-              newRange.collapse(true);
-              selection.removeAllRanges();
-              selection.addRange(newRange);
-              return;
-            }
-            break;
-          }
-          node = node.parentNode;
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeys);
-    return () => {
-      window.removeEventListener('keydown', handleKeys);
-      timeoutIdsRef.current.forEach(id => clearTimeout(id));
-      timeoutIdsRef.current = [];
-    };
-  }, [isOpen]);
-
-  const execCmd = (cmd: string, val?: string) => {
-    document.execCommand(cmd, false, val);
-  };
-
-  const handleAutoIndent = () => {
-    if (!contentRef.current) return;
-    const body = contentRef.current;
-
-    // --- 步骤 1: 结构标准化 (将裸文本包裹进 <p>) ---
-    const children = Array.from(body.childNodes);
-    let currentWrapper: HTMLParagraphElement | null = null;
-
-    children.forEach((node: any) => {
-      // 判断是否为块级元素
-      const isBlock = node.nodeType === Node.ELEMENT_NODE &&
-        /^(P|DIV|H[1-6]|UL|OL|LI|BLOCKQUOTE|SECTION|ARTICLE|PRE|HR|TABLE)$/i.test((node as HTMLElement).tagName);
-
-      // 如果不是块级元素 (即文本、span、br、img等行内内容)
-      if (!isBlock) {
-        // 忽略纯空白文本，除非它在 wrapper 中
-        const isEmptyText = node.nodeType === Node.TEXT_NODE && !node.textContent?.trim();
-        if (isEmptyText && !currentWrapper) return;
-
-        if (!currentWrapper) {
-          currentWrapper = document.createElement('p');
-          body.insertBefore(currentWrapper, node);
-        }
-        currentWrapper.appendChild(node);
-      } else {
-        currentWrapper = null; // 遇到块级元素，打断当前的包裹逻辑
-      }
-    });
-
-    // --- 步骤 2: 递归应用样式 ---
-    const processNode = (node: Node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as HTMLElement;
-        const tag = el.tagName.toLowerCase();
-
-        // 递归处理子节点
-        Array.from(el.children).forEach(child => processNode(child));
-
-        // 跳过特殊的卡片组件
-        if (el.classList.contains('pdf-summary-card')) return;
-
-        // 策略 A: 针对 P 标签 (激进缩进)
-        if (tag === 'p') {
-          const hasText = el.innerText.trim().length > 0;
-          const hasMedia = el.querySelector('img, video, audio, iframe');
-
-          // 逻辑：只要有文字就缩进；或者完全没有媒体也缩进。
-          // 唯独：没文字 且 有媒体 (纯图片段落) -> 不缩进
-          if (hasText || !hasMedia) {
-            el.style.textIndent = '2em';
-            el.style.marginBottom = '0'; // 修改为 0
-            el.style.textAlign = 'justify';
-            el.style.lineHeight = '2.0';
-          } else {
-            // 纯图片段落：清除缩进，居中
-            el.style.textIndent = '0';
-            el.style.textAlign = 'center';
-            el.style.marginBottom = '0'; // 修改为 0
-          }
-        }
-        // 策略 B: 针对 DIV 标签 (保守缩进)
-        else if (tag === 'div') {
-          // 跳过媒体容器，不要给它加缩进
-          if (el.classList.contains('media-container')) return;
-
-          if (!el.querySelector('img, video, audio, iframe')) {
-            el.style.textIndent = '2em';
-            el.style.marginBottom = '0'; // 修改为 0
-            el.style.textAlign = 'justify';
-          }
-        }
-      }
-    };
-
-    processNode(body);
-
-    // 强制触发 React 状态同步
-    setFormData(prev => ({ ...prev, content: body.innerHTML }));
-  };
-
-  const handleScaleText = async (mode: 'expand' | 'shrink') => {
-    const editorElement = contentRef.current;
-    if (!editorElement) return;
-    
-    // 1. 获取当前选区
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
-      alert("请先用鼠标选中需要伸缩的文本段落！");
-      return;
-    }
-
-    const selectedText = selection.toString();
-    
-    // 2. 存下当前光标/选区（利用组件内已有的 saveSelection 方法）
-    saveSelection();
-    setIsScalingText(true);
-
-    try {
-      // 3. 调用 AI 进行伸缩
-      const aiResult = await scaleText(selectedText, mode);
-      
-      // 4. 恢复选区并进行安全替换
-      if (document.activeElement !== editorElement) {
-        editorElement.focus();
-      }
-      restoreSelection();
-      
-      // 使用原生的 insertText 保证纯文本的安全替换，且支持浏览器的撤销(Undo)栈
-      document.execCommand('insertText', false, aiResult);
-      
-      // 5. 立即同步 React 状态 (关键防丢失屏障！)
-      setFormData(prev => ({ ...prev, content: editorElement.innerHTML }));
-      
-      // 6. 更新选区引用
-      saveSelection();
-    } catch (err) {
-      alert(`AI ${mode === 'expand' ? '扩写' : '精简'}失败: ` + (err instanceof Error ? err.message : "未知错误"));
-    } finally {
-      setIsScalingText(false);
-    }
-  };
-
-  const handleAiSummary = async () => {
-    const text = contentRef.current?.innerText || '';
-    if (!text || text.length < 50) return alert("内容太少，AI 无法生成总结");
-
-    // 防误触保护：如果已有标题，提示用户
-    if (formData.title && formData.title.trim() !== '' && formData.title !== '未命名文章') {
-      if (!window.confirm("这将覆盖现有标题，确定继续吗？")) return;
-    }
-
-    setShowAiLoading(true);
-    setIsGeneratingAi(true);
-    try {
-      const result = await generateArticleMeta(text);
-      setFormData(prev => ({
-        ...prev,
-        abstract: result.abstract,
-        title: result.title, // 同时更新标题
-        tags: result.keywords || prev.tags // 同步更新标签
-      }));
-    } catch (err) {
-      alert("AI 总结生成失败: " + (err instanceof Error ? err.message : "未知错误"));
-    } finally {
-      setShowAiLoading(false);
-      setIsGeneratingAi(false);
-    }
-  };
-
-  const handleAiTitle = async () => {
-    const text = contentRef.current?.innerText || '';
-    if (!text || text.length < 50) return alert("内容太少，AI 无法生成标题");
-
-    setShowTitleLoading(true);
-    setIsGeneratingTitle(true);
-    try {
-      const title = await generateTitleOnly(text);
-      setFormData(prev => ({ ...prev, title }));
-    } catch (err) {
-      alert("AI 标题生成失败: " + (err instanceof Error ? err.message : "未知错误"));
-    } finally {
-      setShowTitleLoading(false);
-      setIsGeneratingTitle(false);
-    }
-  };
-
-  const insertHtml = (htmlOrNode: string | Node) => {
-    const editorElement = contentRef.current;
-    if (!editorElement) return;
-
-    // 确保编辑器获得焦点
-    if (document.activeElement !== editorElement) {
-      editorElement.focus();
-    }
-
-    // 恢复之前的选区
-    restoreSelection();
-
-    if (typeof htmlOrNode === 'string') {
-      // 尝试原生的 execCommand
-      const success = document.execCommand('insertHTML', false, htmlOrNode);
-      if (!success) {
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          range.deleteContents();
-          const fragment = range.createContextualFragment(htmlOrNode);
-          range.insertNode(fragment);
-        }
-      }
-    } else {
-      // 直接插入 DOM 节点
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        range.insertNode(htmlOrNode);
-
-        // 移动光标到元素后
-        const newRange = document.createRange();
-        newRange.setStartAfter(htmlOrNode);
-        newRange.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(newRange);
-      } else {
-        editorElement.appendChild(htmlOrNode);
-      }
-    }
-
-    // 插入完成后，更新并保存新光标位置
-    saveSelection();
-
-    // 重要：移除 setFormData 指令，防止 React 渲染擦除刚才插入的 DOM
-  };
-
-  const handlePaste = async (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const clipboardData = e.clipboardData;
-
-    if (clipboardData.files && clipboardData.files.length > 0) {
-      const file = clipboardData.files[0];
-      if (file.type.startsWith('image/')) {
-        setIsProcessing(true);
-        try {
-          const base64 = await fileToDataURL(file);
-          const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
-          insertHtml(`<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box; text-align: center; display: block;"><img src="${src}" style="width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0 auto; object-fit: contain;" class="max-w-full h-auto object-contain" /></div><p><br/></p>`);
-        } catch {
-          alert('粘贴图片失败');
-        } finally {
-          setIsProcessing(false);
-        }
-        return;
-      }
-    }
-
-    const html = clipboardData.getData('text/html');
-    const text = clipboardData.getData('text/plain');
-
-    if (html) {
-      const cleaned = cleanPastedHtml(html);
-      insertHtml(cleaned);
-      setTimeout(() => handleAutoIndent(), 50);
-    } else if (text) {
-      const paragraphs = text.split(/\n\s*\n|\r\n\s*\r\n/);
-      const htmlContent = paragraphs
-        .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
-        .join('');
-      insertHtml(htmlContent);
-      setTimeout(() => handleAutoIndent(), 50);
-    }
-  };
-
-  const handleEditorClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'IMG' && contentRef.current?.contains(target)) {
-      const img = target as HTMLImageElement;
-      if (selectedImgEl && selectedImgEl !== img) {
-        selectedImgEl.classList.remove('img-selected');
-      }
-      img.classList.add('img-selected');
-      setSelectedImgEl(img);
-      const rect = img.getBoundingClientRect();
-      const toolbarHeight = 40;
-      let top = rect.top - toolbarHeight - 8;
-      if (top < 8) top = rect.bottom + 8;
-      const left = rect.left + rect.width / 2;
-      setImgToolbarPos({ top, left });
-    } else {
-      if (selectedImgEl) {
-        selectedImgEl.classList.remove('img-selected');
-        setSelectedImgEl(null);
-        setImgToolbarPos(null);
-      }
-    }
-  };
-
-  const handleImgAlign = (align: 'left' | 'center' | 'right') => {
-    if (!selectedImgEl) return;
-    const container = selectedImgEl.closest('div') as HTMLElement | null;
-    if (container) {
-      container.style.textAlign = align;
-    }
-    selectedImgEl.style.margin = align === 'center' ? '0 auto' : align === 'left' ? '0 auto 0 0' : '0 0 0 auto';
-    selectedImgEl.style.display = 'block';
-  };
-
-  const handleImgSize = (size: '30%' | '60%' | '100%') => {
-    if (!selectedImgEl) return;
-    const container = selectedImgEl.closest('div') as HTMLElement | null;
-    if (container) {
-      container.style.width = size;
-      container.style.maxWidth = size;
-    }
-  };
-
-  const handleImgReplace = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedImgEl) return;
-    setIsProcessing(true);
-    try {
-      const base64 = await fileToDataURL(file);
-      const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
-      selectedImgEl.setAttribute('src', src);
-    } catch {
-      alert('替换图片失败');
-    } finally {
-      setIsProcessing(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleImgDelete = () => {
-    if (!selectedImgEl) return;
-    const container = selectedImgEl.closest('div') as HTMLElement | null;
-    if (container && container.parentElement) {
-      const nextP = container.nextElementSibling;
-      container.remove();
-      if (nextP && nextP.tagName === 'P' && (nextP.innerHTML === '<br>' || nextP.innerHTML === '')) {
-        nextP.remove();
-      }
-    } else {
-      selectedImgEl.remove();
-    }
-    setSelectedImgEl(null);
-    setImgToolbarPos(null);
-  };
-
-  const handleImgCaption = () => {
-    if (!selectedImgEl) return;
-    const container = selectedImgEl.closest('div') as HTMLElement | null;
-    if (!container) return;
-    const existingCaption = container.nextElementSibling;
-    if (existingCaption && existingCaption.classList.contains('image-caption')) {
-      existingCaption.remove();
-      return;
-    }
-    const caption = document.createElement('p');
-    caption.className = 'image-caption';
-    caption.contentEditable = 'true';
-    caption.innerHTML = '请输入图片说明...';
-    caption.style.cssText = 'text-align: center; font-size: 14px; color: #6b7280; font-style: italic; text-indent: 0; margin: 4px 0 16px 0; line-height: 1.6;';
-    container.parentElement!.insertBefore(caption, container.nextSibling);
-    const range = document.createRange();
-    range.selectNodeContents(caption);
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
-  };
-
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>, type: 'img' | 'video' | 'audio' | 'pdf') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-    const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
-    const MAX_AUDIO_SIZE = 20 * 1024 * 1024;
-    const MAX_PDF_SIZE = 50 * 1024 * 1024;
-
-    let maxSize = MAX_IMAGE_SIZE;
-    if (type === 'video') maxSize = MAX_VIDEO_SIZE;
-    else if (type === 'audio') maxSize = MAX_AUDIO_SIZE;
-    else if (type === 'pdf') maxSize = MAX_PDF_SIZE;
-
-    if (file.size > maxSize) {
-      alert(`文件过大，请压缩后上传`);
-      return;
-    }
-
-    setIsProcessing(true);
-    const timeoutId = window.setTimeout(async () => {
-      if (!contentRef.current) return;
-      try {
-                if (type === 'img') {
-          const base64 = await fileToDataURL(file);
-          const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
-                // 核心修复：在图片后追加 <p><br/></p>，确保光标有落脚点，且自动换行
-                insertHtml(`<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box; text-align: center; display: block;"><img src="${src}" style="width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0 auto; object-fit: contain;" class="max-w-full h-auto object-contain" /></div><p><br/></p>`);
-        } else if (type === 'pdf') {
-          const base64 = await fileToDataURL(file);
-
-          // 智能提取 PDF 标题和摘要 (无论哪种模式都执行)
-          try {
-            const extractResult = await extractAbstractFromPdf(base64);
-            if (extractResult.success) {
-              if (!formData.title || formData.title === '未命名文章') {
-                setFormData(prev => ({ ...prev, title: extractResult.title || prev.title }));
-              }
-              // 自动提取关键词并作为标签
-              if (extractResult.keywords && extractResult.keywords.length > 0) {
-                setFormData(prev => ({
-                  ...prev,
-                  tags: [...new Set([...(prev.tags || []), ...extractResult.keywords!])]
-                }));
-              }
-              // 只有当当前摘要为空时，才用提取的摘要覆盖
-              if (!formData.abstract) {
-                setFormData(prev => ({ ...prev, abstract: extractResult.abstract || prev.abstract }));
-              }
-            }
-          } catch (err) {
-            console.error('PDF extraction failed:', err);
-          }
-
-          // 询问用户处理意图
-          const insertAsContent = window.confirm(
-            "您希望如何处理此 PDF？\n\n【确定】转为图片插入正文（推荐，可直接打印，所见即所得）\n【取消】作为附件挂载（仅提供下载链接）"
-          );
-
-          if (insertAsContent) {
-            try {
-              const images = await convertPdfToImages(file);
-              console.log(`[Editor] PDF 转换完成，准备分页插入 (${images.length} 页)...`);
-
-              for (let i = 0; i < images.length; i++) {
-                const dataUrl = images[i];
-                const blobUrl = blobManager.getBlobUrl(dataUrl);
-                if (blobUrl) {
-                  blobToDataMap.current.set(blobUrl, dataUrl);
-
-                  const container = document.createElement('div');
-                  container.className = 'media-container pdf-page-container overflow-hidden';
-                  container.contentEditable = 'false';
-container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box; text-align: center; margin: 3rem auto; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; display: block;';
-
-                  const img = document.createElement('img');
-                  img.src = blobUrl;
-                  img.className = 'pdf-page-image max-w-full h-auto object-contain';
-                  img.style.cssText = 'width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0; padding: 0;';
-                  img.alt = `PDF Page ${i + 1}`;
-
-                  container.appendChild(img);
-                  insertHtml(container);
-
-
-                  console.log(`[Editor] 第 ${i + 1} 页已安全挂载`);
-                }
-              }
-
-              console.log('[Editor] PDF 所有页面已成功流式插入');
-
-              const emptyParagraph = document.createElement('p');
-              emptyParagraph.innerHTML = '<br>';
-              insertHtml(emptyParagraph);
-
-              const editorElement = contentRef.current;
-              if (editorElement) {
-                setFormData(prev => ({ ...prev, content: editorElement.innerHTML }));
-              }
-            } catch (err) {
-              console.error('[Editor] PDF 转换流程异常:', err);
-              alert(`PDF 转换失败: ${err instanceof Error ? err.message : '未知错误'}\n\n请尝试刷新页面重试。`);
-            }
-          } else {
-            // 原有的附件逻辑 (仅设置 PDF 数据)
-            setTempPdf({ name: file.name, data: base64 });
-          }
-        } else {
-          const src = await fileToDataURL(file);
-
-          // 核心修改：使用 contentEditable="false" 包裹视频，使其成为一个整体块
-          // 这样 Backspace 键可以一次性删除它，且光标不会跑进 video 标签里
-          const tag = type === 'video' ?
-            `<div class="media-container" contenteditable="false"><video controls src="${src}" style="max-width:100%; max-height:500px; border-radius:4px; background:#000;"></video></div><p><br/></p>` :
-            `<div class="media-container" contenteditable="false"><audio controls src="${src}" style="width:80%; max-width:500px;"></audio></div><p><br/></p>`;
-
-          insertHtml(tag);
-        }
-      } catch (error) {
-        alert("上传失败");
-      } finally {
-        setIsProcessing(false);
-        e.target.value = '';
-      }
-    }, 50);
-    timeoutIdsRef.current.push(timeoutId);
-  };
-
-  const handleSave = (targetPublishState?: boolean) => {
-    if (!formData.title) return alert("请输入标题");
-
-    // 存盘前克隆 DOM 进行“数据还原” (将临时 Blob URL 换回持久 DataURL)
     let finalContent = contentRef.current?.innerHTML || '';
 
-    if (blobToDataMap.current.size > 0) {
+    if (blobToDataMapRef.current.size > 0) {
       const parser = new DOMParser();
       const doc = parser.parseFromString(finalContent, 'text/html');
       const mediaElements = doc.querySelectorAll('img, video, audio, source');
@@ -801,7 +131,7 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
       mediaElements.forEach(el => {
         const src = el.getAttribute('src');
         if (src && src.startsWith('blob:')) {
-          const dataUrl = blobToDataMap.current.get(src);
+          const dataUrl = blobToDataMapRef.current.get(src);
           if (dataUrl) {
             el.setAttribute('src', dataUrl);
             replacedCount++;
@@ -811,24 +141,65 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
 
       if (replacedCount > 0) {
         finalContent = doc.body.innerHTML;
-        console.log(`[Editor] 存盘还原：已将 ${replacedCount} 个临时链接恢复为持久数据`);
       }
     }
 
     onSave({
       ...formData,
+      title,
       content: finalContent,
       pdfData: tempPdf?.data,
       isPublished: targetPublishState !== undefined ? targetPublishState : formData.isPublished
     });
-  };
+  }, [formData, title, tempPdf, onSave]);
+
+  const stableOnManageCats = useRef(onManageCats);
+  stableOnManageCats.current = onManageCats;
+
+  const handleManageCatsStable = useCallback(() => {
+    stableOnManageCats.current();
+  }, []);
+
+  const handleImgReplaceWithSettings = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    handleImgReplace(e, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
+  }, [handleImgReplace, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat]);
+
+  const handleArticleUpdate = useCallback((id: number, updates: Partial<Article>) => {
+    setFormData(prev => ({ ...prev, ...updates }));
+  }, [setFormData]);
+
+  const handleImageUpload = useCallback((type: 'cover' | 'back') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      handleFile(e as any, 'img');
+    };
+    input.click();
+  }, [handleFile]);
+
+  const handleContentClick = useCallback((e: React.MouseEvent) => {
+    handleEditorClick(e, contentRef);
+  }, [handleEditorClick]);
+
+  const handleFieldChange = useCallback((field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, [setFormData]);
+
+  const articleForRenderer = useMemo(
+    () => ({ ...formData, title } as Article),
+    [formData, title]
+  );
+
+  const noop = useCallback(() => {}, []);
 
   if (!isOpen) return null;
 
   return (
       <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-[100] flex items-center justify-center p-0 md:p-6 overflow-hidden w-full">
 
-      {/* AI 摘要生成 Loading */}
       {showAiLoading && (
         <LoadingOverlay 
           isLoading={showAiLoading} 
@@ -836,7 +207,6 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
         />
       )}
 
-      {/* AI 标题生成 Loading */}
       {showTitleLoading && (
         <LoadingOverlay 
           isLoading={showTitleLoading} 
@@ -858,7 +228,6 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
       )}
 
       <div className="bg-white w-full max-w-[1600px] h-full rounded-2xl flex flex-col shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] border border-gray-200 overflow-hidden">
-        {/* Header */}
         <div className="p-5 border-b border-gray-100 flex justify-between items-center group">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -873,16 +242,13 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
           </button>
         </div>
 
-        {/* Workspace: Split Panel */}
         <div className="flex-1 flex overflow-hidden min-h-0">
-          {/* Left Panel: Content Editor */}
           <div className="flex-1 flex flex-col border-r border-gray-100 bg-gray-50/30 min-h-0">
-            {/* Dynamic Title Input */}
             <div className="p-8 pb-4 flex items-center gap-2">
               <input
                 className="flex-1 bg-transparent text-3xl font-bold border-none placeholder:text-gray-300 focus:outline-none focus:ring-0 leading-tight"
-                value={formData.title || ''}
-                onChange={e => setFormData({ ...formData, title: e.target.value })}
+                value={title}
+                onChange={e => setTitle(e.target.value)}
                 placeholder="在这里输入引人入胜的标题..."
               />
               <button
@@ -895,164 +261,26 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
               </button>
             </div>
 
-            {/* Formatting Toolbar */}
-            <div className="px-8 py-2 flex items-center gap-1 border-b border-gray-100 bg-white sticky top-0 z-20">
-              <div className="flex items-center gap-0.5 mr-2">
-                {['bold', 'italic', 'underline'].map(cmd => (
-                  <button
-                    key={cmd}
-                    onClick={() => execCmd(cmd)}
-                    className="p-2 rounded hover:bg-gray-100 text-gray-600 transition-colors"
-                    title={cmd}
-                  >
-                    <Icon name={cmd as any} className="w-4 h-4" />
-                  </button>
-                ))}
-              </div>
-
-              <div className="w-px h-4 bg-gray-200 mx-1"></div>
-
-              <div className="flex items-center gap-1 mx-2">
-                <button
-                  onClick={() => execCmd('formatBlock', 'h2')}
-                  className="px-2 py-1 text-xs font-black text-gray-700 hover:bg-gray-100 rounded border border-transparent hover:border-gray-200"
-                  title="二级标题"
-                >H2</button>
-                <button
-                  onClick={() => execCmd('formatBlock', 'blockquote')}
-                  className="px-2 py-1 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded"
-                  title="引用"
-                >Quote</button>
-                <button
-                  onClick={() => execCmd('insertUnorderedList')}
-                  className="p-2 rounded hover:bg-gray-100 text-gray-600 transition-colors"
-                  title="无序列表"
-                >
-                  <Icon name="menu" className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="w-px h-4 bg-gray-200 mx-1"></div>
-
-              <div className="flex items-center gap-1 mx-2">
-                <button
-                  onClick={() => execCmd('justifyLeft')}
-                  className="p-2 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-800 transition-colors"
-                  title="左对齐"
-                >
-                  <Icon name="align-left" className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    const selection = window.getSelection();
-                    if (selection && selection.rangeCount > 0) {
-                      const container = selection.getRangeAt(0).commonAncestorContainer;
-                      const element = container.nodeType === 3 ? container.parentElement : (container as HTMLElement);
-                      if (element && (element.style.textAlign === 'center' || element.getAttribute('align') === 'center')) {
-                        execCmd('justifyLeft');
-                      } else {
-                        execCmd('justifyCenter');
-                      }
-                    }
-                  }}
-                  className="p-2 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-800 transition-colors"
-                  title="居中切换"
-                >
-                  <Icon name="align-center" className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="w-px h-4 bg-gray-200 mx-1"></div>
-
-              <div className="ml-2">
-                <button
-                  onClick={handleAutoIndent}
-                  className="px-3 py-1 bg-blue-50 text-brand-blue text-[11px] font-bold rounded hover:bg-blue-100 transition-colors border border-blue-100 shadow-sm"
-                  title="智能首行缩进"
-                >智能缩进</button>
-              </div>
-
-              <div className="w-px h-4 bg-gray-200 mx-1"></div>
-
-              <div className="flex items-center gap-2 mx-1">
-                <button
-                  onClick={() => handleScaleText('expand')}
-                  disabled={isScalingText}
-                  className={`flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded border shadow-sm transition-all ${
-                    isScalingText ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-purple-50 text-purple-600 border-purple-100 hover:bg-purple-100 hover:-translate-y-0.5'
-                  }`}
-                  title="AI 智能扩写选中段落"
-                >
-                  {isScalingText ? <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin"></div> : '➕'}
-                  AI 扩写
-                </button>
-                <button
-                  onClick={() => handleScaleText('shrink')}
-                  disabled={isScalingText}
-                  className={`flex items-center gap-1 px-3 py-1 text-[11px] font-bold rounded border shadow-sm transition-all ${
-                    isScalingText ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100 hover:-translate-y-0.5'
-                  }`}
-                  title="AI 智能精简选中段落"
-                >
-                  {isScalingText ? <div className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin"></div> : '➖'}
-                  AI 精简
-                </button>
-              </div>
-
-              <div className="flex-1"></div>
-
-              <div className="flex gap-2">
-                <label className="cursor-pointer p-2 hover:bg-blue-50 text-brand-blue rounded transition-colors group relative">
-                  <Icon name="image" className="w-4 h-4" />
-                  <input type="file" className="hidden" accept="image/*" onChange={e => handleFile(e, 'img')} />
-                </label>
-                <label className="cursor-pointer p-2 hover:bg-purple-50 text-purple-600 rounded transition-colors relative">
-                  <Icon name="video" className="w-4 h-4" />
-                  <input type="file" className="hidden" accept="video/*" onChange={e => handleFile(e, 'video')} />
-                </label>
-                <label className="cursor-pointer p-2 hover:bg-red-50 text-red-500 rounded transition-colors relative">
-                  <Icon name="pdf" className="w-4 h-4" />
-                  <input type="file" className="hidden" accept="application/pdf" onChange={e => handleFile(e, 'pdf')} />
-                </label>
-              </div>
-            </div>
-
-            {/* Editable Body */}
-            {formData.category === '封面' || formData.category === '封底' ? (
-    <div className="flex-1 relative overflow-hidden bg-gray-50 flex items-center justify-center min-h-[600px]">
-      <TechGrid />
-      <AmbientBg src={formData.category === '封面' ? formData.coverImage : formData.backImage} />
-      <div className="relative z-10 w-full h-full p-0 flex items-center justify-center">
-        {formData.category === '封面' ? (
-          formData.coverImage ? (
-            <img 
-              src={formData.coverImage} 
-              className="max-w-full max-h-full object-contain mix-blend-multiply" 
-              alt="封面预览" 
+            <FormattingToolbar
+              onExecCmd={execCmd}
+              onAutoIndent={handleAutoIndent}
+              onScaleText={handleScaleText}
+              isScalingText={isScalingText}
+              onFile={handleFile}
             />
-          ) : (
-            <div className="text-center text-gray-400 p-8 bg-white/80 rounded-lg backdrop-blur-sm">
-              <div className="text-lg font-bold mb-2">未设置封面图片</div>
-              <div className="text-sm">请在右侧控制面板上传图片</div>
-            </div>
-          )
-        ) : formData.backImage ? (
-          <img 
-            src={formData.backImage} 
-            className="max-w-full max-h-full object-contain mix-blend-multiply" 
-            alt="封底预览" 
-          />
-        ) : (
-          <div className="text-center text-gray-400 p-8 bg-white/80 rounded-lg backdrop-blur-sm">
-            <div className="text-lg font-bold mb-2">未设置封底图片</div>
-            <div className="text-sm">请在右侧控制面板上传图片</div>
-          </div>
-        )}
-      </div>
-      <div className="absolute bottom-4 right-4 z-20 bg-black/70 text-white text-xs px-3 py-2 rounded backdrop-blur-sm">
-        请在右侧面板更换图片
-      </div>
-    </div>
+
+            {isSpecialCategory(formData.category) ? (
+              <div className="flex-1 relative overflow-hidden bg-gray-50 min-h-[600px]">
+                <ArticleRenderer
+                  article={articleForRenderer}
+                  mode="edit"
+                  isEditable={true}
+                  onArticleUpdate={handleArticleUpdate}
+                  onImageUpload={handleImageUpload}
+                  onNext={noop}
+                  useAlternateDesign={false}
+                />
+              </div>
             ) : (
               <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full relative">
                 <div
@@ -1060,310 +288,51 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
                   className="sws-prose editor-area min-h-full focus:outline-none"
                   contentEditable
                   onPaste={handlePaste}
-                  onClick={handleEditorClick}
+                  onClick={handleContentClick}
                   onMouseUp={saveSelection}
                   onKeyUp={saveSelection}
                   onBlur={saveSelection}
-                  style={{
-                    fontSize: `${formData.fontSize}px`,
-                    lineHeight: formData.lineHeight,
-                    textAlign: 'justify'
-                  }}
+                  style={contentAreaStyle}
                 />
                 {imgToolbarPos && selectedImgEl && (
-                  <div
-                    className="fixed z-[300] flex items-center gap-1 bg-white rounded-lg shadow-xl border border-gray-200 px-2 py-1.5"
-                    style={{
-                      top: `${imgToolbarPos.top}px`,
-                      left: `${imgToolbarPos.left}px`,
-                      transform: 'translateX(-50%)',
-                    }}
-                  >
-                    <button onClick={() => handleImgAlign('left')} className="p-1.5 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-800 transition-colors" title="左对齐">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
-                    </button>
-                    <button onClick={() => handleImgAlign('center')} className="p-1.5 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-800 transition-colors" title="居中">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
-                    </button>
-                    <button onClick={() => handleImgAlign('right')} className="p-1.5 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-800 transition-colors" title="右对齐">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
-                    </button>
-                    <div className="w-px h-4 bg-gray-200 mx-0.5"></div>
-                    <button onClick={() => handleImgSize('30%')} className="px-1.5 py-0.5 text-[10px] font-bold text-gray-500 hover:bg-gray-100 rounded hover:text-gray-800 transition-colors" title="小图 30%">S</button>
-                    <button onClick={() => handleImgSize('60%')} className="px-1.5 py-0.5 text-[10px] font-bold text-gray-500 hover:bg-gray-100 rounded hover:text-gray-800 transition-colors" title="中图 60%">M</button>
-                    <button onClick={() => handleImgSize('100%')} className="px-1.5 py-0.5 text-[10px] font-bold text-gray-500 hover:bg-gray-100 rounded hover:text-gray-800 transition-colors" title="大图 100%">L</button>
-                    <div className="w-px h-4 bg-gray-200 mx-0.5"></div>
-                    <label className="p-1.5 hover:bg-blue-50 rounded text-gray-500 hover:text-brand-blue cursor-pointer transition-colors" title="替换图片">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      <input type="file" className="hidden" accept="image/*" onChange={handleImgReplace} ref={imgReplaceInputRef} />
-                    </label>
-                    <button onClick={handleImgCaption} className="p-1.5 hover:bg-purple-50 rounded text-gray-500 hover:text-purple-600 transition-colors" title="添加/移除题注">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7h16M4 12h10M4 17h12"/></svg>
-                    </button>
-                    <button onClick={handleImgDelete} className="p-1.5 hover:bg-red-50 rounded text-gray-500 hover:text-red-500 transition-colors" title="删除图片">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    </button>
-                  </div>
+                  <ImageToolbar
+                    position={imgToolbarPos}
+                    onAlign={handleImgAlign}
+                    onSize={handleImgSize}
+                    onReplace={handleImgReplaceWithSettings}
+                    onCaption={handleImgCaption}
+                    onDelete={handleImgDelete}
+                    replaceInputRef={imgReplaceInputRef}
+                  />
                 )}
               </div>
             )}
           </div>
 
-          {/* Right Panel: Settings & Meta */}
-          <div className="w-[400px] flex flex-col bg-white overflow-y-auto scrollbar-hide border-l border-gray-100">
-            <div className="p-8 flex flex-col gap-8">
-
-              {/* Section: Basic Info */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">基础信息</h3>
-                </div>
-
-                <div className="space-y-4 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-                  {/* 仅在封面/封底显示分类管理 */}
-                  {(formData.category === '封面' || formData.category === '封底') ? (
-                    <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-bold text-gray-500 flex justify-between">
-                        特殊页面类型 <button onClick={onManageCats} className="text-brand-blue hover:underline">管理</button>
-                      </label>
-                      <select
-                        className="w-full bg-white border border-gray-200 rounded-lg p-2 text-sm focus:border-brand-blue outline-none"
-                        value={formData.category}
-                        onChange={e => setFormData({ ...formData, category: e.target.value })}
-                      >
-                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  ) : (
-                    /* 普通文章显示标签输入 */
-                    <div className="flex flex-col gap-2">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-bold text-gray-500 flex items-center gap-1">
-                          <Icon name="search" className="w-2.5 h-2.5" /> 标签 / 关键词 (支持人工录入)
-                        </label>
-                      </div>
-                      <div
-                        className="flex flex-wrap gap-2 p-2 bg-white border border-gray-200 rounded-lg focus-within:border-brand-blue transition-all min-h-[42px] cursor-text"
-                        onClick={(e) => {
-                          const input = e.currentTarget.querySelector('input');
-                          if (input) input.focus();
-                        }}
-                      >
-                        {(formData.tags || []).map((tag, idx) => (
-                          <span key={idx} className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-brand-blue text-[11px] font-bold rounded-md">
-                            {tag}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const newTags = (formData.tags || []).filter((_, i) => i !== idx);
-                                setFormData({ ...formData, tags: newTags });
-                              }}
-                              className="hover:text-red-500"
-                            >
-                              <Icon name="maximize" className="w-2.5 h-2.5 rotate-45" />
-                            </button>
-                          </span>
-                        ))}
-                        <input
-                          type="text"
-                          className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-gray-400"
-                          placeholder={(formData.tags || []).length === 0 ? "点击输入标签，回车或空格分隔..." : "继续输入..."}
-                          onBlur={(e) => {
-                            const val = e.currentTarget.value.trim().replace(/[,，]/g, ' ');
-                            if (val) {
-                              const newTags = val.split(/\s+/).filter(t => t && !(formData.tags || []).includes(t));
-                              if (newTags.length > 0) {
-                                setFormData({ ...formData, tags: [...(formData.tags || []), ...newTags] });
-                                e.currentTarget.value = '';
-                              }
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ',' || e.key === '，' || e.key === ' ') {
-                              e.preventDefault();
-                              const val = e.currentTarget.value.trim().replace(/[,，\s]/g, '');
-                              if (val && !(formData.tags || []).includes(val)) {
-                                setFormData({ ...formData, tags: [...(formData.tags || []), val] });
-                                e.currentTarget.value = '';
-                              }
-                            }
-                            if (e.key === 'Backspace' && e.currentTarget.value === '' && (formData.tags || []).length > 0) {
-                              const newTags = (formData.tags || []).slice(0, -1);
-                              setFormData({ ...formData, tags: newTags });
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="text-[10px] text-gray-400 flex justify-between px-1">
-                        <span>支持回车、空格、逗号分隔</span>
-                        <span>{(formData.tags || []).length} / 10 个建议</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Section: Typography */}
-              <div className="space-y-4">
-                <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">排版控制</h3>
-                <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 space-y-6">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
-                      <span>正文字号</span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200">{formData.fontSize}px</span>
-                    </div>
-                    <input
-                      type="range" min="12" max="36" step="1"
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-blue"
-                      value={formData.fontSize}
-                      onChange={e => setFormData({ ...formData, fontSize: parseInt(e.target.value) })}
-                    />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
-                      <span>行间距</span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200">{formData.lineHeight}x</span>
-                    </div>
-                    <input
-                      type="range" min="1.0" max="3.0" step="0.1"
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-blue"
-                      value={formData.lineHeight}
-                      onChange={e => setFormData({ ...formData, lineHeight: parseFloat(e.target.value) })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section: Image Compression */}
-              <div className="space-y-4">
-                <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">图片压缩</h3>
-                <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 space-y-5">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
-                      <span>输出格式</span>
-                    </div>
-                    <div className="flex gap-1.5">
-                      {([
-                        { value: 'webp' as const, label: 'WebP', desc: '体积最小' },
-                        { value: 'jpeg' as const, label: 'JPEG', desc: '兼容最好' },
-                        { value: 'original' as const, label: '原格式', desc: '不转码' },
-                      ]).map(opt => (
-                        <button
-                          key={opt.value}
-                          onClick={() => setImgCompressFormat(opt.value)}
-                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                            imgCompressFormat === opt.value
-                              ? 'bg-brand-blue text-white border-brand-blue shadow-sm'
-                              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          {opt.label}
-                          <span className="block text-[8px] font-normal opacity-70">{opt.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
-                      <span>最大宽度</span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200">{imgCompressMaxWidth}px</span>
-                    </div>
-                    <input
-                      type="range" min="400" max="2400" step="100"
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-blue"
-                      value={imgCompressMaxWidth}
-                      onChange={e => setImgCompressMaxWidth(parseInt(e.target.value))}
-                    />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
-                      <span>压缩质量</span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200">{Math.round(imgCompressQuality * 100)}%</span>
-                    </div>
-                    <input
-                      type="range" min="0.3" max="1.0" step="0.05"
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-blue"
-                      value={imgCompressQuality}
-                      onChange={e => setImgCompressQuality(parseFloat(e.target.value))}
-                    />
-                    <div className="flex justify-between text-[8px] text-gray-400">
-                      <span>体积小</span>
-                      <span>质量高</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section: AI Summary */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">摘要/导读 (Why & How)</h3>
-                  <button
-                    onClick={handleAiSummary}
-                    disabled={isGeneratingAi}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold transition-all ${isGeneratingAi ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-brand-blue text-white shadow-lg shadow-blue-200 hover:scale-105 active:scale-95'}`}
-                    title="一键生成标题与摘要"
-                  >
-                    {isGeneratingAi ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : '✨'}
-                    一键生成标题与摘要
-                  </button>
-                </div>
-                <textarea
-                  className="w-full h-[180px] bg-gray-50/50 border border-gray-100 rounded-xl p-4 text-[13px] leading-relaxed text-gray-600 focus:bg-white focus:border-brand-blue outline-none transition-all resize-none placeholder:text-gray-300"
-                  placeholder={formData.pdfData ? "摘要：建议重点总结 PDF 的核心内容及效益... 将展示在阅读器顶部。" : "点击上方按钮生成摘要，或者在这里手动输入... 摘要将展示在导出版的标题正下方。建议重点描述：为什么要开展此项工法？能带来哪些效益？"}
-                  value={formData.abstract || ''}
-                  onChange={e => setFormData({ ...formData, abstract: e.target.value })}
-                />
-              </div>
-
-              {/* PDF Attached status */}
-              {tempPdf && (
-                <div className="p-4 rounded-xl bg-red-50 border border-red-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-red-500 shadow-sm">
-                      <Icon name="pdf" className="w-4 h-4" />
-                    </div>
-                    <div className="overflow-hidden">
-                      <div className="text-[10px] font-bold text-red-600 uppercase tracking-tight">附件 PDF</div>
-                      <div className="text-[11px] text-red-500 truncate max-w-[150px]">{tempPdf.name}</div>
-                    </div>
-                  </div>
-                  <button onClick={() => setTempPdf(null)} className="p-2 hover:bg-white rounded-lg text-red-300 hover:text-red-600 transition-colors">
-                    <Icon name="trash" className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          <EditorRightPanel
+            formData={formData}
+            onFieldChange={handleFieldChange}
+            categories={categories}
+            onManageCats={handleManageCatsStable}
+            isGeneratingAi={isGeneratingAi}
+            handleAiSummary={handleAiSummary}
+            tempPdf={tempPdf}
+            setTempPdf={setTempPdf}
+            imgCompressQuality={imgCompressQuality}
+            setImgCompressQuality={setImgCompressQuality}
+            imgCompressMaxWidth={imgCompressMaxWidth}
+            setImgCompressMaxWidth={setImgCompressMaxWidth}
+            imgCompressFormat={imgCompressFormat}
+            setImgCompressFormat={setImgCompressFormat}
+          />
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-6 border-t border-gray-100 flex justify-between items-center bg-white">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <Icon name="lock" className="w-3 h-3" />
-            所有更改已自动缓存到本地数据库
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-6 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-100 transition-all font-bold text-xs shadow-sm"
-            >
-              放弃修改
-            </button>
-            <button
-              onClick={() => handleSave(false)}
-              className="px-6 py-2.5 bg-amber-50 border border-amber-200 text-amber-600 rounded-xl hover:bg-amber-100 transition-all font-bold text-xs shadow-sm"
-            >
-              存为草稿
-            </button>
-            <button
-              onClick={() => handleSave(true)}
-              className="px-8 py-2.5 bg-brand-blue text-white rounded-xl hover:shadow-xl hover:shadow-blue-200 hover:-translate-y-0.5 transition-all font-bold text-xs shadow-lg active:translate-y-0"
-            >
-              {formData.id && formData.isPublished ? '更新并发布' : '直接发布'}
-            </button>
-          </div>
-        </div>
+        <EditorFooter
+          hasId={formData.id}
+          isPublished={formData.isPublished || false}
+          onClose={onClose}
+          onSave={handleSave}
+        />
       </div >
     </div >
   );

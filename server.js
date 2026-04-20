@@ -15,7 +15,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 加载环境变量 - 优先从 .env.local 读取，如果不存在则读取 .env
-dotenv.config({ path: '.env.local' });
+import { existsSync } from 'fs';
+if (existsSync('.env.local')) {
+  dotenv.config({ path: '.env.local' });
+} else {
+  dotenv.config({ path: '.env' });
+}
 
 // 健康检查：验证必需的环境变量
 // 安全修复：移除对 VITE_ 前缀的兼容性，防止 API Key 被 Vite 打包泄露到前端
@@ -44,7 +49,7 @@ app.use(cors({
 }));
 
 // 安全修复：限制请求体大小为 1MB，防止恶意发送超大文本耗尽内存
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // DeepSeek API 配置
@@ -75,7 +80,14 @@ app.get('/api/health', (req, res) => {
 // DeepSeek API 代理端点
 app.post('/api/deepseek/generate', async (req, res) => {
   try {
-    const proxySecret = process.env.PROXY_SECRET || 'my-super-secret-key';
+    const proxySecret = process.env.PROXY_SECRET;
+    if (!proxySecret) {
+      console.warn('⚠️  PROXY_SECRET 未配置，代理接口拒绝所有请求');
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: '代理服务未正确配置',
+      });
+    }
     const requestSecret = req.headers['x-sws-proxy-secret'];
     
     if (requestSecret !== proxySecret) {
@@ -169,7 +181,7 @@ app.listen(PORT, () => {
   
   if (process.env.NODE_ENV === 'production') {
     console.log('\x1b[32m%s\x1b[0m', '📦 前端静态资源托管已启用');
-    console.log('\x1b[32m%s\x1b[0m', '🔗 访问 http://localhost:${PORT} 使用完整应用');
+    console.log('\x1b[32m%s\x1b[0m', `🔗 访问 http://localhost:${PORT} 使用完整应用`);
   }
 });
 

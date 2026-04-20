@@ -1,0 +1,284 @@
+import { StyleSheet, Font } from '@react-pdf/renderer';
+
+Font.register({
+  family: 'NotoSansSC',
+  fonts: [
+    {
+      src: 'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@5.2.9/chinese-simplified-400-normal.woff2',
+      fontWeight: 400,
+    },
+    {
+      src: 'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@5.2.9/chinese-simplified-700-normal.woff2',
+      fontWeight: 700,
+    },
+  ],
+});
+
+const styles = StyleSheet.create({
+  page: {
+    flexDirection: 'column',
+    backgroundColor: '#FFFFFF',
+    padding: 0,
+    fontFamily: 'NotoSansSC',
+  },
+  coverPage: {
+    flexDirection: 'column',
+    backgroundColor: '#FFFFFF',
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  coverBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F8F9FA',
+  },
+  coverHeader: {
+    marginTop: 80,
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  coverTitle: {
+    fontSize: 60,
+    fontWeight: 'bold',
+    color: '#005596',
+    letterSpacing: 10,
+    marginBottom: 20,
+  },
+  coverSubtitle: {
+    fontSize: 18,
+    color: '#666666',
+    marginBottom: 30,
+    letterSpacing: 2,
+  },
+  coverMetaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 20,
+  },
+  coverMetaBadge: {
+    backgroundColor: '#005596',
+    color: '#FFFFFF',
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    borderRadius: 15,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  coverMetaDivider: {
+    color: '#00559680',
+    fontSize: 12,
+  },
+  coverImageContainer: {
+    flex: 1,
+    marginHorizontal: 40,
+    marginTop: 40,
+    marginBottom: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverImage: {
+    width: '100%',
+    maxHeight: 400,
+    objectFit: 'contain',
+  },
+  coverFooter: {
+    paddingBottom: 40,
+    alignItems: 'center',
+  },
+  coverFooterText: {
+    fontSize: 14,
+    color: '#666666',
+    letterSpacing: 2,
+  },
+  tocPage: {
+    padding: 60,
+  },
+  tocHeader: {
+    alignItems: 'center',
+    marginBottom: 50,
+  },
+  tocTitle: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#005596',
+    marginBottom: 10,
+  },
+  tocSubtitle: {
+    fontSize: 12,
+    color: '#666666',
+    letterSpacing: 2,
+  },
+  tocList: {
+    width: '100%',
+  },
+  tocItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingBottom: 10,
+  },
+  tocItemTitle: {
+    fontSize: 16,
+    color: '#1F2937',
+    flex: 1,
+  },
+  tocDots: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: '#D1D5DB',
+    borderBottomStyle: 'dotted',
+    marginHorizontal: 10,
+    marginBottom: 4,
+  },
+  tocPageNumber: {
+    fontSize: 16,
+    color: '#005596',
+    fontWeight: 'bold',
+  },
+  articlePage: {
+    padding: 60,
+  },
+  articleHeader: {
+    marginBottom: 30,
+  },
+  articleTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 10,
+  },
+  articleMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+    marginBottom: 20,
+  },
+  tagCloud: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tagItem: {
+    backgroundColor: '#E5E7EB',
+    color: '#374151',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
+    fontSize: 12,
+  },
+  articleCategory: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  summaryCard: {
+    backgroundColor: '#F3F4F6',
+    padding: 20,
+    borderRadius: 8,
+    marginBottom: 30,
+    borderLeftWidth: 5,
+    borderLeftColor: '#005596',
+  },
+  summaryLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 10,
+  },
+  summaryText: {
+    fontSize: 15,
+    lineHeight: 1.7,
+    color: '#374151',
+  },
+  articleContent: {
+    fontSize: 16,
+    lineHeight: 2.0,
+    color: '#1F2937',
+    textAlign: 'justify',
+  },
+  articleFooter: {
+    marginTop: 50,
+    alignItems: 'center',
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  footerLogo: {
+    width: 120,
+    height: 'auto',
+    marginBottom: 10,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#6B7280',
+    letterSpacing: 2,
+  },
+  articleEndMark: {
+    marginTop: 30,
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  backCoverPage: {
+    flexDirection: 'column',
+    backgroundColor: '#FFFFFF',
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    padding: 60,
+  },
+  backCoverHeader: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  backCoverTitle: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#005596',
+    marginBottom: 10,
+  },
+  backCoverSubtitle: {
+    fontSize: 18,
+    color: '#666666',
+  },
+  backCoverImageContainer: {
+    flex: 1,
+    marginVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backCoverImage: {
+    width: '80%',
+    maxHeight: 300,
+    objectFit: 'contain',
+  },
+  backCoverFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  backCoverCompany: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  backCoverAddress: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 1.5,
+  },
+  backCoverLogo: {
+    width: 100,
+    height: 'auto',
+  },
+});
+
+export default styles;

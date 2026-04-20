@@ -1,4 +1,4 @@
-import { CONSTANTS } from '../../../../types';
+import { CONSTANTS } from '../../../constants';
 import { compressImage } from '../../../utils/fileHelpers';
 
 /**
@@ -79,19 +79,30 @@ export async function inlineOnlineImages(
 
     let processedContent = content;
     let done = 0;
+    const CONCURRENCY = 4;
 
-    for (const match of matches) {
-        try {
-            const rawBase64 = await fetchImageAsBase64(match.url);
-            const base64 = await compressImage(rawBase64, 1200, 0.8).catch(() => rawBase64);
-            const newTag = `<img${match.before}src="${base64}"${match.after}>`;
-            processedContent = processedContent.replace(match.full, newTag);
-            console.log(`[Export] ✅ 图片已内联并压缩 (${++done}/${matches.length}): ${match.url.substring(0, 60)}...`);
-        } catch (err) {
-            console.warn(`[Export] ⚠️ 图片内联失败，保留原链接: ${match.url}`, err);
+    for (let i = 0; i < matches.length; i += CONCURRENCY) {
+        const batch = matches.slice(i, i + CONCURRENCY);
+        const results = await Promise.allSettled(
+            batch.map(async (match) => {
+                const rawBase64 = await fetchImageAsBase64(match.url);
+                const base64 = await compressImage(rawBase64, 1200, 0.8).catch(() => rawBase64);
+                return { match, base64 };
+            })
+        );
+
+        for (const result of results) {
             done++;
+            if (result.status === 'fulfilled') {
+                const { match, base64 } = result.value;
+                const newTag = `<img${match.before}src="${base64}"${match.after}>`;
+                processedContent = processedContent.replace(match.full, newTag);
+                console.log(`[Export] ✅ 图片已内联并压缩 (${done}/${matches.length}): ${match.url.substring(0, 60)}...`);
+            } else {
+                console.warn(`[Export] ⚠️ 图片内联失败，保留原链接: ${batch[results.indexOf(result)]?.url}`, result.reason);
+            }
+            if (onProgress) onProgress(done, matches.length);
         }
-        if (onProgress) onProgress(done, matches.length);
     }
 
     console.log(`[Export] 图片内联完成: 成功 ${done}/${matches.length}`);
@@ -147,7 +158,9 @@ export async function extractVideoFirstFrame(videoUrl: string): Promise<string> 
             reject(new Error('视频加载失败'));
         };
 
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
+            video.src = '';
+            video.load();
             reject(new Error('视频首帧提取超时'));
         }, 5000);
 
@@ -212,21 +225,10 @@ export async function processMediaForPrint(content: string): Promise<string> {
     const videoRegex = /<video[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/video>/gi;
     const videoMatches = Array.from(content.matchAll(videoRegex));
 
-    for (const match of videoMatches) {
-        const videoTag = match[0];
-        const videoSrc = match[1];
+    const videoPlaceholder = `<div class="media-print-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><polygon points="10 8 16 12 10 16 10 8"></polygon></svg><div class="media-print-placeholder-text">视频，需要观看使用电子版</div></div>`;
 
-        try {
-            console.log('正在提取视频首帧:', videoSrc);
-            const firstFrameBase64 = await extractVideoFirstFrame(videoSrc);
-            const imgTag = `<img src="${firstFrameBase64}" alt="视频首帧" style="max-width: 100%; height: auto; display: block; margin: 20px auto; border: 2px solid #e5e7eb; border-radius: 8px;" />`;
-            processedContent = processedContent.replace(videoTag, imgTag);
-        } catch (error) {
-            console.warn('视频首帧提取失败，使用占位符:', error);
-            // 使用占位符
-            const placeholder = `<div class="media-print-placeholder"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><polygon points="10 8 16 12 10 16 10 8"></polygon></svg><div style="margin-top: 10px; color: #666; font-size: 14px;">此处为视频资源，请查阅电子版</div></div>`;
-            processedContent = processedContent.replace(videoTag, placeholder);
-        }
+    for (const match of videoMatches) {
+        processedContent = processedContent.replace(match[0], videoPlaceholder);
     }
 
     // 2. 处理GIF图片（检测.gif扩展名）

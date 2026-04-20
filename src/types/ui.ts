@@ -1,8 +1,6 @@
-// UI 相关的类型定义
-
 export type UploadType = 'cover' | 'back';
 export type NavigationDirection = 'prev' | 'next';
-export type ExportType = 'reader' | 'project';
+export type ExportType = 'reader' | 'project' | 'printable';
 
 export interface ExportOptions {
   useAlternateDesign: boolean;

@@ -26,6 +26,10 @@ const NavigationCapsule: React.FC<NavigationCapsuleProps> = ({
           {/* Previous Article Card */}
           <div
             onClick={onPrev}
+            role="button"
+            tabIndex={prevTitle ? 0 : -1}
+            onKeyDown={(e) => e.key === 'Enter' && prevTitle && onPrev()}
+            aria-disabled={!prevTitle}
             className={`flex flex-col p-5 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-md hover:border-brand-blue/30 cursor-pointer transition-all group ${!prevTitle ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
           >
             <div className="flex items-center gap-2 text-gray-400 mb-2 font-black text-[10px] tracking-widest uppercase">
@@ -40,6 +44,10 @@ const NavigationCapsule: React.FC<NavigationCapsuleProps> = ({
           {/* Next Article Card */}
           <div
             onClick={onNext}
+            role="button"
+            tabIndex={nextTitle ? 0 : -1}
+            onKeyDown={(e) => e.key === 'Enter' && nextTitle && onNext()}
+            aria-disabled={!nextTitle}
             className={`flex flex-col p-5 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-md hover:border-brand-blue/30 cursor-pointer transition-all items-end text-right group ${!nextTitle ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
           >
             <div className="flex items-center gap-2 text-gray-400 mb-2 font-black text-[10px] tracking-widest uppercase">

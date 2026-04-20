@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icon } from './Icons';
 
 interface ExportOptionsModalProps {
@@ -24,6 +24,10 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   const [optimizeForPrint, setOptimizeForPrint] = useState(false);
   const [exportType, setExportType] = useState<'reader' | 'printable' | 'pdf'>('pdf');
 
+  useEffect(() => {
+    setSelectedDesign(currentUseAlternateDesign ? 'magazine' : 'original');
+  }, [currentUseAlternateDesign]);
+
   if (!isOpen) {
     return null;
   }
@@ -35,14 +39,15 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
       optimizeForPrint: exportType === 'printable' || optimizeForPrint,
       exportType,
     });
-    onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[102] flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[102] flex items-center justify-center p-4" onClick={onClose} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="p-6 border-b flex justify-between items-center">
-          <h2 className="text-xl font-bold text-gray-900">导出阅读版选项</h2>
+          <h2 className="text-xl font-bold text-gray-900">
+            {exportType === 'reader' ? '导出阅读版选项' : exportType === 'printable' ? '导出打印版选项' : '导出PDF选项'}
+          </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100"
@@ -56,7 +61,7 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
             {/* 导出版本类型选择 */}
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-3">导出版本</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <button
                   type="button"
                   onClick={() => setExportType('reader')}
@@ -78,6 +83,17 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
                   </div>
                   <span className="text-sm font-medium">打印专用版</span>
                   <span className="text-xs text-gray-500 mt-1 text-center">适合 A4 打印<br />线性排版，零缺失</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportType('pdf')}
+                  className={`p-4 border-2 rounded-lg flex flex-col items-center transition-all ${exportType === 'pdf' ? 'border-brand-blue bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                >
+                  <div className="w-10 h-10 mb-2 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+                    <Icon name="pdf" className="w-6 h-6" />
+                  </div>
+                  <span className="text-sm font-medium">PDF 文档</span>
+                  <span className="text-xs text-gray-500 mt-1 text-center">标准 PDF 格式<br />便于分发归档</span>
                 </button>
               </div>
             </div>
@@ -150,7 +166,13 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
                 <Icon name="info" className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                 <div className="text-sm text-blue-700">
                   <p className="font-medium">导出说明</p>
-                  <p className="mt-1">导出的HTML文件包含所有文章、图片和导航功能，可在任何现代浏览器中离线阅读。</p>
+                  <p className="mt-1">
+                    {exportType === 'reader'
+                      ? '导出的HTML文件包含所有文章、图片和导航功能，可在任何现代浏览器中离线阅读。'
+                      : exportType === 'printable'
+                      ? '导出适合A4打印的HTML文件，包含所有文章内容，可直接在浏览器中打印或另存为PDF。'
+                      : '生成标准PDF格式文档，便于分发和归档。'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -169,7 +191,7 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
             className="px-4 py-2 bg-brand-blue text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
             <Icon name="download" className="w-4 h-4" />
-            导出阅读版
+            {exportType === 'reader' ? '导出阅读版' : exportType === 'printable' ? '导出打印版' : '导出PDF'}
           </button>
         </div>
       </div>

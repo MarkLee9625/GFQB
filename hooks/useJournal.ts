@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Article } from '../types';
+import { Article } from '../src/types/models';
 import { db } from '../services/db';
 
 export function useJournal() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const idCounterRef = useRef(0);
 
   // 核心：强制排序逻辑
   const enforceOrder = useCallback((list: Article[]): Article[] => {
@@ -116,9 +117,12 @@ export function useJournal() {
       const next = [...prev];
       next[idx] = updated;
 
-      // 如果更新了 category，可能需要重新排序
-      if (updates.category === '封面' || updates.category === '封底') {
-        return enforceOrder(next);
+      if (updates.category !== undefined) {
+        const oldCategory = prev[idx].category;
+        if (updates.category === '封面' || updates.category === '封底' ||
+            oldCategory === '封面' || oldCategory === '封底') {
+          return enforceOrder(next);
+        }
       }
       return next;
     });
@@ -129,20 +133,20 @@ export function useJournal() {
 
   const createArticle = useCallback(async (articleData: Partial<Article>) => {
     const maxOrder = articlesRef.current.length > 0
-      ? Math.max(...articlesRef.current.map(a => Number(a.order) || 0))
+      ? articlesRef.current.reduce((max, a) => Math.max(max, Number(a.order) || 0), 0)
       : 0;
 
     // 移除 articleData 中可能存在的无效 id，确保不覆盖 Date.now()
     const { id: _, ...restData } = articleData;
 
     const newArt: Article = {
-      id: Date.now() + Math.floor(Math.random() * 1000),
+      ...restData,
+      id: Date.now() * 1000 + (++idCounterRef.current),
       title: restData.title || '无标题',
       category: restData.category || '工艺工法',
       content: restData.content || '',
       abstract: restData.abstract || '',
-      order: maxOrder + 1000, // 赋予一个足够大的值，确保在所有现有文章之后
-      ...restData
+      order: maxOrder + 1000,
     };
     try {
       await db.saveArticle(newArt);
@@ -155,24 +159,22 @@ export function useJournal() {
   }, [enforceOrder]);
 
   const deleteArticle = useCallback(async (id: number) => {
-    // 查找时使用 String 转换，确保能找到 NaN ID 的文章
-    const art = articles.find(a => String(a.id) === String(id));
+    const art = articlesRef.current.find(a => String(a.id) === String(id));
 
     if (art?.category === '封面' || art?.category === '封底') return alert('封面和封底不可删除');
     if (!window.confirm('确定要删除这篇文章吗？')) return;
 
     try {
-      await db.deleteArticle(id); // 尝试从 DB 删除
+      await db.deleteArticle(id);
 
       setArticles(prev => {
-        // 核心修复：使用 String() 对比，确保 NaN !== NaN 判定为 false，从而成功移除
         const next = prev.filter(a => String(a.id) !== String(id));
         return enforceOrder(next);
       });
 
-      if (currentId === id) setCurrentId(null);
+      setCurrentId(prev => prev === id ? null : prev);
     } catch (e) { console.error('Delete failed', e); }
-  }, [articles, currentId, enforceOrder]); // 添加 enforceOrder
+  }, [enforceOrder]);
 
   const reorderArticles = useCallback((newArticles: Article[]) => {
     // 核心修复：根据拖拽后的新顺序，重新分配 order 权重 (0, 1000, 2000...)

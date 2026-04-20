@@ -18,7 +18,9 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
-          rewrite: (path) => path,
+          headers: {
+            'x-sws-proxy-secret': env.VITE_PROXY_SECRET || env.PROXY_SECRET || '',
+          },
         },
       },
     },
@@ -34,7 +36,7 @@ export default defineConfig(({ mode }) => {
     // 优化构建目标以支持 PDF.js 的 Top-level Await
     build: {
       target: 'esnext',
-      minify: false, // Disable minification to avoid build crash
+      minify: true,
       sourcemap: false,
       rollupOptions: {
         output: {

@@ -25,7 +25,7 @@ export async function fetchRssFeed(url: string, sourceName: string): Promise<Uni
     if (data.status === 'ok' && data.items && data.items.length > 0) {
       console.log(`[rssFetcher] 引擎1成功拉取 ${data.items.length} 篇文章`);
       return data.items.map((item: any) => ({
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substring(2, 11),
         sourceType: 'rss',
         sourceName: sourceName,
         title: item.title,
@@ -68,7 +68,7 @@ export async function fetchRssFeed(url: string, sourceName: string): Promise<Uni
         const pubDate = item.querySelector("pubDate")?.textContent || "";
 
         return {
-          id: Math.random().toString(36).substr(2, 9),
+          id: Math.random().toString(36).substring(2, 11),
           sourceType: 'rss',
           sourceName: sourceName,
           title,

@@ -1,4 +1,4 @@
-import { CONSTANTS } from '../../../types';
+import { CONSTANTS } from '../../constants';
 
 export const UNIFIED_STYLES = CONSTANTS.UNIFIED_STYLES;
 export const COMPANY_INFO = CONSTANTS.COMPANY_INFO;
@@ -68,21 +68,14 @@ body { margin: 0; padding: 0; font-family: "PingFang SC", "Microsoft YaHei", "Si
     overflow: hidden; 
     background: white; 
 }
-@media print {
-    .cover-root, .normal-back-root {
-        min-height: 100vh !important;
-        height: 100vh;
-        page-break-after: always;
-    }
-}
 .ambient-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0.3; filter: blur(60px) saturate(180%) brightness(1.05); transform: scale(1.2); z-index: 0; pointer-events: none; transition: opacity 0.7s; }
 .tech-grid { position: absolute; inset: 0; opacity: 0.03; background-image: linear-gradient(#005596 1px, transparent 1px), linear-gradient(90deg, #005596 1px, transparent 1px); background-size: 40px 40px; z-index: 0; pointer-events: none; }
 .cover-header { border-bottom: 3px double #333; padding-bottom: 15px; margin-bottom: 15px; position: relative; z-index: 2; width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
 .cover-sub { font-family: sans-serif; font-size: 10px; font-weight: 800; color: #005596; letter-spacing: 3px; text-transform: uppercase; width: 100%; margin-bottom: 5px; }
-.cover-meta { display: flex; gap: 8px; align-items: center; justify-content: flex-start; font-family: sans-serif; text-[#333]; font-size: 12px; font-weight: bold; mt-5px; }
+.cover-meta { display: flex; gap: 8px; align-items: center; justify-content: flex-start; font-family: sans-serif; color: #333; font-size: 12px; font-weight: bold; margin-top: 5px; }
 .cover-img-box { flex-grow: 1; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1; min-height: 500px; margin-top: 10px; position: relative; }
-.cover-img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; position: relative; z-index: 1; shadow-2xl; border-radius: 2px; }
-.cover-footer { display: flex; align-items: center; justify-content: space-between; z-index: 2; pt-15px; flex-shrink: 0; mt-15px; width: 100%; relative; }
+.cover-img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; position: relative; z-index: 1; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border-radius: 2px; }
+.cover-footer { display: flex; align-items: center; justify-content: space-between; z-index: 2; padding-top: 15px; flex-shrink: 0; margin-top: 15px; width: 100%; position: relative; }
 `;
 
 export const MAGAZINE_STYLES = `
@@ -132,7 +125,7 @@ export const MAGAZINE_STYLES = `
 `;
 
 export const PRINT_STYLES = `
-/* --- 打印专用样式 (A4 适配版 - V4 Ultimate) --- */
+/* --- 打印专用样式 (A4 专业期刊排版 - V5) --- */
 @media print {
     @page { margin: 0; size: A4 portrait; }
     
@@ -157,11 +150,11 @@ export const PRINT_STYLES = `
     /* 2. 修复顶部巨大留白与镶嵌感：重置正文容器与标题的边距 */
     .normal-container {
         width: 100% !important;
-        padding: 0 !important; /* 核心修复：外层画布已有页边距，此处强制清零，彻底消除双重边距叠加！ */
-        margin: 0 !important; 
+        padding: 25mm 20mm !important;
+        margin: 0 !important;
         min-height: 0 !important;
         background: transparent !important;
-        box-shadow: none !important; 
+        box-shadow: none !important;
         border: none !important;
         border-radius: 0 !important;
     }
@@ -213,6 +206,21 @@ export const PRINT_STYLES = `
         position: relative !important;
         left: 0 !important;
         top: 0 !important;
+    }
+    
+    /* 4. 各类型页面的特定高度与间距规范 */
+    /* 非正文页面（如封面、目录、封底）使用 100vh 填充一页 */
+    .print-page-wrapper.toc-page {
+        min-height: 100vh !important;
+        height: 100vh !important;
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+    .print-page-wrapper:not(.article-wrapper):not(.pdf-full-page):not(.toc-page) {
+        min-height: 100vh !important;
+        height: 100vh !important;
+        page-break-after: always !important;
+        break-after: always !important;
     }
 
     /* 例外：如果是“打印单页”模式 (body没有print-all类)，则隐藏非激活项，并取消可见项的前置分页 */
@@ -275,11 +283,33 @@ export const PRINT_STYLES = `
     .sws-prose, .article-body {
         width: 100% !important;
         max-width: none !important;
+        font-size: 10.5pt !important;
+        line-height: 1.75 !important;
+        color: #000 !important;
+        text-align: justify !important;
+        orphans: 3 !important;
+        widows: 3 !important;
     }
     .sws-prose p, .sws-prose div {
         max-width: none !important;
-        text-align: justify !important; /* 核心：左右对齐的期刊级排版 */
-        line-height: 1.8 !important;
+        text-align: justify !important;
+        line-height: 1.75 !important;
+        font-size: 10.5pt !important;
+    }
+    .sws-prose p {
+        display: block !important;
+        margin: 0 !important;
+        text-indent: 2em !important;
+    }
+    .sws-prose span,
+    .sws-prose strong,
+    .sws-prose em,
+    .sws-prose a {
+        display: inline !important;
+        color: #000 !important;
+    }
+    .sws-prose li {
+        display: list-item !important;
     }
     
     /* --- 封面/封底 (全屏无边距) --- */
@@ -306,37 +336,93 @@ export const PRINT_STYLES = `
         break-inside: avoid; 
     }
     
-    .article-header h1 { 
-        font-size: 24pt !important; 
-        color: #000 !important; 
-        text-align: center; 
-        margin-top: 0 !important; /* 强制归零浏览器默认的 h1 顶部边距 */
-        padding-top: 0 !important;
-        page-break-after: avoid; 
+    .article-header h1 {
+        font-size: 18pt !important;
+        color: #000 !important;
+        text-align: center !important;
+        margin: 0 0 8pt 0 !important;
+        padding: 0 !important;
+        page-break-after: avoid !important;
+        line-height: 1.4 !important;
+        font-weight: bold !important;
+    }
+    .article-header h1::after {
+        content: "";
+        display: block;
+        width: 60px;
+        height: 2px;
+        background: #005596;
+        margin: 10pt auto 0;
+    }
+    .sws-prose h2 {
+        font-size: 14pt !important;
+        font-weight: bold !important;
+        color: #000 !important;
+        margin-top: 20pt !important;
+        margin-bottom: 10pt !important;
+        padding-left: 12px !important;
+        border-left: 3px solid #005596 !important;
+        line-height: 1.4 !important;
+        text-indent: 0 !important;
+        page-break-after: avoid !important;
+    }
+    .sws-prose h3 {
+        font-size: 12pt !important;
+        font-weight: bold !important;
+        color: #000 !important;
+        margin-top: 14pt !important;
+        margin-bottom: 8pt !important;
+        line-height: 1.4 !important;
+        text-indent: 0 !important;
+        page-break-after: avoid !important;
     }
     
     /* 媒体占位 */
     video, iframe { display: none !important; }
-    .media-print-placeholder { 
-        display: block !important; 
-        margin: 20px 0; 
-        border: 1px dashed #ccc; 
-        padding: 20px; 
-        text-align: center; 
-        page-break-inside: avoid;
-        break-inside: avoid;
-    }
-    
-    .sws-prose img { 
-        max-width: 100% !important; 
-        max-height: 600px !important; /* 限制最大高度，防止超出页面 */
-        height: auto !important; 
-        width: auto !important;
-        display: block !important; 
-        margin: 15px auto !important; 
-        object-fit: contain !important; /* 保持纵横比 */
+    .media-print-placeholder {
+        display: block !important;
+        margin: 16pt auto !important;
+        padding: 24pt 20pt !important;
+        border: 1.5pt dashed #b0b5be !important;
+        border-radius: 4px !important;
+        text-align: center !important;
+        background: #fafbfc !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+        max-width: 80% !important;
+    }
+    .media-print-placeholder svg {
+        display: block !important;
+        margin: 0 auto 10pt !important;
+    }
+    .media-print-placeholder-text {
+        margin-top: 8pt !important;
+        color: #6b7280 !important;
+        font-size: 10.5pt !important;
+        letter-spacing: 1px !important;
+    }
+    
+    .sws-prose img {
+        max-width: 100% !important;
+        max-height: 200mm !important;
+        height: auto !important;
+        width: auto !important;
+        display: block !important;
+        margin: 12pt auto !important;
+        object-fit: contain !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        border: 0.5pt solid #e5e7eb !important;
+        padding: 4px !important;
+    }
+    .sws-prose .image-caption {
+        text-align: center !important;
+        font-size: 9pt !important;
+        color: #666 !important;
+        font-style: italic !important;
+        text-indent: 0 !important;
+        margin: 4pt 0 12pt 0 !important;
+        line-height: 1.5 !important;
     }
     
     /* PDF 页面图片 - 铺满整页，覆盖通用 img 限制 */
@@ -390,6 +476,72 @@ export const PRINT_STYLES = `
     }
 
     .print-only { display: block !important; }
+    .no-print { display: none !important; }
+
+    .summary-card {
+        margin: 16pt 0 !important;
+        padding: 14pt 18pt !important;
+        background: #f7f8fa !important;
+        border: 1px solid #d1d5db !important;
+        border-left: 4px solid #005596 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        page-break-inside: avoid !important;
+    }
+    .summary-label {
+        font-size: 9pt !important;
+        font-weight: bold !important;
+        color: #005596 !important;
+        letter-spacing: 2px !important;
+        margin-bottom: 6pt !important;
+        text-transform: uppercase !important;
+    }
+    .summary-card p {
+        font-size: 9.5pt !important;
+        line-height: 1.7 !important;
+        color: #333 !important;
+        font-style: italic !important;
+        text-indent: 0 !important;
+        margin: 0 !important;
+    }
+
+    .article-meta {
+        font-size: 9pt !important;
+        color: #666 !important;
+        text-align: center !important;
+        margin: 6pt 0 0 0 !important;
+        justify-content: center !important;
+    }
+    .tag-item {
+        font-size: 8pt !important;
+        padding: 1px 6px !important;
+    }
+    .article-end-mark {
+        font-size: 9pt !important;
+        color: #999 !important;
+        margin-top: 30pt !important;
+    }
+    .article-footer-knowledge-base {
+        margin-top: 30pt !important;
+        padding-top: 12pt !important;
+    }
+
+    .sws-prose blockquote {
+        border-left: 3px solid #005596 !important;
+        margin: 14pt 0 !important;
+        padding: 6pt 18pt !important;
+        color: #555 !important;
+        font-style: italic !important;
+        background: #f9fafb !important;
+        text-indent: 0 !important;
+        page-break-inside: avoid !important;
+    }
+
+    .sws-prose ul, .sws-prose ol {
+        margin: 8pt 0 !important;
+        padding-left: 2em !important;
+        font-size: 10.5pt !important;
+    }
 }
 `;
 
@@ -493,10 +645,16 @@ ${UNIFIED_STYLES}
 .graph-expand-btn:hover {
     background: rgba(0,85,150,0.2) !important;
 }
+.is-offline-reader .sws-graph-print {
+    display: none !important;
+}
+.is-offline-reader .graph-expand-btn {
+    display: flex !important;
+}
 
 
 .normal-back-title { font-size: 36px; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; margin: 0; line-height: 1.2; background: linear-gradient(to bottom, #005596, #003366); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; color: transparent; font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif; }
-.normal-back-footer { width: 100%; display: flex; align-items: center; justify-content: space-between; z-index: 2; pt-15px; flex-shrink: 0; margin-top: 15px; position: relative; }
+.normal-back-footer { width: 100%; display: flex; align-items: center; justify-content: space-between; z-index: 2; padding-top: 15px; flex-shrink: 0; margin-top: 15px; position: relative; }
 .normal-back-left { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: #9ca3af; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
 .normal-back-left span:last-child { font-weight: normal; font-size: 9px; text-transform: none; letter-spacing: 0; }
 .normal-back-right { display: flex; align-items: center; gap: 20px; }

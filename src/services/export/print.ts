@@ -1,9 +1,18 @@
-import { Article, CONSTANTS } from '../../../types';
+import { Article } from '../../types/models';
+import { CONSTANTS } from '../../constants';
 import { getPrintableSkeleton } from './templates';
 import { convertPdfToImages } from '../pdf';
-import { processMediaForPrint } from './utils/media';
+import { processMediaForPrint, inlineOnlineImages } from './utils/media';
 import { base64ToFile } from './utils/file';
 import { ExportOptions, ExportMetadata } from './reader';
+
+function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function escapeAttr(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 
 /**
@@ -30,10 +39,10 @@ export async function generatePrintableHTML(
     const tocItems = sortedArticles
         .filter(a => a.category !== '封面' && a.category !== '封底')
         .map((a, i) => `
-            <li class="toc-item">
-                <span class="toc-title">${a.title}</span>
+            <li class="toc-item" data-toc-index="${i}">
+                <span class="toc-title">${escapeHtml(a.title)}</span>
                 <span class="toc-dots"></span>
-                <span class="toc-page-number">${i + 1}</span>
+                <span class="toc-page-number"></span>
             </li>
         `).join('');
 
@@ -59,7 +68,7 @@ export async function generatePrintableHTML(
             const isMagazine = alternateDesign;
             const issueText = article.issueText || 'NO.01';
             const dateText = article.dateText || 'JAN 2025';
-            const coverImage = article.coverImage ? `<img src="${article.coverImage}" class="${isMagazine ? 'magazine-image' : 'cover-img'}" alt="Cover" />` : '<div class="cover-img-placeholder">暂无封面图片</div>';
+            const coverImage = article.coverImage ? `<img src="${escapeAttr(article.coverImage)}" class="${isMagazine ? 'magazine-image' : 'cover-img'}" alt="Cover" />` : '<div class="cover-img-placeholder">暂无封面图片</div>';
 
             if (isMagazine) {
                 articleHtml = `
@@ -85,7 +94,7 @@ export async function generatePrintableHTML(
                 <div class="print-page-wrapper">
                     <div class="cover-root">
                         <div class="tech-grid"></div>
-                        <div class="ambient-bg" style="${article.coverImage ? `background-image:url(${article.coverImage});` : ''}"></div>
+                        <div class="ambient-bg" style="${article.coverImage ? `background-image:url(${escapeAttr(article.coverImage)});` : ''}"></div>
                         <div class="cover-header">
                             <div class="cover-sub">Ship Construction Method Information</div>
                             <h1 style="font-size: 60px; color:#005596; margin:0; font-weight:900; letter-spacing:10px;">工法情报</h1>
@@ -98,7 +107,7 @@ export async function generatePrintableHTML(
             }
         } else if (article.category === '封底') {
             const isMagazine = alternateDesign;
-            const backImage = article.backImage ? `<img src="${article.backImage}" class="${isMagazine ? 'magazine-back-image' : 'cover-img'}" alt="Back" />` : '<div class="cover-img-placeholder">暂无封底图片</div>';
+            const backImage = article.backImage ? `<img src="${escapeAttr(article.backImage)}" class="${isMagazine ? 'magazine-back-image' : 'cover-img'}" alt="Back" />` : '<div class="cover-img-placeholder">暂无封底图片</div>';
             const company = CONSTANTS.COMPANY_INFO;
 
             if (isMagazine) {
@@ -116,7 +125,7 @@ export async function generatePrintableHTML(
                             <div class="magazine-back-left">
                                 <div class="magazine-back-company">${company.EN_SHORT}</div>
                                 <div class="magazine-back-address">${company.EN_FULL}<br/>${company.ZH_FULL}</div>
-                                <div class="magazine-back-copyright">© 2025 Ship Construction Method</div>
+                                <div class="magazine-back-copyright">© ${new Date().getFullYear()} Ship Construction Method</div>
                             </div>
                             <div class="magazine-back-right">
                                 ${logo ? `<img src="${logo}" class="magazine-back-logo" />` : ''}
@@ -130,7 +139,7 @@ export async function generatePrintableHTML(
                 <div class="print-page-wrapper">
                     <div class="normal-back-root">
                         <div class="tech-grid"></div>
-                        <div class="ambient-bg" style="${article.backImage ? `background-image:url(${article.backImage});` : ''}"></div>
+                        <div class="ambient-bg" style="${article.backImage ? `background-image:url(${escapeAttr(article.backImage)});` : ''}"></div>
                         <div class="normal-back-header">
                             <div class="normal-back-sub">Ship Construction Method Information</div>
                             <h1 class="normal-back-title">Sailing With Success</h1>
@@ -150,8 +159,11 @@ export async function generatePrintableHTML(
             }
         } else {
             // 正文文章
-            const tagsHtml = (article.tags || []).map(t => `<span class="tag-item">${t}</span>`).join('');
+            const tagsHtml = (article.tags || []).map(t => `<span class="tag-item">${escapeHtml(t)}</span>`).join('');
             let processedContent = await processMediaForPrint(article.content || '');
+            if (options.includeImages !== false) {
+                processedContent = await inlineOnlineImages(processedContent);
+            }
             let pdfHtmlContent = '';
 
             // 处理 PDF 附件
@@ -179,13 +191,13 @@ export async function generatePrintableHTML(
             <div class="print-page-wrapper article-wrapper">
                 <div class="normal-container">
                     <div class="article-header">
-                        <h1>${article.title}</h1>
+                        <h1>${escapeHtml(article.title)}</h1>
                         <div class="article-meta">
                             <div class="tag-cloud">${tagsHtml}</div>
-                            <span>分类: ${article.category}</span>
+                            <span>分类: ${escapeHtml(article.category)}</span>
                         </div>
                     </div>
-                    ${article.abstract ? `<div class="summary-card"><div class="summary-label">摘要</div><p>${article.abstract}</p></div>` : ''}
+                    ${article.abstract ? `<div class="summary-card"><div class="summary-label">摘要</div><p>${escapeHtml(article.abstract)}</p></div>` : ''}
                     <div class="sws-prose">${processedContent}</div>
                     <div class="article-footer-knowledge-base">
                         ${logo ? `<img src="${logo}" class="footer-logo" />` : ''}

@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Article } from '../../../types';
-import { Icon } from '../../Icons';
-import { useBlobManager } from '../../../hooks/useBlobManager';
+import { Article } from '../../src/types/models';
+import { Icon } from '../Icons';
+import { usePanZoom } from '../../hooks/usePanZoom';
 import { ArticleRendererBaseProps } from './ArticleRenderer';
+import { AmbientBg, TechGrid, LazyImage } from './SharedComponents';
 
 interface BackRendererProps extends ArticleRendererBaseProps {
   mode: 'edit' | 'read' | 'print';
@@ -11,74 +12,7 @@ interface BackRendererProps extends ArticleRendererBaseProps {
   onUpdate?: (id: number, updates: Partial<Article>) => void;
 }
 
-// 环境背景组件
-const AmbientBg: React.FC<{ src: string | null | undefined }> = ({ src }) => {
-  if (!src) return null;
-  return (
-    <div
-      className="absolute inset-0 w-full h-full bg-cover bg-center opacity-30 pointer-events-none z-0 transition-opacity duration-700"
-      style={{
-        backgroundImage: `url('${src}')`,
-        filter: 'blur(60px) saturate(180%) brightness(1.05)',
-        transform: 'scale(1.2)',
-      }}
-    />
-  );
-};
-
-// 技术网格背景
-const TechGrid: React.FC = () => (
-  <div
-    className="absolute inset-0 w-full h-full pointer-events-none z-[0] opacity-[0.03]"
-    style={{
-      backgroundImage: `
-        linear-gradient(#005596 1px, transparent 1px),
-        linear-gradient(90deg, #005596 1px, transparent 1px)
-      `,
-      backgroundSize: '40px 40px'
-    }}
-  />
-);
-
-// 懒加载图片组件
-const LazyImage: React.FC<{
-  src: string | null;
-  alt: string;
-  className: string;
-  style?: React.CSSProperties;
-}> = ({ src, alt, className, style }) => {
-  const [loaded, setLoaded] = useState(false);
-  const blobManager = useBlobManager();
-  const blobUrl = src ? blobManager.getBlobUrl(src) : null;
-
-  return (
-    <img
-      src={blobUrl || src}
-      alt={alt}
-      className={`${className} ${loaded ? 'loaded' : ''}`}
-      style={{
-        ...style,
-        opacity: loaded ? 1 : 0.8,
-        transition: 'opacity 0.2s ease-out',
-      }}
-      onLoad={() => setLoaded(true)}
-    />
-  );
-};
-
-/**
- * 封底渲染组件
- * 
- * 支持两种设计风格：
- * 1. 原版设计：经典蓝色边框 + 技术网格背景
- * 2. 杂志风设计：专业期刊风格 + 渐变背景
- * 
- * 支持三种模式：
- * - edit: 可编辑模式，支持拖拽、缩放、更换图片
- * - read: 只读模式，优化显示效果
- * - print: 打印模式，应用打印样式
- */
-export const BackRenderer: React.FC<BackRendererProps> = ({
+export const BackRenderer = React.memo<BackRendererProps>(({
   article,
   mode,
   useAlternateDesign = false,
@@ -86,100 +20,38 @@ export const BackRenderer: React.FC<BackRendererProps> = ({
   onImageUpload,
   onUpdate
 }) => {
-  const [zoom, setZoom] = useState({
-    scale: article.scale || 1,
-    x: article.posX || 0,
-    y: article.posY || 0
+  // 使用拖拽缩放 Hook
+  const {
+    zoom,
+    isDragging,
+    eventHandlers,
+    containerRef,
+  } = usePanZoom({
+    initialScale: article.scale || 1,
+    initialX: article.posX || 0,
+    initialY: article.posY || 0,
+    isEditable: isEditable || false,
+    mode,
+    category: article.category,
+    onUpdate: (updates) => onUpdate?.(article.id, updates),
+    minScale: 0.5,
+    maxScale: 5,
+    scaleStep: 0.1,
+    dragThreshold: 2,
+    debounceDelay: 150,
   });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, initX: 0, initY: 0 });
-  const hasMoved = useRef(false);
 
   const backUrl = article.backImage;
 
-  // 监听文章 ID 变化，重置缩放状态
-  useEffect(() => {
-    setZoom({
-      scale: article.scale || 1,
-      x: article.posX || 0,
-      y: article.posY || 0
-    });
-  }, [article.id]);
-
-  const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
-  const articleRef = useRef(article);
-  articleRef.current = article;
-  const onUpdateRef = useRef(onUpdate);
-  onUpdateRef.current = onUpdate;
-
-  // 鼠标拖拽事件处理
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isEditable || !article.category.includes('封底')) return;
-    if ((e.target as HTMLElement).closest('button, input, .clickable-area')) return;
-
-    setIsDragging(true);
-    hasMoved.current = false;
-    dragStart.current = { x: e.clientX, y: e.clientY, initX: zoom.x, initY: zoom.y };
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) hasMoved.current = true;
-    setZoom(prev => ({ ...prev, x: dragStart.current.initX + dx, y: dragStart.current.initY + dy }));
-  };
-
-  const handleMouseUp = () => {
-    if (isDragging) {
-      setIsDragging(false);
-      if (hasMoved.current && article && onUpdate) {
-        onUpdate(article.id, { posX: zoomRef.current.x, posY: zoomRef.current.y });
-      }
-    }
-  };
-
-  // 滚轮缩放
-  useEffect(() => {
-    if (!isEditable || mode !== 'edit') return;
-
-    const handleWheel = (e: WheelEvent) => {
-      if (!articleRef.current?.category.includes('封底')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      let newScale = zoomRef.current.scale * delta;
-      newScale = Math.min(Math.max(0.5, newScale), 5);
-      setZoom(prev => ({ ...prev, scale: newScale }));
-      
-      if (articleRef.current && onUpdate) {
-        onUpdate(articleRef.current.id, { scale: newScale });
-      }
-    };
-
-    const backEl = document.getElementById(`back-${article.id}`);
-    if (backEl) {
-      backEl.addEventListener('wheel', handleWheel, { passive: false });
-    }
-
-    return () => {
-      if (backEl) {
-        backEl.removeEventListener('wheel', handleWheel);
-      }
-    };
-  }, [isEditable, mode, onUpdate, article.id]);
 
   // 杂志风设计
   if (useAlternateDesign) {
     return (
       <div
+        ref={containerRef}
         id={`back-${article.id}`}
         className="w-full min-h-[840px] flex flex-col p-[40px_60px] bg-white text-left relative overflow-hidden group magazine-back-cover"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        {...eventHandlers}
       >
         {/* 背景 - 简洁渐变 */}
         <div className="absolute inset-0 z-0 bg-gradient-to-tl from-blue-50/80 via-white to-gray-50/80"></div>
@@ -322,11 +194,10 @@ export const BackRenderer: React.FC<BackRendererProps> = ({
   // 原版设计
   return (
     <div
+      ref={containerRef}
       id={`back-${article.id}`}
       className="w-full min-h-[840px] flex flex-col p-0 bg-transparent text-left border-t-8 border-brand-blue relative overflow-hidden group"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      {...eventHandlers}
     >
       <div className="absolute inset-0 z-0 overflow-hidden bg-transparent">
         <TechGrid />
@@ -386,4 +257,4 @@ export const BackRenderer: React.FC<BackRendererProps> = ({
       </div>
     </div>
   );
-};
+});

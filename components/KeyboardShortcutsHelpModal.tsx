@@ -4,7 +4,6 @@ import { Icon } from './Icons';
 interface KeyboardShortcutsHelpModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentArticleTitle?: string;
 }
 
 const KeyboardShortcutsHelpModal: React.FC<KeyboardShortcutsHelpModalProps> = ({ isOpen, onClose }) => {
@@ -28,8 +27,8 @@ const KeyboardShortcutsHelpModal: React.FC<KeyboardShortcutsHelpModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-[500px] rounded-3xl shadow-2xl overflow-hidden border border-white/20 flex flex-col scale-in-center">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+      <div className="bg-white w-full max-w-[500px] rounded-3xl shadow-2xl overflow-hidden border border-white/20 flex flex-col scale-in-center" onClick={(e) => e.stopPropagation()}>
         <div className="p-8 bg-gradient-to-br from-brand-blue to-blue-700 text-white flex justify-between items-center relative overflow-hidden">
           <div className="relative z-10">
             <h2 className="text-2xl font-black tracking-tight">键盘快捷键</h2>

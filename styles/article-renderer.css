@@ -550,6 +550,41 @@
   line-height: 2.0;
 }
 
+.sws-block-wrapper {
+  margin-bottom: 1.5em;
+}
+
+.sws-block-wrapper > h1,
+.sws-block-wrapper > h2,
+.sws-block-wrapper > h3,
+.sws-block-wrapper > h4,
+.sws-block-wrapper > h5,
+.sws-block-wrapper > h6,
+.sws-block-wrapper > p,
+.sws-block-wrapper > blockquote,
+.sws-block-wrapper > ul,
+.sws-block-wrapper > ol,
+.sws-block-wrapper > pre,
+.sws-block-wrapper > table,
+.sws-block-wrapper > figure {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.sws-block-wrapper > h1,
+.sws-block-wrapper > h2,
+.sws-block-wrapper > h3,
+.sws-block-wrapper > h4,
+.sws-block-wrapper > h5,
+.sws-block-wrapper > h6 {
+  margin-bottom: 0.5em;
+}
+
+.sws-block-wrapper > img {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .sws-prose h1,
 .sws-prose h2,
 .sws-prose h3,
@@ -735,6 +770,17 @@
   .pdf-expand-btn,
   .magazine-button {
     display: none !important;
+  }
+
+  /* Block 级别打印保护 */
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-avoid-break-after {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
   }
 }
 

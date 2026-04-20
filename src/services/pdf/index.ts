@@ -1,4 +1,3 @@
-// import * as pdfjsLib from 'pdfjs-dist';
 import { pdfjsLib, ensurePdfLibLoaded } from './wrapper';
 import { extractTitle } from './strategies/title';
 import { extractAbstract } from './strategies/abstract';
@@ -45,8 +44,9 @@ export async function extractAbstractFromPdf(
     timeoutMs: number = 30000
 ): Promise<PdfExtractionResult> {
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<PdfExtractionResult>((_, reject) => {
-        setTimeout(() => reject(new Error(`PDF解析超时 (${timeoutMs}ms)`)), timeoutMs);
+        timeoutId = setTimeout(() => reject(new Error(`PDF解析超时 (${timeoutMs}ms)`)), timeoutMs);
     });
 
     const extractionPromise = (async (): Promise<PdfExtractionResult> => {
@@ -144,8 +144,11 @@ export async function extractAbstractFromPdf(
     })();
 
     try {
-        return await Promise.race([extractionPromise, timeoutPromise]);
+        const result = await Promise.race([extractionPromise, timeoutPromise]);
+        if (timeoutId) clearTimeout(timeoutId);
+        return result;
     } catch (error) {
+        if (timeoutId) clearTimeout(timeoutId);
         return { success: false, error: '操作超时' };
     }
 }

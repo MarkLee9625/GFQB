@@ -33,7 +33,10 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
   const handleDeleteCategory = (category: string) => {
     if (window.confirm(`删除 ${category}? 隶属于该分类的文章将变为'默认'`)) {
-      const updatedCategories = categories.filter(x => x !== category);
+      let updatedCategories = categories.filter(x => x !== category);
+      if (!updatedCategories.includes('默认')) {
+        updatedCategories = [...updatedCategories, '默认'];
+      }
       onUpdateCategories(updatedCategories);
       if (onRenameCategory) onRenameCategory(category, '默认');
     }
@@ -59,8 +62,8 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[101] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-[450px] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-100">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[101] flex items-center justify-center p-4" onClick={onClose} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+      <div className="bg-white w-full max-w-[450px] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-100" onClick={(e) => e.stopPropagation()}>
         <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
           <span className="font-bold text-gray-800 tracking-tight">分类资源管理器</span>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">&times;</button>

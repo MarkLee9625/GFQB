@@ -146,7 +146,7 @@ async function main() {
     const singleFileContent = htmlContent;
 
     // Save the single file reader for debugging/verification
-    const readerOutputPath = path.join(DIST_DIR, 'reader.html');
+    const readerOutputPath = join(DIST_DIR, 'reader.html');
     fs.writeFileSync(readerOutputPath, singleFileContent);
     console.log(`✅ Single-file reader generated at: ${readerOutputPath}`);
 
@@ -160,13 +160,13 @@ async function main() {
     // We want: `const READER_TEMPLATE = "<html>...";`
     // So we replace `"SWS_READER_TEMPLATE_PLACEHOLDER"` with `escapedContent`.
 
-    const assetsDir = path.join(DIST_DIR, 'assets');
+    const assetsDir = join(DIST_DIR, 'assets');
     const files = fs.readdirSync(assetsDir);
     let injected = false;
 
     for (const file of files) {
         if (file.endsWith('.js')) {
-            const filePath = path.join(assetsDir, file);
+            const filePath = join(assetsDir, file);
             let content = fs.readFileSync(filePath, 'utf-8');
 
             if (content.includes(PLACEHOLDER)) {
@@ -199,8 +199,7 @@ async function main() {
 
     if (!injected) {
         console.error("❌ Placeholder not found in any JS asset! Template injection failed.");
-        // Proceed anyway? No, this is critical.
-        // process.exit(1); 
+        process.exit(1);
     }
 
     console.log("🎉 Post-build processing complete.");

@@ -1,4 +1,5 @@
-import { Article, CONSTANTS } from '../types';
+import { Article } from '../src/types/models';
+import { CONSTANTS } from '../src/constants';
 
 // 数据库连接状态
 enum DBConnectionState {
@@ -27,6 +28,7 @@ class DBService {
   };
   private retryCount = 0;
   private readonly MAX_RETRIES = 3;
+  private initPromise: Promise<IDBDatabase> | null = null;
 
   // 获取连接状态
   getConnectionState(): DBConnectionState {
@@ -40,9 +42,15 @@ class DBService {
 
   // 初始化数据库连接
   init(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
+    if (this.initPromise) return this.initPromise;
+    if (this.connectionState === DBConnectionState.CONNECTED && this.db) {
+      return Promise.resolve(this.db);
+    }
+
+    this.initPromise = new Promise<IDBDatabase>((resolve, reject) => {
       if (!window.indexedDB) {
         this.connectionState = DBConnectionState.ERROR;
+        this.initPromise = null;
         return reject(new Error("浏览器不支持IndexedDB"));
       }
 
@@ -52,10 +60,9 @@ class DBService {
 
       request.onupgradeneeded = (e: IDBVersionChangeEvent) => {
         const db = (e.target as IDBOpenDBRequest).result;
-        if (db.objectStoreNames.contains(CONSTANTS.DB_STORE)) {
-          db.deleteObjectStore(CONSTANTS.DB_STORE);
+        if (!db.objectStoreNames.contains(CONSTANTS.DB_STORE)) {
+          db.createObjectStore(CONSTANTS.DB_STORE);
         }
-        db.createObjectStore(CONSTANTS.DB_STORE);
       };
 
       request.onsuccess = (e: Event) => {
@@ -63,7 +70,6 @@ class DBService {
         this.connectionState = DBConnectionState.CONNECTED;
         this.retryCount = 0;
 
-        // 添加数据库连接事件监听
         this.db.onerror = (event) => {
           console.error('数据库连接错误:', event);
           this.connectionState = DBConnectionState.ERROR;
@@ -72,6 +78,7 @@ class DBService {
         this.db.onclose = () => {
           console.warn('数据库连接关闭');
           this.connectionState = DBConnectionState.DISCONNECTED;
+          this.initPromise = null;
         };
 
         resolve(this.db);
@@ -82,14 +89,15 @@ class DBService {
         const error = (e.target as IDBOpenDBRequest).error;
         console.error('数据库初始化失败:', error);
 
-        // 重试逻辑
         if (this.retryCount < this.MAX_RETRIES) {
           this.retryCount++;
           console.log(`第${this.retryCount}次重试数据库连接...`);
+          this.initPromise = null;
           setTimeout(() => {
             this.init().then(resolve).catch(reject);
           }, 1000 * this.retryCount);
         } else {
+          this.initPromise = null;
           reject(new Error(`数据库连接失败，已重试${this.MAX_RETRIES}次: ${error?.message || '未知错误'}`));
         }
       };
@@ -97,9 +105,12 @@ class DBService {
       request.onblocked = () => {
         console.warn('数据库连接被阻塞，请关闭其他标签页');
         this.connectionState = DBConnectionState.ERROR;
+        this.initPromise = null;
         reject(new Error('数据库连接被阻塞，请关闭其他标签页'));
       };
     });
+
+    return this.initPromise;
   }
 
   // 保存数据（带性能监控）
@@ -229,6 +240,7 @@ class DBService {
   // 获取所有文章
   async getArticles(): Promise<Article[]> {
     if (!this.db) await this.init();
+    if (!this.db) throw new Error("数据库初始化失败");
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(CONSTANTS.DB_STORE, "readonly");
       const store = tx.objectStore(CONSTANTS.DB_STORE);
@@ -257,6 +269,7 @@ class DBService {
   // 删除单篇文章
   async deleteArticle(id: number): Promise<void> {
     if (!this.db) await this.init();
+    if (!this.db) throw new Error("数据库初始化失败");
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(CONSTANTS.DB_STORE, "readwrite");
       const store = tx.objectStore(CONSTANTS.DB_STORE);
@@ -279,6 +292,7 @@ class DBService {
   // 原子化：清空并批量保存文章
   async clearAndBulkSaveArticles(articles: Article[]): Promise<void> {
     if (!this.db) await this.init();
+    if (!this.db) throw new Error("数据库初始化失败");
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(CONSTANTS.DB_STORE, "readwrite");
       const store = tx.objectStore(CONSTANTS.DB_STORE);

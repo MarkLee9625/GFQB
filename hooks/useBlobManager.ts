@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { base64ToBlob } from '../src/utils/fileHelpers';
 
 /**
@@ -6,7 +6,6 @@ import { base64ToBlob } from '../src/utils/fileHelpers';
  * 放在模块顶层以支持跨组件、跨 Hook 实例的缓存复用
  */
 const globalBlobCache = new Map<string, { url: string; timestamp: number }>();
-const globalCleanupQueue: Array<() => void> = [];
 const MAX_CACHE_SIZE = 100;
 
 const cleanupExpiredUrls = (): void => {
@@ -29,6 +28,15 @@ const cleanupExpiredUrls = (): void => {
     }
   }
 };
+
+let cleanupTimerStarted = false;
+function startCleanupTimer() {
+  if (cleanupTimerStarted) return;
+  cleanupTimerStarted = true;
+  setInterval(cleanupExpiredUrls, 60 * 1000);
+}
+
+startCleanupTimer();
 
 /**
  * 优化Blob URL管理的自定义Hook
@@ -60,12 +68,6 @@ export function useBlobManager() {
       const url = URL.createObjectURL(blob);
       globalBlobCache.set(dataUrl, { url, timestamp: Date.now() });
 
-      // 添加到全局清理列表
-      globalCleanupQueue.push(() => {
-        URL.revokeObjectURL(url);
-        globalBlobCache.delete(dataUrl);
-      });
-
       return url;
     } catch (error) {
       console.error('Failed to create blob URL:', error);
@@ -89,18 +91,6 @@ export function useBlobManager() {
     }
     globalBlobCache.clear();
     // 这里我们不直接弹出全局队列，而是由管理器统一维护
-  }, []);
-
-  // 组件卸载时不因单次生命周期清理全局缓存，交给定时清理
-  useEffect(() => {
-    // 移除原有的 cleanupAll 调用，因为缓存是全局共享的
-    // 如果需要显式清理，可以在 App 层级调用提供的方法
-  }, []);
-
-  // 定期清理过期URL
-  useEffect(() => {
-    const interval = setInterval(cleanupExpiredUrls, 60 * 1000); // 每分钟检查一次
-    return (): void => clearInterval(interval);
   }, []);
 
   return {

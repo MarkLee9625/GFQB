@@ -54,12 +54,7 @@ export async function compressWithNativeAPI(data: string, format: 'gzip' | 'defl
     const dataBytes = encoder.encode(data);
     
     const compressionStream = new CompressionStream(format);
-    const writableStream = new WritableStream({
-        write(chunk) {
-            // 流写入处理
-        }
-    });
-    
+
     const readableStream = new ReadableStream({
         start(controller) {
             controller.enqueue(dataBytes);
@@ -139,27 +134,29 @@ export async function decompressWithNativeAPI(compressedBytes: Uint8Array, forma
  * @param data 要压缩的字符串数据
  * @param format 压缩格式，默认为 'gzip'
  */
-export async function compressData(data: string, format: 'gzip' | 'deflate' = 'gzip'): Promise<Uint8Array> {
+export interface CompressionResult {
+    data: Uint8Array;
+    method: 'gzip' | 'deflate' | 'none';
+}
+
+export async function compressData(data: string, format: 'gzip' | 'deflate' = 'gzip'): Promise<CompressionResult> {
     if (supportsCompressionStream()) {
         console.log('[压缩] 使用原生 CompressionStream API');
-        return await compressWithNativeAPI(data, format);
+        const compressed = await compressWithNativeAPI(data, format);
+        return { data: compressed, method: format };
     }
     
-    // 回退到 fflate
     console.log('[压缩] 原生 API 不可用，回退到 fflate');
     try {
-        // 动态导入 fflate，避免未安装时的构建错误
         const fflate = await import('fflate');
         const encoder = new TextEncoder();
         const dataBytes = encoder.encode(data);
         
-        // 使用 fflate 的 gzip 压缩
         const compressed = fflate.gzipSync(dataBytes);
-        return compressed;
+        return { data: compressed, method: format };
     } catch (error) {
         console.error('[压缩] fflate 加载失败，使用未压缩数据', error);
-        // 返回未压缩的字节数据
-        return new TextEncoder().encode(data);
+        return { data: new TextEncoder().encode(data), method: 'none' };
     }
 }
 

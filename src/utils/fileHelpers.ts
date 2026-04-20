@@ -1,4 +1,4 @@
-import { CONSTANTS } from '../../types';
+import { CONSTANTS } from '../constants';
 
 /**
  * 文件转换为DataURL（带内存优化）
@@ -128,8 +128,8 @@ export const compressImage = async (
 
                 const compressedDataUrl = canvas.toDataURL(mimeType, quality);
                 
-                if (compressedDataUrl.length < 100) {
-                    const fallbackMime = format === 'webp' ? 'image/jpeg' : 'image/jpeg';
+                if (compressedDataUrl.length < 100 || (format === 'webp' && compressedDataUrl.startsWith('data:image/png'))) {
+                    const fallbackMime = 'image/jpeg';
                     const fallbackDataUrl = canvas.toDataURL(fallbackMime, 0.8);
                     if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
                     resolve(fallbackDataUrl);
@@ -255,13 +255,18 @@ export function parseMarkdownToHtml(mdText: string): string {
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
   // 处理加粗和斜体
-  html = html.replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>');
-  html = html.replace(/\*(.*)\*/gim, '<em>$1</em>');
+  html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+  html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
   // 处理图片 (突破微信防盗链！)
   html = html.replace(/!\[(.*?)\]\((.*?)\)/gim, '<img src="$2" alt="$1" referrerpolicy="no-referrer" style="max-width:100%; border-radius:8px; margin:16px auto; display:block;" />');
   // 处理链接
   html = html.replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank" style="color:#3b82f6;">$1</a>');
   // 处理段落换行 (保留双换行为段落)
-  html = html.split('\n\n').map(p => p.trim() ? `<p style="margin-bottom:1em; line-height:1.6;">${p}</p>` : '').join('\n');
+  html = html.split('\n\n').map(p => {
+    const trimmed = p.trim();
+    if (!trimmed) return '';
+    if (/^<(h[1-6]|ul|ol|li|blockquote|pre|table|figure|hr)/i.test(trimmed)) return trimmed;
+    return `<p style="margin-bottom:1em; line-height:1.6;">${trimmed}</p>`;
+  }).join('\n');
   return html;
 }
