@@ -3,7 +3,7 @@ import { Article } from '../../src/types/models';
 import { Icon } from '../Icons';
 import { usePanZoom } from '../../hooks/usePanZoom';
 import { ArticleRendererBaseProps } from './ArticleRenderer';
-import { AmbientBg, TechGrid, LazyImage } from './SharedComponents';
+import { AmbientBg, TechGrid } from './SharedComponents';
 import { calculateAutoFitPosition } from '../../src/utils/imageMath';
 import ImageToolbar from '../editor/ImageToolbar';
 
@@ -140,141 +140,160 @@ export const BackRenderer = React.memo<BackRendererProps>(({
     }
   }, [article.backImage, onUpdate, article.id]);
 
+  const hasImage = !!backUrl;
+
+  // ────── Magazine Design ──────
   if (useAlternateDesign) {
     return (
       <div
         ref={containerRef}
         id={`back-${article.id}`}
-        className="w-full min-h-[840px] flex flex-col p-[40px_60px] bg-white text-left relative overflow-hidden group magazine-back-cover"
+        className="w-full min-h-[900px] flex flex-col text-left relative overflow-hidden group magazine-back-cover"
         {...eventHandlers}
       >
-        <div className="absolute inset-0 z-0 bg-gradient-to-tl from-blue-50/80 via-white to-gray-50/80"></div>
+        {/* Background when no image */}
+        {!hasImage && (
+          <div className="absolute inset-0 z-0 bg-gradient-to-tl from-blue-50/80 via-white to-gray-50/80"></div>
+        )}
 
-        <div className="flex flex-col items-start z-[2] mb-[25px] shrink-0 w-full relative">
-          <div className="font-sans text-[9px] font-black text-brand-blue tracking-[4px] uppercase w-full mb-[2px] letter-spacing-wider">
+        {/* Ambient blur background */}
+        {hasImage && (
+          <div className="absolute inset-0 z-0 overflow-hidden">
+            <AmbientBg src={backUrl} />
+          </div>
+        )}
+
+        {/* Full-bleed image */}
+        {hasImage && (
+          <div
+            ref={imageContainerRef}
+            className={`absolute inset-0 z-[1] ${isEditable ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
+            onClick={handleContainerClick}
+          >
+            <div className={`w-full h-full ${isImageSelected ? 'cover-img-selected' : ''}`}>
+              <img
+                src={backUrl}
+                alt="Back Cover"
+                className="w-full h-full object-cover select-none"
+                style={{
+                  transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
+                  transformOrigin: 'center',
+                }}
+                draggable={false}
+                onClick={handleImageClick}
+                onDoubleClick={handleImageDoubleClick}
+              />
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/70 pointer-events-none z-[2]"></div>
+            {isEditable && !isImageSelected && (
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-[3]">
+                <div className="bg-black/60 text-white text-xs px-3 py-2 rounded backdrop-blur-sm">
+                  双击更换封底图片，单击选中编辑
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Header section */}
+        <div className="flex flex-col items-start z-[3] w-full relative px-[40px] md:px-[60px] pt-[35px] shrink-0">
+          <div className="font-sans text-[9px] font-black text-[#005596] tracking-[4px] uppercase w-full mb-[2px] letter-spacing-wider drop-shadow-[0_1px_3px_rgba(255,255,255,0.8)]">
             SHIP CONSTRUCTION METHOD
           </div>
-          <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-brand-blue/30 to-transparent mb-[15px]"></div>
+          <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[#005596]/20 to-transparent mb-[15px]"></div>
 
           <div className="relative transform -rotate-2 origin-left">
             <h1
-              className="font-serif text-[64px] font-black tracking-[-2px] leading-[0.9] mb-[5px] italic"
+              className="font-serif text-[64px] font-black tracking-[-2px] leading-[0.9] mb-[5px] italic drop-shadow-[0_2px_8px_rgba(255,255,255,0.6)]"
               style={{
-                background: 'linear-gradient(to bottom, #005596, #003366)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-                color: 'transparent'
+                color: '#005596',
               }}
             >
               Sailing With Success
             </h1>
-            <div className="absolute -bottom-3 left-0 w-24 h-2 bg-gradient-to-r from-brand-blue to-transparent transform rotate-2"></div>
+            <div className="absolute -bottom-3 left-0 w-24 h-2 bg-gradient-to-r from-[#005596]/60 to-transparent transform rotate-2"></div>
           </div>
         </div>
 
-        <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative my-4">
-          <div
-            ref={imageContainerRef}
-            className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${
-              isEditable ? 'cursor-grab active:cursor-grabbing' : ''
-            }`}
-            onClick={handleContainerClick}
-          >
-            {backUrl ? (
-              <div className={`relative group ${isImageSelected ? 'cover-img-selected' : ''} flex flex-col items-center justify-center w-full h-full`}>
-                <LazyImage
-                  src={backUrl}
-                  alt="Back Cover"
-                  className="w-auto h-auto max-w-full max-h-full object-contain shadow-2xl relative z-[1] rounded-[8px] transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto"
-                  style={{
-                    boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.3)'
-                  }}
-                  onClick={handleImageClick}
-                  onDoubleClick={handleImageDoubleClick}
-                />
-                {isEditable && !isImageSelected && (
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                    <div className="bg-black/60 text-white text-xs px-3 py-2 rounded backdrop-blur-sm">
-                      双击更换封底图片，单击选中编辑
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="clickable-area text-gray-500 text-[14px] bg-white/90 backdrop-blur-sm px-8 py-4 border-2 border-dashed border-gray-300 z-[10] tracking-widest rounded-xl shadow-sm hover:bg-white hover:text-brand-blue hover:border-brand-blue hover:scale-105 active:scale-95 transition-all cursor-pointer font-bold group"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isEditable) onImageUpload?.('back');
-                }}
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-brand-blue/10 flex items-center justify-center">
-                    <Icon name="image" className="w-5 h-5 text-brand-blue" />
-                  </div>
-                  <span>添加封底图片</span>
-                  <span className="text-[11px] font-normal text-gray-400">建议尺寸 1200×1600</span>
+        {/* Upload button when no image */}
+        {!hasImage && (
+          <div className="flex-1 flex items-center justify-center z-[3]">
+            <button
+              type="button"
+              className="clickable-area text-gray-500 text-[14px] bg-white/90 backdrop-blur-sm px-8 py-4 border-2 border-dashed border-gray-300 z-[10] tracking-widest rounded-xl shadow-sm hover:bg-white hover:text-brand-blue hover:border-brand-blue hover:scale-105 active:scale-95 transition-all cursor-pointer font-bold group"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isEditable) onImageUpload?.('back');
+              }}
+            >
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-brand-blue/10 flex items-center justify-center">
+                  <Icon name="image" className="w-5 h-5 text-brand-blue" />
                 </div>
-              </button>
-            )}
+                <span>添加封底图片</span>
+                <span className="text-[11px] font-normal text-gray-400">建议尺寸 1200×1600</span>
+              </div>
+            </button>
           </div>
-        </div>
+        )}
 
-        <div className="w-full flex items-start justify-between z-[2] shrink-0 relative">
+        {/* Spacer when no image */}
+        {!hasImage && <div className="shrink-0 h-[60px]"></div>}
+
+        {/* Footer background strip — ensures footer text stays clear over blurred background */}
+        <div className="absolute bottom-0 left-0 right-0 z-[2] h-[160px] bg-gradient-to-t from-white/80 via-white/30 to-transparent pointer-events-none"></div>
+
+        {/* Footer — overlaid on image */}
+        <div className="flex items-end justify-between z-[3] pb-[30px] px-[40px] md:px-[60px] shrink-0 w-full relative mt-auto pt-[20px]">
           <div className="flex flex-col gap-[8px] max-w-[40%]">
-            <div className="text-[11px] text-gray-500 tracking-[1px] font-bold uppercase">
+            <div className="text-[11px] text-[#005596]/70 tracking-[1px] font-bold uppercase drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]">
               SWS Offshore
             </div>
-            <div className="font-normal text-[10px] text-gray-400 leading-tight">
+            <div className="font-normal text-[10px] text-[#005596]/50 leading-tight drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]">
               Shanghai Waigaoqiao Shipbuilding Co., Ltd.<br />
               上海外高桥造船有限公司
             </div>
-            <div className="mt-[10px] text-[9px] text-gray-400">
+            <div className="mt-[10px] text-[9px] text-[#005596]/40 drop-shadow-[0_1px_2px_rgba(255,255,255,0.6)]">
               © {new Date().getFullYear()} Ship Construction Method Information
             </div>
           </div>
 
-          <div className="flex flex-col gap-[12px]">
-            <div className="grid grid-cols-3 gap-[20px] text-[11px] text-gray-600 font-sans">
+          <div className="flex flex-col gap-[12px] items-center">
+            <div className="grid grid-cols-3 gap-[20px] text-[11px] text-[#005596]/80 font-sans drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]">
               <div className="flex flex-col gap-[2px]">
-                <div className="text-gray-400 text-[9px] uppercase tracking-widest">编辑</div>
-                <b>马李琛</b>
+                <div className="text-[#005596]/50 text-[9px] uppercase tracking-widest">编辑</div>
+                <b className="text-[#005596]">马李琛</b>
               </div>
               <div className="flex flex-col gap-[2px]">
-                <div className="text-gray-400 text-[9px] uppercase tracking-widest">校对</div>
-                <b>胡国超</b>
+                <div className="text-[#005596]/50 text-[9px] uppercase tracking-widest">校对</div>
+                <b className="text-[#005596]">胡国超</b>
               </div>
               <div className="flex flex-col gap-[2px]">
-                <div className="text-gray-400 text-[9px] uppercase tracking-widest">审核</div>
-                <b>储年生</b>
+                <div className="text-[#005596]/50 text-[9px] uppercase tracking-widest">审核</div>
+                <b className="text-[#005596]">储年生</b>
               </div>
             </div>
 
             <div className="flex flex-col items-center gap-[2px] mt-[5px]">
-              <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-              <div className="text-[8px] text-gray-400 tracking-[3px]">ISSN 0000-0000</div>
+              <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#005596]/30 to-transparent"></div>
+              <div className="text-[8px] text-[#005596]/40 tracking-[3px]">ISSN 0000-0000</div>
             </div>
           </div>
 
           <div className="flex flex-col items-end gap-[10px]">
             {logo && (
               <div className="relative">
-                <img src={logo} className="h-[25px] w-auto block" alt="Logo" />
-                <div className="absolute -bottom-1 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-brand-blue/50 to-transparent"></div>
+                <img src={logo} className="h-[25px] w-auto block brightness-0 invert-[0.3] sepia-[1] saturate-[5] hue-rotate-[150deg] opacity-80" alt="Logo" />
+                <div className="absolute -bottom-1 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#005596]/50 to-transparent"></div>
               </div>
             )}
-            <div className="text-[9px] text-gray-400 text-right">
+            <div className="text-[9px] text-[#005596]/50 text-right drop-shadow-[0_1px_2px_rgba(255,255,255,0.6)]">
               Official Publication<br />
               Volume {article.issueText || '01'} · {article.dateText || `JAN ${new Date().getFullYear()}`}
             </div>
           </div>
         </div>
 
-        <div className="absolute top-20 left-10 w-3 h-3 border-2 border-brand-blue/20 rounded-full"></div>
-        <div className="absolute bottom-20 right-10 w-2 h-2 border border-brand-blue/20"></div>
-        <div className="absolute top-40 right-20 w-6 h-px bg-gradient-to-r from-transparent to-brand-blue/30"></div>
         {isEditable && isImageSelected && toolbarPos && (
           <ImageToolbar
             position={toolbarPos}
@@ -291,82 +310,100 @@ export const BackRenderer = React.memo<BackRendererProps>(({
     );
   }
 
+  // ────── Default Design ──────
   return (
     <div
       ref={containerRef}
       id={`back-${article.id}`}
-      className="w-full min-h-[840px] flex flex-col p-0 bg-transparent text-left border-t-8 border-brand-blue relative overflow-hidden group"
+      className="w-full min-h-[900px] flex flex-col p-0 text-left border-t-8 border-brand-blue relative overflow-hidden group"
       {...eventHandlers}
     >
       <div className="absolute inset-0 z-0 overflow-hidden bg-transparent">
         <TechGrid />
         <AmbientBg src={backUrl} />
       </div>
-      <div className="w-full border-b-[3px] border-double border-[#333] pb-[15px] mb-[15px] flex flex-col items-start gap-[5px] z-[2] shrink-0 relative">
-        <div className="font-sans text-[10px] font-extrabold text-brand-blue tracking-[3px] uppercase w-full mb-[5px]">
+
+      {/* Full-bleed image */}
+      {hasImage && (
+        <div
+          ref={imageContainerRef}
+          className={`absolute inset-0 z-[1] ${isEditable ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
+          onClick={handleContainerClick}
+        >
+          <div className={`w-full h-full ${isImageSelected ? 'cover-img-selected' : ''}`}>
+            <img
+              src={backUrl}
+              alt="Back Cover"
+              className="w-full h-full object-cover select-none"
+              style={{
+                transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
+                transformOrigin: 'center',
+              }}
+              draggable={false}
+              onClick={handleImageClick}
+              onDoubleClick={handleImageDoubleClick}
+            />
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/80 pointer-events-none z-[2]"></div>
+          {isEditable && !isImageSelected && (
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-[3]">
+              <div className="bg-black/60 text-white text-xs px-3 py-2 rounded backdrop-blur-sm">
+                双击更换封底图片，单击选中编辑
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col items-start z-[3] w-full relative px-[40px] md:px-[60px] pt-[30px] shrink-0">
+        <div className="font-sans text-[10px] font-extrabold text-[#005596] tracking-[3px] uppercase w-full mb-[5px] drop-shadow-[0_1px_3px_rgba(255,255,255,0.8)]">
           Ship Construction Method Information
         </div>
-        <div className="font-serif text-[36px] font-bold tracking-[2px] uppercase m-0 leading-[1.2] text-transparent bg-clip-text bg-gradient-to-b from-brand-blue to-brand-dark">
+        <div className="font-serif text-[36px] font-bold tracking-[2px] uppercase m-0 leading-[1.2] drop-shadow-[0_1px_3px_rgba(255,255,255,0.8)]"
+          style={{ color: '#005596' }}>
           Sailing With Success
         </div>
       </div>
-      <div className="w-full h-[550px] shrink-0 flex justify-center items-center z-[1] relative my-4">
-        <div
-          ref={imageContainerRef}
-          className={`w-full h-full flex items-center justify-center p-4 md:p-8 ${
-            isEditable ? backUrl ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer' : ''
-          }`}
-          onClick={handleContainerClick}
-        >
-          {backUrl ? (
-            <div className={`relative group ${isImageSelected ? 'cover-img-selected' : ''}`}>
-              <LazyImage
-                src={backUrl}
-                alt="Back Cover"
-                className="w-auto h-auto max-w-full max-h-full object-contain shadow-2xl relative z-[1] rounded-[8px] origin-center will-change-transform transition-all duration-300 group-hover:shadow-3xl group-hover:scale-[1.02] mx-auto mix-blend-multiply"
-                style={{
-                  transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
-                  boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.5)'
-                }}
-                onClick={handleImageClick}
-                onDoubleClick={handleImageDoubleClick}
-              />
-              {isEditable && !isImageSelected && (
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                  <div className="bg-black/60 text-white text-xs px-3 py-2 rounded backdrop-blur-sm">
-                    双击更换封底图片，单击选中编辑
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="clickable-area absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-[13px] bg-white/80 backdrop-blur-sm px-6 py-3 border border-gray-200 z-[10] tracking-widest rounded-lg shadow-sm hover:bg-white hover:text-brand-blue hover:border-brand-blue hover:scale-105 active:scale-95 transition-all cursor-pointer font-bold"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isEditable) onImageUpload?.('back');
-              }}
-            >
-              + BACK PHOTO
-            </button>
-          )}
+
+      {/* Upload button when no image */}
+      {!hasImage && (
+        <div className="flex-1 flex items-center justify-center z-[3]">
+          <button
+            type="button"
+            className="clickable-area absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-[13px] bg-white/80 backdrop-blur-sm px-6 py-3 border border-gray-200 z-[10] tracking-widest rounded-lg shadow-sm hover:bg-white hover:text-brand-blue hover:border-brand-blue hover:scale-105 active:scale-95 transition-all cursor-pointer font-bold"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isEditable) onImageUpload?.('back');
+            }}
+          >
+            + BACK PHOTO
+          </button>
         </div>
-      </div>
-      <div className="w-full flex items-center justify-between z-[2] pt-[15px] shrink-0 mt-[15px] relative">
-        <div className="text-[10px] text-gray-400 tracking-[1px] font-bold uppercase flex flex-col gap-[4px]">
-          <span>SWS Offshore</span>
-          <span className="font-normal text-[9px]">Shanghai Waigaoqiao Shipbuilding Co., Ltd.</span>
+      )}
+
+      {/* Spacer when no image */}
+      {!hasImage && <div className="shrink-0 h-[60px]"></div>}
+
+      {/* Footer background strip — ensures footer text stays clear over blurred background */}
+      <div className="absolute bottom-0 left-0 right-0 z-[2] h-[140px] bg-gradient-to-t from-white/80 via-white/30 to-transparent pointer-events-none"></div>
+
+      {/* Footer */}
+      <div className="flex items-end justify-between z-[3] pb-[25px] px-[40px] md:px-[60px] shrink-0 w-full relative mt-auto pt-[15px]">
+        <div className="flex flex-col gap-[4px]">
+          <span className="text-[#005596]/70 text-[10px] tracking-[1px] font-bold uppercase drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]">SWS Offshore</span>
+          <span className="font-normal text-[9px] text-[#005596]/50 drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]">Shanghai Waigaoqiao Shipbuilding Co., Ltd.</span>
         </div>
         <div className="flex items-center gap-[20px]">
-          <div className="flex gap-[15px] text-[11px] text-[#666] font-sans">
-            <div className="flex gap-[4px] whitespace-nowrap"><span>编辑:</span> <b>马李琛</b></div>
-            <div className="flex gap-[4px] whitespace-nowrap"><span>校对:</span> <b>胡国超</b></div>
-            <div className="flex gap-[4px] whitespace-nowrap"><span>审核:</span> <b>储年生</b></div>
+          <div className="flex gap-[15px] text-[#005596]/80 text-[11px] font-sans drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]">
+            <div className="flex gap-[4px] whitespace-nowrap"><span className="text-[#005596]/60">编辑:</span> <b className="text-[#005596]">马李琛</b></div>
+            <div className="flex gap-[4px] whitespace-nowrap"><span className="text-[#005596]/60">校对:</span> <b className="text-[#005596]">胡国超</b></div>
+            <div className="flex gap-[4px] whitespace-nowrap"><span className="text-[#005596]/60">审核:</span> <b className="text-[#005596]">储年生</b></div>
           </div>
-          {logo && <img src={logo} className="h-[20px] w-auto block" alt="Logo" />}
+          {logo && <img src={logo} className="h-[20px] w-auto block brightness-0 invert-[0.3] sepia-[1] saturate-[5] hue-rotate-[150deg] opacity-80" alt="Logo" />}
         </div>
       </div>
+
       {isEditable && isImageSelected && toolbarPos && (
         <ImageToolbar
           position={toolbarPos}

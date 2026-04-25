@@ -263,7 +263,8 @@ const AppContent: React.FC = () => {
     if (!file || !currentId) return;
     try {
       const base64 = await fileToDataURL(file);
-      const compressedBase64 = await compressImage(base64);
+      const isCoverUpload = uploadTypeRef.current === 'cover' || uploadTypeRef.current === 'back';
+      const compressedBase64 = await compressImage(base64, isCoverUpload ? 2400 : 1200, isCoverUpload ? 0.92 : 0.8);
       if (uploadTypeRef.current === 'cover') {
         updateArticle(currentId, { coverImage: compressedBase64 });
       } else {

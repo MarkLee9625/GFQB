@@ -1,4 +1,5 @@
 # SWS 工法情报编辑器
+**Language**: Always respond in Chinese (Simplified). 无论处理什么任务，请始终使用简体中文回复。
 
 船舶与海洋工程工法情报收集、编辑与发布系统。
 

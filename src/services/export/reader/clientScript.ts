@@ -390,22 +390,27 @@ export function getClientScript() {
                 if (elem.dataset.field === 'dateText') elem.textContent = dateText;
             });
             var imagePlaceholder = node.querySelector('.magazine-image-placeholder') || node.querySelector('.cover-img-placeholder');
+            var imageLayer = node.querySelector('.cover-image-layer');
             if (coverImgUrl) {
                 var img = document.createElement('img');
                 img.src = coverImgUrl;
-                img.className = imagePlaceholder ? (imagePlaceholder.className.indexOf('magazine') !== -1 ? 'magazine-image' : 'cover-img') : 'cover-img';
                 img.alt = "Cover";
-                if (!self.alternateDesign) {
-                    var s = parseFloat(article.scale) || 1;
-                    var x = parseFloat(article.posX) || 0;
-                    var y = parseFloat(article.posY) || 0;
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+                var s = parseFloat(article.scale) || 1;
+                var x = parseFloat(article.posX) || 0;
+                var y = parseFloat(article.posY) || 0;
+                if (s !== 1 || x !== 0 || y !== 0) {
                     img.style.transformOrigin = 'center';
                     img.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + s + ')';
                 }
-                if (imagePlaceholder) imagePlaceholder.parentNode.replaceChild(img, imagePlaceholder);
-                var ambientBg = node.querySelector('.ambient-bg');
-                if (!self.alternateDesign && ambientBg) ambientBg.style.backgroundImage = 'url(' + coverImgUrl + ')';
+                if (imageLayer && imagePlaceholder) {
+                    imageLayer.replaceChild(img, imagePlaceholder);
+                } else if (imagePlaceholder) {
+                    imagePlaceholder.parentNode.replaceChild(img, imagePlaceholder);
+                }
             }
+            var ambientBg = node.querySelector('.ambient-bg');
+            if (!self.alternateDesign && ambientBg && coverImgUrl) ambientBg.style.backgroundImage = 'url(' + coverImgUrl + ')';
             el.appendChild(node);
             var startBtn = el.querySelector('.magazine-button');
             if (startBtn) startBtn.onclick = function(e) { e.preventDefault(); self.next(); };
@@ -438,13 +443,21 @@ export function getClientScript() {
                     if (field === 'issueText') elem.textContent = article.issueText || "NO.01";
                     if (field === 'dateText') elem.textContent = article.dateText || "JAN 2025";
                 });
-                var imgContainer = node.querySelector('.magazine-back-image-container');
-                var placeholder = node.querySelector('.magazine-image-placeholder');
-                if (backImgUrl && imgContainer) {
+                var imageLayer = node.querySelector('.cover-image-layer');
+                var placeholder = imageLayer ? imageLayer.querySelector('.magazine-image-placeholder') : null;
+                if (backImgUrl && placeholder && imageLayer) {
                     var img = document.createElement('img');
-                    img.className = 'magazine-back-image';
                     img.src = backImgUrl;
-                    if (placeholder) imgContainer.replaceChild(img, placeholder); else imgContainer.appendChild(img);
+                    img.alt = "Back Cover";
+                    img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+                    var s = parseFloat(article.scale) || 1;
+                    var x = parseFloat(article.posX) || 0;
+                    var y = parseFloat(article.posY) || 0;
+                    if (s !== 1 || x !== 0 || y !== 0) {
+                        img.style.transformOrigin = 'center';
+                        img.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + s + ')';
+                    }
+                    imageLayer.replaceChild(img, placeholder);
                 }
             } else {
                 var fields = node.querySelectorAll('[data-field]');
@@ -457,6 +470,22 @@ export function getClientScript() {
                     if (field === 'issueText') elem.textContent = article.issueText || '01';
                     if (field === 'dateText') elem.textContent = article.dateText || 'JAN 2025';
                 });
+                var imageLayer = node.querySelector('.cover-image-layer');
+                var placeholder = imageLayer ? imageLayer.querySelector('.cover-img-placeholder') : null;
+                if (backImgUrl && placeholder && imageLayer) {
+                    var img = document.createElement('img');
+                    img.src = backImgUrl;
+                    img.alt = "Back Cover";
+                    img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+                    var s = parseFloat(article.scale) || 1;
+                    var x = parseFloat(article.posX) || 0;
+                    var y = parseFloat(article.posY) || 0;
+                    if (s !== 1 || x !== 0 || y !== 0) {
+                        img.style.transformOrigin = 'center';
+                        img.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + s + ')';
+                    }
+                    imageLayer.replaceChild(img, placeholder);
+                }
                 var bgContainer = node.querySelector('[data-field="bgStyle"]');
                 if (bgContainer && backImgUrl) {
                     bgContainer.style.backgroundImage = 'url(' + backImgUrl + ')';
@@ -465,22 +494,6 @@ export function getClientScript() {
                     bgContainer.style.opacity = '0.3';
                     bgContainer.style.filter = 'blur(60px) saturate(180%) brightness(1.05)';
                     bgContainer.style.transform = 'scale(1.2)';
-                }
-                var imgContainer = node.querySelector('.cover-img-box');
-                var placeholder = node.querySelector('.cover-img-placeholder');
-                if (backImgUrl && imgContainer) {
-                    var img = document.createElement('img');
-                    img.className = 'cover-img';
-                    img.src = backImgUrl;
-                    img.style.boxShadow = '0 20px 50px -12px rgba(0, 0, 0, 0.5)';
-                    if (article.scale !== undefined) {
-                        var s = parseFloat(article.scale) || 1;
-                        var x = parseFloat(article.posX) || 0;
-                        var y = parseFloat(article.posY) || 0;
-                        img.style.transformOrigin = 'center';
-                        img.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + s + ')';
-                    }
-                    if (placeholder) imgContainer.replaceChild(img, placeholder); else imgContainer.appendChild(img);
                 }
             }
             el.appendChild(node);

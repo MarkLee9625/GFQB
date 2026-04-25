@@ -55,73 +55,75 @@ body { margin: 0; padding: 0; font-family: "PingFang SC", "Microsoft YaHei", "Si
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Cover & Back Roots */
-/* Cover & Back Roots */
-.cover-root, .normal-back-root { 
-    width: 100%; 
-    min-height: 100vh; 
-    display: flex; 
-    flex-direction: column; 
-    padding: 30px 50px; 
-    border-top: 8px solid #005596; 
-    position: relative; 
-    overflow: hidden; 
-    background: white; 
+/* Cover & Back Roots — Full-bleed layout */
+.cover-root, .normal-back-root {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border-top: 8px solid #005596;
+    position: relative;
+    overflow: hidden;
+    background: white;
 }
 .ambient-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0.3; filter: blur(60px) saturate(180%) brightness(1.05); transform: scale(1.2); z-index: 0; pointer-events: none; transition: opacity 0.7s; }
 .tech-grid { position: absolute; inset: 0; opacity: 0.03; background-image: linear-gradient(#005596 1px, transparent 1px), linear-gradient(90deg, #005596 1px, transparent 1px); background-size: 40px 40px; z-index: 0; pointer-events: none; }
-.cover-header { border-bottom: 3px double #333; padding-bottom: 15px; margin-bottom: 15px; position: relative; z-index: 2; width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
-.cover-sub { font-family: sans-serif; font-size: 10px; font-weight: 800; color: #005596; letter-spacing: 3px; text-transform: uppercase; width: 100%; margin-bottom: 5px; }
-.cover-meta { display: flex; gap: 8px; align-items: center; justify-content: flex-start; font-family: sans-serif; color: #333; font-size: 12px; font-weight: bold; margin-top: 5px; }
-.cover-img-box { flex-grow: 1; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1; min-height: 500px; margin-top: 10px; position: relative; }
-.cover-img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; position: relative; z-index: 1; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border-radius: 2px; }
-.cover-footer { display: flex; align-items: center; justify-content: space-between; z-index: 2; padding-top: 15px; flex-shrink: 0; margin-top: 15px; width: 100%; position: relative; }
+.cover-image-layer { position: absolute; inset: 0; z-index: 1; overflow: hidden; }
+.cover-image-layer img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-overlay { position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.7) 100%); }
+.cover-header { position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding: 30px 50px 15px; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.cover-sub { font-family: sans-serif; font-size: 10px; font-weight: 800; color: #005596; letter-spacing: 3px; text-transform: uppercase; width: 100%; margin-bottom: 5px; text-shadow: 0 1px 3px rgba(255,255,255,0.8); }
+.cover-meta { display: flex; gap: 8px; align-items: center; justify-content: flex-start; font-family: sans-serif; color: #005596; font-size: 12px; font-weight: bold; text-shadow: 0 1px 3px rgba(255,255,255,0.8); }
+.cover-img-box { /* kept for backward compat — image layer replaces this */ }
+.cover-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-footer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 0 50px 25px; }
 `;
 
 export const MAGAZINE_STYLES = `
-/* Magazine Style Classes */
-.magazine-cover { width: 100%; min-height: 840px; display: flex; flex-direction: column; padding: 40px 60px; background: white; text-align: left; position: relative; overflow: hidden; }
-.magazine-bg-gradient { position: absolute; inset: 0; z-index: 0; background: linear-gradient(to bottom right, #eff6ff, white, #f9fafb); }
-.magazine-header { display: flex; flex-direction: column; align-items: flex-start; z-index: 2; margin-bottom: 25px; flex-shrink: 0; width: 100%; position: relative; }
-.magazine-header-title { font-family: sans-serif; font-size: 9px; font-weight: 900; color: #005596; letter-spacing: 4px; text-transform: uppercase; width: 100%; margin-bottom: 2px; }
-.magazine-header-divider { height: 1px; width: 100%; background: linear-gradient(to right, transparent, #00559680, transparent); margin-bottom: 15px; }
-.magazine-title-underline { position: absolute; bottom: -2px; left: 0; width: 64px; height: 1px; background: linear-gradient(to right, #005596, transparent); }
-.magazine-meta-container { display: flex; gap: 15px; align-items: center; justify-content: flex-start; font-family: sans-serif; color: #333; font-size: 11px; font-weight: bold; margin-top: 15px; }
-.magazine-meta-badge { min-width: 60px; text-align: center; padding: 4px 8px; border-radius: 9999px; border: 1px solid rgba(0,85,150,0.3); background: rgba(255,255,255,0.5); backdrop-filter: blur(4px); }
-.magazine-image-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1; width: 100%; min-height: 520px; margin-top: 5px; position: relative; }
+/* Magazine Style Classes — Full-bleed layout */
+.magazine-cover { width: 100%; min-height: 100vh; display: flex; flex-direction: column; padding: 0; text-align: left; position: relative; overflow: hidden; }
+.magazine-bg-gradient { position: absolute; inset: 0; z-index: 0; background: linear-gradient(to bottom right, #1a1a2e, #16213e, #0f3460); }
+.magazine-header { position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding: 35px 60px 20px; display: flex; flex-direction: column; align-items: flex-start; }
+.magazine-header-title { font-family: sans-serif; font-size: 9px; font-weight: 900; color: #005596; letter-spacing: 4px; text-transform: uppercase; width: 100%; margin-bottom: 2px; text-shadow: 0 1px 3px rgba(255,255,255,0.8); }
+.magazine-header-divider { height: 1px; width: 100%; background: linear-gradient(to right, transparent, rgba(0,85,150,0.3), transparent); margin-bottom: 15px; }
+.magazine-title-svg text { fill: #005596; }
+.magazine-title-underline { position: absolute; bottom: -2px; left: 0; width: 64px; height: 1px; background: linear-gradient(to right, rgba(255,255,255,0.8), transparent); }
+.magazine-meta-container { display: flex; gap: 15px; align-items: center; justify-content: flex-start; font-family: sans-serif; color: #005596; font-size: 11px; font-weight: bold; margin-top: 15px; text-shadow: 0 1px 3px rgba(255,255,255,0.8); }
+.magazine-meta-badge { min-width: 60px; text-align: center; padding: 4px 8px; border-radius: 9999px; border: 1px solid rgba(0,85,150,0.3); background: rgba(255,255,255,0.3); backdrop-filter: blur(4px); color: #005596; }
+.magazine-image-container { /* kept for backward compat */ }
 .magazine-image-wrapper { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; overflow: visible; }
-.magazine-image { width: auto; height: auto; max-width: 85%; max-height: 85%; object-fit: contain; position: relative; z-index: 1; box-shadow: 0 25px 60px -15px rgba(0,0,0,0.4); border-radius: 4px; transition: all 0.3s; }
-.magazine-footer { display: flex; align-items: center; justify-content: space-between; z-index: 2; padding-top: 20px; flex-shrink: 0; margin-top: 20px; width: 100%; position: relative; }
-.magazine-footer-text { font-size: 9px; color: #9ca3af; letter-spacing: 2px; text-transform: uppercase; font-weight: bold; }
-.magazine-button { font-size: 11px; font-weight: bold; color: white; background: linear-gradient(to right, #005596, #003366); display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 12px 16px; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); text-transform: uppercase; letter-spacing: 2px; transition: all 0.2s; }
+.magazine-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+.magazine-footer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 0 60px 30px; }
+.magazine-footer-text { font-size: 9px; color: rgba(0,85,150,0.5); letter-spacing: 2px; text-transform: uppercase; font-weight: bold; text-shadow: 0 1px 2px rgba(255,255,255,0.6); }
+.magazine-button { font-size: 11px; font-weight: bold; color: rgba(0,85,150,0.8); background: rgba(255,255,255,0.3); backdrop-filter: blur(8px); display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(0,85,150,0.2); text-transform: uppercase; letter-spacing: 2px; transition: all 0.2s; }
 .magazine-button:hover { opacity: 0.9; transform: translateX(4px); }
-.magazine-back-cover { width: 100%; min-height: 840px; display: flex; flex-direction: column; padding: 40px 60px; background: white; text-align: left; position: relative; overflow: hidden; }
+.magazine-back-cover { width: 100%; min-height: 100vh; display: flex; flex-direction: column; padding: 0; text-align: left; position: relative; overflow: hidden; }
 .magazine-back-bg { position: absolute; inset: 0; z-index: 0; background: linear-gradient(to top left, rgba(235,248,255,0.8), white, rgba(243,244,246,0.8)); }
-.magazine-back-header { display: flex; flex-direction: column; align-items: flex-start; z-index: 2; margin-bottom: 25px; flex-shrink: 0; width: 100%; position: relative; }
-.magazine-back-title { font-family: "PingFang SC", "Microsoft YaHei", "SimHei", serif; font-size: 64px; font-weight: 900; letter-spacing: -2px; line-height: 0.9; margin-bottom: 5px; font-style: italic; background: linear-gradient(to bottom, #005596, #003366); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; color: transparent; }
-.magazine-back-title-underline { position: absolute; bottom: -12px; left: 0; width: 96px; height: 3px; background: linear-gradient(to right, #005596, transparent); transform: rotate(2deg); }
-.magazine-back-image-container { flex-grow: 1; width: 100%; display: flex; align-items: center; justify-content: center; position: relative; overflow: visible; min-height: 520px; margin-bottom: 25px; }
-.magazine-back-image { width: auto; height: auto; max-width: 80%; max-height: 80%; object-fit: contain; box-shadow: 0 20px 50px -10px rgba(0,0,0,0.3); border-radius: 8px; transition: all 0.3s; }
-.magazine-back-footer { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; z-index: 2; flex-shrink: 0; position: relative; }
+.magazine-back-header { position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding: 35px 60px 20px; display: flex; flex-direction: column; align-items: flex-start; }
+.magazine-back-title { font-family: "PingFang SC", "Microsoft YaHei", "SimHei", serif; font-size: 64px; font-weight: 900; letter-spacing: -2px; line-height: 0.9; margin-bottom: 5px; font-style: italic; color: #005596; text-shadow: 0 2px 8px rgba(255,255,255,0.6); }
+.magazine-back-title-underline { position: absolute; bottom: -12px; left: 0; width: 96px; height: 3px; background: linear-gradient(to right, rgba(0,85,150,0.6), transparent); transform: rotate(2deg); }
+.magazine-back-image-container { /* kept for backward compat */ }
+.magazine-back-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+.magazine-back-footer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 60px 30px; }
 .magazine-back-left { display: flex; flex-direction: column; gap: 8px; max-width: 40%; }
-.magazine-back-company { font-size: 11px; color: #6b7280; letter-spacing: 1px; font-weight: bold; text-transform: uppercase; }
-.magazine-back-address { font-size: 10px; color: #9ca3af; line-height: 1.4; white-space: nowrap; }
-.magazine-back-copyright { margin-top: 10px; font-size: 9px; color: #9ca3af; }
+.magazine-back-company { font-size: 11px; color: rgba(0,85,150,0.7); letter-spacing: 1px; font-weight: bold; text-transform: uppercase; text-shadow: 0 1px 3px rgba(255,255,255,0.6); }
+.magazine-back-address { font-size: 10px; color: rgba(0,85,150,0.5); line-height: 1.4; white-space: nowrap; text-shadow: 0 1px 3px rgba(255,255,255,0.6); }
+.magazine-back-copyright { margin-top: 10px; font-size: 9px; color: rgba(0,85,150,0.4); text-shadow: 0 1px 3px rgba(255,255,255,0.6); }
 .magazine-back-center { display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; }
-.magazine-back-team { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; font-size: 11px; color: #4b5563; font-family: sans-serif; }
+.magazine-back-team { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; font-size: 11px; color: rgba(0,85,150,0.8); font-family: sans-serif; text-shadow: 0 1px 3px rgba(255,255,255,0.6); }
 .magazine-back-team-item { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
-.magazine-back-team-item b { font-weight: 700; color: #111; }
-.magazine-back-team-label { font-size: 9px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.1em; }
+.magazine-back-team-item b { font-weight: 700; color: #005596; }
+.magazine-back-team-label { font-size: 9px; color: rgba(0,85,150,0.5); text-transform: uppercase; letter-spacing: 0.1em; }
 .magazine-back-barcode { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 5px; width: 100%; }
-.magazine-back-barcode-line { height: 2px; width: 100%; background: linear-gradient(to right, transparent, #d1d5db, transparent); }
-.magazine-back-barcode-text { font-size: 8px; color: #9ca3af; letter-spacing: 3px; }
+.magazine-back-barcode-line { height: 2px; width: 100%; background: linear-gradient(to right, transparent, rgba(0,85,150,0.3), transparent); }
+.magazine-back-barcode-text { font-size: 8px; color: rgba(0,85,150,0.4); letter-spacing: 3px; }
 .magazine-back-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-.magazine-back-logo { height: 25px; width: auto; }
-.magazine-back-logo-underline { position: absolute; bottom: -1px; left: 0; right: 0; height: 1px; background: linear-gradient(to right, transparent, #00559680, transparent); }
-.magazine-back-info { font-size: 9px; color: #9ca3af; text-align: right; }
+.magazine-back-logo { height: 25px; width: auto; filter: brightness(0) saturate(100%) invert(28%) sepia(98%) saturate(1235%) hue-rotate(190deg); opacity: 0.8; }
+.magazine-back-info { font-size: 9px; color: rgba(0,85,150,0.5); text-align: right; text-shadow: 0 1px 3px rgba(255,255,255,0.6); }
 .magazine-decoration-circle { position: absolute; top: 80px; left: 40px; width: 12px; height: 12px; border: 2px solid rgba(0,85,150,0.2); border-radius: 50%; }
 .magazine-decoration-square { position: absolute; bottom: 80px; right: 40px; width: 8px; height: 8px; border: 1px solid rgba(0,85,150,0.2); }
-.magazine-decoration-line { position: absolute; top: 160px; right: 80px; width: 24px; height: 1px; background: linear-gradient(to right, transparent, #00559630); }
+.magazine-decoration-line { position: absolute; top: 160px; right: 80px; width: 24px; height: 1px; background: linear-gradient(to right, transparent, rgba(0,85,150,0.3)); }
 `;
 
 export const PRINT_STYLES = `
@@ -313,18 +315,38 @@ export const PRINT_STYLES = `
     }
     
     /* --- 封面/封底 (全屏无边距) --- */
-    .cover-root, .magazine-cover, .magazine-back-cover, .normal-back-root { 
+    .cover-root, .magazine-cover, .magazine-back-cover, .normal-back-root {
         width: 100% !important;
-        height: 100vh !important; /* 强制填满一页 */
+        height: 100vh !important;
         min-height: 100vh !important;
         max-height: 100vh !important;
         margin: 0 !important;
-        padding: 40px !important;
+        padding: 0 !important;
         border: none !important;
-        display: flex !important; 
-        flex-direction: column !important; 
-        justify-content: space-between !important; 
-        background-color: white !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        background-color: #1a1a2e !important;
+    }
+
+    .cover-image-layer {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 1 !important;
+        overflow: hidden !important;
+    }
+    .cover-image-layer img {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+        display: block !important;
+    }
+    .cover-overlay {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 2 !important;
+        pointer-events: none !important;
+        background: linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.7)) !important;
     }
 
     /* 内部元素保护 */
@@ -443,24 +465,29 @@ export const PRINT_STYLES = `
         display: block !important;
     }
     
-    /* 封面/封底图片特殊处理 */
+    /* 封面/封底图片特殊处理 — full-bleed */
     .cover-img, .magazine-image, .magazine-back-image {
-        max-width: 85% !important;
-        max-height: 65vh !important; /* 使用vh单位确保不超出页面高度 */
-        height: auto !important;
-        width: auto !important;
-        object-fit: contain !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        object-fit: cover !important;
         display: block !important;
-        margin: 0 auto !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
     }
-    
-    /* 封面/封底图片容器 */
+
+    /* 封面/封底图片容器 — full-bleed */
     .cover-img-box, .magazine-image-container, .magazine-back-image-container {
-        max-height: 70vh !important;
+        position: absolute !important;
+        inset: 0 !important;
+        max-height: none !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
         overflow: hidden !important;
+        z-index: 1 !important;
     }
     
     /* 文章底部Logo尺寸 */

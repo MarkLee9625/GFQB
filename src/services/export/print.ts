@@ -68,24 +68,28 @@ export async function generatePrintableHTML(
             const isMagazine = alternateDesign;
             const issueText = article.issueText || 'NO.01';
             const dateText = article.dateText || 'JAN 2025';
-            const coverImage = article.coverImage ? `<img src="${escapeAttr(article.coverImage)}" class="${isMagazine ? 'magazine-image' : 'cover-img'}" alt="Cover" />` : '<div class="cover-img-placeholder">暂无封面图片</div>';
+            const hasCover = !!article.coverImage;
+            const coverImageHtml = hasCover
+                ? `<img src="${escapeAttr(article.coverImage)}" alt="Cover" style="width:100%;height:100%;object-fit:cover;display:block;" />`
+                : '<div class="cover-img-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;background:#f3f4f6;">暂无封面图片</div>';
 
             if (isMagazine) {
                 articleHtml = `
                 <div class="print-page-wrapper">
                     <div class="magazine-cover">
                         <div class="magazine-bg-gradient"></div>
+                        <div class="cover-image-layer">${coverImageHtml}</div>
+                        <div class="cover-overlay" style="background:linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.6) 100%);"></div>
                         <div class="magazine-header">
                             <div class="magazine-header-title">SHIP CONSTRUCTION METHOD</div>
                             <div class="magazine-header-divider"></div>
-                            <h1 style="font-size: 60px; color:#005596; margin:0; font-weight:900; letter-spacing:10px;">工法情报</h1>
+                            <h1 style="font-size:60px; color:#005596; margin:0; font-weight:900; letter-spacing:10px; text-shadow:0 1px 4px rgba(255,255,255,0.8);">工法情报</h1>
                             <div class="magazine-meta-container">
                                 <div class="magazine-meta-badge">${issueText}</div>
-                                <span style="color:#00559680; font-size:12px;">•</span>
+                                <span style="color:rgba(0,85,150,0.4); font-size:12px;">•</span>
                                 <div class="magazine-meta-badge">${dateText}</div>
                             </div>
                         </div>
-                        <div class="magazine-image-container">${coverImage}</div>
                         <div class="magazine-footer"><div class="magazine-footer-text">OFFICIAL PUBLICATION</div></div>
                     </div>
                 </div>`;
@@ -95,19 +99,23 @@ export async function generatePrintableHTML(
                     <div class="cover-root">
                         <div class="tech-grid"></div>
                         <div class="ambient-bg" style="${article.coverImage ? `background-image:url(${escapeAttr(article.coverImage)});` : ''}"></div>
-                        <div class="cover-header">
+                        <div class="cover-image-layer">${coverImageHtml}</div>
+                        <div class="cover-overlay" style="background:linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.7) 100%);"></div>
+                        <div class="cover-header" style="padding:30px 50px;">
                             <div class="cover-sub">Ship Construction Method Information</div>
-                            <h1 style="font-size: 60px; color:#005596; margin:0; font-weight:900; letter-spacing:10px;">工法情报</h1>
-                            <div class="cover-meta"><span>${issueText}</span> <span style="color:#666; font-size:12px;">·</span> <span>${dateText}</span></div>
+                            <h1 style="font-size:60px; color:#005596; margin:0; font-weight:900; letter-spacing:10px; text-shadow:0 1px 4px rgba(255,255,255,0.8);">工法情报</h1>
+                            <div class="cover-meta"><span>${issueText}</span> <span style="color:rgba(0,85,150,0.4); font-size:12px;">·</span> <span>${dateText}</span></div>
                         </div>
-                        <div class="cover-img-box">${coverImage}</div>
-                        <div class="cover-footer"><div style="height:15px;width:80px;background-image:repeating-linear-gradient(90deg, #333, #333 1px, transparent 1px, transparent 3px);opacity:0.4;"></div></div>
+                        <div class="cover-footer"><div style="height:15px;width:80px;background-image:repeating-linear-gradient(90deg, rgba(255,255,255,0.5), rgba(255,255,255,0.5) 1px, transparent 1px, transparent 3px);opacity:0.6;"></div></div>
                     </div>
                 </div>`;
             }
         } else if (article.category === '封底') {
             const isMagazine = alternateDesign;
-            const backImage = article.backImage ? `<img src="${escapeAttr(article.backImage)}" class="${isMagazine ? 'magazine-back-image' : 'cover-img'}" alt="Back" />` : '<div class="cover-img-placeholder">暂无封底图片</div>';
+            const hasBack = !!article.backImage;
+            const backImageHtml = hasBack
+                ? `<img src="${escapeAttr(article.backImage)}" alt="Back" style="width:100%;height:100%;object-fit:cover;display:block;" />`
+                : '<div class="cover-img-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;background:#f3f4f6;">暂无封底图片</div>';
             const company = CONSTANTS.COMPANY_INFO;
 
             if (isMagazine) {
@@ -115,12 +123,13 @@ export async function generatePrintableHTML(
                 <div class="print-page-wrapper">
                     <div class="magazine-back-cover">
                         <div class="magazine-back-bg"></div>
+                        <div class="cover-image-layer">${backImageHtml}</div>
+                        <div class="cover-overlay" style="background:linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.7) 100%);"></div>
                         <div class="magazine-back-header">
                             <div class="magazine-header-title">SHIP CONSTRUCTION METHOD</div>
                             <div class="magazine-header-divider"></div>
-                            <div class="magazine-back-title">Sailing With Success</div>
+                            <div class="magazine-back-title" style="color:#005596;text-shadow:0 2px 8px rgba(255,255,255,0.6);">Sailing With Success</div>
                         </div>
-                        <div class="magazine-back-image-container">${backImage}</div>
                         <div class="magazine-back-footer">
                             <div class="magazine-back-left">
                                 <div class="magazine-back-company">${company.EN_SHORT}</div>
@@ -140,18 +149,19 @@ export async function generatePrintableHTML(
                     <div class="normal-back-root">
                         <div class="tech-grid"></div>
                         <div class="ambient-bg" style="${article.backImage ? `background-image:url(${escapeAttr(article.backImage)});` : ''}"></div>
-                        <div class="normal-back-header">
-                            <div class="normal-back-sub">Ship Construction Method Information</div>
-                            <h1 class="normal-back-title">Sailing With Success</h1>
+                        <div class="cover-image-layer">${backImageHtml}</div>
+                        <div class="cover-overlay" style="background:linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.8) 100%);"></div>
+                        <div class="normal-back-header" style="padding:30px 50px; z-index:3;">
+                            <div class="normal-back-sub" style="color:#005596; text-shadow:0 1px 3px rgba(255,255,255,0.8);">Ship Construction Method Information</div>
+                            <h1 class="normal-back-title" style="color:#005596; -webkit-text-fill-color:#005596; background:none; text-shadow:0 1px 4px rgba(255,255,255,0.8);">Sailing With Success</h1>
                         </div>
-                        <div class="cover-img-box">${backImage}</div>
-                        <div class="normal-back-footer">
+                        <div class="normal-back-footer" style="position:absolute; bottom:0; left:0; right:0; z-index:3; padding:0 50px 25px;">
                             <div class="normal-back-left">
-                                <div class="normal-back-company-short">${company.EN_SHORT}</div>
-                                <div class="normal-back-company-full">${company.ZH_FULL}</div>
+                                <div class="normal-back-company-short" style="color:rgba(0,85,150,0.7);">${company.EN_SHORT}</div>
+                                <div class="normal-back-company-full" style="color:rgba(0,85,150,0.5);">${company.ZH_FULL}</div>
                             </div>
                             <div class="normal-back-right">
-                                ${logo ? `<img src="${logo}" class="normal-back-logo" style="height:20px; width:auto;" />` : ''}
+                                ${logo ? `<img src="${logo}" class="normal-back-logo" style="height:20px; width:auto; filter:brightness(0) saturate(100%) invert(28%) sepia(98%) saturate(1235%) hue-rotate(190deg); opacity:0.8;" />` : ''}
                             </div>
                         </div>
                     </div>
