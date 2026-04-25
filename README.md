@@ -58,7 +58,7 @@
 
 ## Claude Code Skills
 
-本项目内置了 6 个 Claude Code 自定义 slash command，可在对话中直接输入 `/<skill-name>` 调用：
+本项目内置了 7 个 Claude Code 自定义 slash command，可在对话中直接输入 `/<skill-name>` 调用：
 
 | 命令 | 用途 |
 |------|------|
@@ -68,6 +68,7 @@
 | `/ai-meta` | AI 功能大全：元数据、卷首语、知识图谱、选题评审 |
 | `/export-data` | 数据导出/导入：Reader、打印版、PDF、项目文件 |
 | `/db-inspect` | IndexedDB 诊断、数据修复、缓存清理 |
+| `/git-upload` | 提交并推送代码到 GitHub，含变更审查与提交规范 |
 
 ---
 
@@ -182,6 +183,12 @@
 
 ## 更新日志
 
+### v1.9.1 (2026-04-25) - 仓库清理与 Skills 扩展
+- 新增 `/git-upload` skill — 提交并推送代码到 GitHub
+- 从 Git 跟踪中移除 `.trae/` 和 `dist-reader/` 目录（已加入 .gitignore）
+- 删除已迁移的旧类型文件 (`src/types/index.ts`, `ui.ts`)
+- 删除已合并的旧样式文件 (`styles/article-renderer.css`)
+
 ### v1.9.0 (2026-04-25) - Claude Code Skills 集成
 - 新增 6 个 Claude Code 开发维护 skills
 - 新增 CLAUDE.md 项目架构文档
@@ -207,4 +214,4 @@
 
 ---
 
-最后更新：2026-04-25
+最后更新：2026-04-25 (v1.9.1)
