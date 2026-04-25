@@ -4,6 +4,7 @@ import { cleanPastedHtml } from '../../../src/utils/pasteCleaner';
 import { createImageHtml } from '../../../src/utils/encoding';
 import { extractAbstractFromPdf, convertPdfToImages } from '../../../src/services/pdf';
 import { useBlobManager } from '../../../hooks/useBlobManager';
+import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
 
 interface UseFileUploadOptions {
   contentRef: React.RefObject<HTMLDivElement | null>;
@@ -50,6 +51,15 @@ export function useFileUpload({
       blobToDataMapRef.current.clear();
     };
   }, []);
+
+  const getImageDimensions = (base64: string): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => reject(new Error('图片加载失败'));
+      img.src = base64;
+    });
+  };
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     e.preventDefault();
@@ -116,8 +126,21 @@ export function useFileUpload({
           if (category === '封面' || category === '封底') {
             const base64 = await fileToDataURL(file);
             const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
+
+            const dimensions = await getImageDimensions(src);
+
+            const containerHeight = 550;
+            const containerWidth = Math.floor(containerHeight / 1.414);
+
+            const { scale, posX, posY } = calculateAutoFitPosition(
+              dimensions.width,
+              dimensions.height,
+              containerWidth,
+              containerHeight
+            );
+
             const updateKey = category === '封面' ? 'coverImage' : 'backImage';
-            setFormData(prev => ({ ...prev, [updateKey]: src }));
+            setFormData(prev => ({ ...prev, [updateKey]: src, scale, posX, posY }));
           } else {
             const base64 = await fileToDataURL(file);
             const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);

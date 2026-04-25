@@ -1,22 +1,16 @@
-import { pdfjsLib, ensurePdfLibLoaded } from './wrapper';
+import { pdfjsLib, ensurePdfLibLoaded, workerUrl } from './wrapper';
 import { extractTitle } from './strategies/title';
 import { extractAbstract } from './strategies/abstract';
 import { extractKeywords } from './strategies/keywords';
 import { compressImage } from '../../utils/fileHelpers';
 
-// 1. 定义 Worker 地址 (指向 public 根目录)
-// 移除时间戳，确保某些环境对 .mjs 扩展名的严格匹配
-const WORKER_URL = window.location.origin + '/pdf.worker.min.mjs';
-
-// 2. 配置 Worker
 const ensurePdfJsReady = async () => {
-    // 1. 首先确保库文件已加载到全局/代理
     await ensurePdfLibLoaded();
 
     if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
         if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_URL;
-            console.log(`[PDF服务] GlobalWorkerOptions 配置成功: ${WORKER_URL}`);
+            pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+            console.log(`[PDF服务] GlobalWorkerOptions 配置成功: ${workerUrl}`);
         }
     }
 };
@@ -56,7 +50,7 @@ export async function extractAbstractFromPdf(
 
             // 冗余检查：确保 workerSrc 已设置
             if (pdfjsLib?.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_URL;
+                pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
             }
 
             if (!pdfjsLib || !pdfjsLib.getDocument) {
@@ -184,7 +178,7 @@ export const convertPdfToImages = async (
 
     // 冗余检查：确保 workerSrc 已设置
     if (pdfjsLib?.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_URL;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
     }
 
     if (!pdfjsLib || !pdfjsLib.getDocument) {

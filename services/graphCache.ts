@@ -124,6 +124,27 @@ async function cleanupOldEntries(db: IDBDatabase): Promise<void> {
     }
 }
 
+export async function removeGraphCache(hash: string): Promise<void> {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.delete(hash);
+            request.onsuccess = () => {
+                console.log(`[GraphCache] 已删除缓存 (hash: ${hash})`);
+                resolve();
+            };
+            request.onerror = () => {
+                console.warn('[GraphCache] 删除缓存失败:', request.error);
+                reject(request.error);
+            };
+        });
+    } catch (err) {
+        console.warn('[GraphCache] IndexedDB 不可用，跳过删除缓存:', err);
+    }
+}
+
 export async function clearGraphCache(): Promise<void> {
     try {
         const db = await openDB();

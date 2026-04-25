@@ -112,6 +112,7 @@ export function usePanZoom(options: UsePanZoomOptions): UsePanZoomReturn {
   onUpdateCompleteRef.current = onUpdateComplete;
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasUserInteractedRef = useRef(false);
 
   const setZoomWithRef = useCallback((updater: (prev: typeof zoom) => typeof zoom) => {
     setZoomState(prev => {
@@ -134,6 +135,7 @@ export function usePanZoom(options: UsePanZoomOptions): UsePanZoomReturn {
     if (!isEditable || (category !== '封面' && category !== '封底')) return;
     if ((e.target as HTMLElement).closest('button, input, .clickable-area')) return;
 
+    hasUserInteractedRef.current = true;
     setIsDraggingWithRef(true);
     hasMovedRef.current = false;
     dragStartRef.current = { 
@@ -271,6 +273,15 @@ export function usePanZoom(options: UsePanZoomOptions): UsePanZoomReturn {
       }
     };
   }, []);
+ 
+  useEffect(() => {
+    if (hasUserInteractedRef.current) return;
+    setZoomWithRef(() => ({
+      scale: initialScale,
+      x: initialX,
+      y: initialY,
+    }));
+  }, [initialScale, initialX, initialY, setZoomWithRef]);
 
   const setZoom = useCallback((newZoom: { scale?: number; x?: number; y?: number }) => {
     setZoomWithRef(prev => {
@@ -285,20 +296,13 @@ export function usePanZoom(options: UsePanZoomOptions): UsePanZoomReturn {
   }, [minScale, maxScale]);
 
   const resetZoom = useCallback(() => {
+    hasUserInteractedRef.current = false;
     setZoomWithRef(() => ({
       scale: initialScale,
       x: initialX,
       y: initialY,
     }));
   }, [initialScale, initialX, initialY]);
-
-  useEffect(() => {
-    setZoomWithRef(() => ({
-      scale: initialScale,
-      x: initialX,
-      y: initialY,
-    }));
-  }, [initialScale, initialX, initialY, setZoomWithRef]);
 
   return {
     zoom,

@@ -50,6 +50,9 @@ export default defineConfig(({ mode }) => {
       reportCompressedSize: true,
       chunkSizeWarningLimit: 1000,
     },
+    worker: {
+      format: 'es',
+    },
     // 预构建优化
     optimizeDeps: {
       include: ['react', 'react-dom'],

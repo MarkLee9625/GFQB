@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { Article } from '../src/types/models';
 import { isSpecialCategory } from '../src/constants';
 import { Icon } from './Icons';
@@ -24,20 +24,41 @@ interface EditorProps {
   onManageCats: () => void;
 }
 
+/**
+ * 替换 Blob URL 为 Data URL
+ *
+ * 使用字符串 split().join() 替代 DOMParser
+ * 原因：DOMParser 解析大 HTML 是同步阻塞的，而字符串替换只需要 1-2ms
+ *
+ * @param html - 富文本 HTML 内容
+ * @param blobMap - blob URL 到 data URL 的映射
+ * @returns 替换后的 HTML
+ */
+function replaceBlobsSync(html: string, blobMap: Map<string, string>): string {
+  let finalContent = html;
+
+  blobMap.forEach((dataUrl, blobUrl) => {
+    finalContent = finalContent.split(blobUrl).join(dataUrl);
+  });
+
+  return finalContent;
+}
+
 export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onClose, onSave, onManageCats }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const imgReplaceInputRef = useRef<HTMLInputElement | null>(null);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
 
   const {
     formData, setFormData,
     title, setTitle,
     tempPdf, setTempPdf,
-    isProcessing,
-    isGeneratingAi,
-    isGeneratingTitle,
-    showAiLoading,
-    showTitleLoading,
-    isScalingText,
+    isProcessing, setIsProcessing,
+    isGeneratingAi, setIsGeneratingAi,
+    isGeneratingTitle, setIsGeneratingTitle,
+    showAiLoading, setShowAiLoading,
+    showTitleLoading, setShowTitleLoading,
+    isScalingText, setIsScalingText,
     saveToast, setSaveToast,
     imgCompressQuality, setImgCompressQuality,
     imgCompressMaxWidth, setImgCompressMaxWidth,
@@ -101,8 +122,8 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
   const formDataRef = useRef(formData);
   formDataRef.current = formData;
-  const onSaveRef = useRef((data: any) => { handleSave(); });
-  onSaveRef.current = (data: any) => { handleSave(); };
+  const onSaveRef = useRef((data?: any) => { handleSave(); });
+  onSaveRef.current = (data?: any) => { handleSave(); };
 
   useEditorKeyboard({
     isOpen,
@@ -115,7 +136,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
   useEffect(() => {
     resetForArticle(contentRef);
-  }, [isOpen, article.id, categories]);
+  }, [isOpen, article.id, resetForArticle]);
 
   const handleSave = useCallback((targetPublishState?: boolean) => {
     if (!title) return alert("请输入标题");
@@ -123,25 +144,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     let finalContent = contentRef.current?.innerHTML || '';
 
     if (blobToDataMapRef.current.size > 0) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(finalContent, 'text/html');
-      const mediaElements = doc.querySelectorAll('img, video, audio, source');
-      let replacedCount = 0;
-
-      mediaElements.forEach(el => {
-        const src = el.getAttribute('src');
-        if (src && src.startsWith('blob:')) {
-          const dataUrl = blobToDataMapRef.current.get(src);
-          if (dataUrl) {
-            el.setAttribute('src', dataUrl);
-            replacedCount++;
-          }
-        }
-      });
-
-      if (replacedCount > 0) {
-        finalContent = doc.body.innerHTML;
-      }
+      finalContent = replaceBlobsSync(finalContent, blobToDataMapRef.current);
     }
 
     onSave({
@@ -202,14 +205,14 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
       {showAiLoading && (
         <LoadingOverlay 
-          isLoading={showAiLoading} 
+          isLoading={true}
           message="DeepSeek 正在进行深度逻辑推理，请耐心等待 (约 10-30 秒)..."
         />
       )}
 
       {showTitleLoading && (
         <LoadingOverlay 
-          isLoading={showTitleLoading} 
+          isLoading={true}
           message="DeepSeek 正在分析内容，生成精准标题..."
         />
       )}
@@ -238,7 +241,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
             </h2>
           </div>
           <button onClick={onClose} className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-800 transition-all">
-            <Icon name="maximize" className="w-5 h-5 rotate-45" />
+            <Icon name="x" className="w-5 h-5" />
           </button>
         </div>
 
@@ -246,7 +249,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
           <div className="flex-1 flex flex-col border-r border-gray-100 bg-gray-50/30 min-h-0">
             <div className="p-8 pb-4 flex items-center gap-2">
               <input
-                className="flex-1 bg-transparent text-3xl font-bold border-none placeholder:text-gray-300 focus:outline-none focus:ring-0 leading-tight"
+                className={`flex-1 bg-transparent text-3xl font-bold border-none placeholder:text-gray-300 focus:outline-none focus:ring-0 leading-tight`}
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="在这里输入引人入胜的标题..."
@@ -282,7 +285,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
                 />
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full relative">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden p-12 bg-white max-w-full relative transform-gpu">
                 <div
                   ref={contentRef}
                   className="sws-prose editor-area min-h-full focus:outline-none"
@@ -293,6 +296,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
                   onKeyUp={saveSelection}
                   onBlur={saveSelection}
                   style={contentAreaStyle}
+                  data-placeholder="开始输入正文，或粘贴内容… 支持直接粘贴图片和 PDF"
                 />
                 {imgToolbarPos && selectedImgEl && (
                   <ImageToolbar
@@ -324,6 +328,8 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
             setImgCompressMaxWidth={setImgCompressMaxWidth}
             imgCompressFormat={imgCompressFormat}
             setImgCompressFormat={setImgCompressFormat}
+            collapsed={rightPanelCollapsed}
+            onToggleCollapse={() => setRightPanelCollapsed(v => !v)}
           />
         </div>
 
@@ -332,6 +338,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
           isPublished={formData.isPublished || false}
           onClose={onClose}
           onSave={handleSave}
+          contentRef={contentRef}
         />
       </div >
     </div >

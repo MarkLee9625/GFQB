@@ -25,11 +25,30 @@ const CategoryManagerModal = React.lazy(() => import('./components/CategoryManag
 const ExportOptionsModal = React.lazy(() => import('./components/ExportOptionsModal'));
 const AiCurationModal = React.lazy(() => import('./src/components/AiCurationModal'));
 
-const LazyFallback = () => (
-  <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
-    <div className="bg-white rounded-xl p-6 shadow-2xl flex items-center gap-3">
-      <div className="w-5 h-5 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
-      <span className="text-sm text-gray-600">加载中...</span>
+const LazyFallback = ({ error, onReset }: { error?: string; onReset?: () => void }) => (
+  <div className="fixed inset-0 bg-white/95 z-[9999] flex flex-col items-center justify-center backdrop-blur-[4px]">
+    <div className="relative mb-8">
+      <div className="absolute inset-0 w-[100px] h-[100px] bg-blue-50 rounded-full animate-ping opacity-20"></div>
+      <div className="relative w-[60px] h-[60px] border-[3px] border-blue-200 border-t-brand-blue rounded-full animate-spin"></div>
+    </div>
+    <div className="text-center max-w-md px-6">
+      <div className="text-gray-700 text-lg font-bold mb-2 tracking-wide">
+        {error ? '组件加载异常' : '加载中'}...
+      </div>
+      {error && (
+        <div className="text-red-500 text-sm mb-4 font-medium">{error}</div>
+      )}
+      {error && (
+        <button
+          onClick={onReset || (() => window.location.reload())}
+          className="px-6 py-2 bg-brand-blue text-white rounded-lg text-sm font-bold hover:bg-brand-dark transition-colors"
+        >
+          重试
+        </button>
+      )}
+      {!error && (
+        <div className="text-gray-500 text-sm font-medium">正在加载应用组件，请稍候</div>
+      )}
     </div>
   </div>
 );
@@ -126,6 +145,18 @@ const AppContent: React.FC = () => {
     setUseAlternateDesign,
     loading,
   });
+
+  useEffect(() => {
+    if (!loading) {
+      Promise.all([
+        import('./components/Editor'),
+        import('./components/KeyboardShortcutsHelpModal'),
+        import('./components/CategoryManagerModal'),
+        import('./components/ExportOptionsModal'),
+        import('./src/components/AiCurationModal'),
+      ]).catch(() => {});
+    }
+  }, [loading]);
 
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -282,7 +313,7 @@ const AppContent: React.FC = () => {
     contentScrollRef,
   });
 
-  const { handleGenerateForeword, handleGenerateGraph, handleAdoptArticle } = useAiFeatures({
+  const { handleGenerateForeword, handleGenerateGraph, handleForceGenerateGraph, handleAdoptArticle } = useAiFeatures({
     articles,
     createArticle,
     setCurrentId,
@@ -338,9 +369,8 @@ const AppContent: React.FC = () => {
   const handleCloseCatManager = useCallback(() => setIsCatManagerOpen(false), []);
   const handleCloseExportOptions = useCallback(() => setIsExportOptionsModalOpen(false), []);
   const handleCloseAiCuration = useCallback(() => setIsAiCurationModalOpen(false), []);
-  const handleExportConfirm = useCallback((options: any) => {
-    handleExportWithOptions(options);
-    setIsExportOptionsModalOpen(false);
+  const handleExportConfirm = useCallback(async (options: any, onProgress?: (percent: number, message?: string) => void) => {
+    await handleExportWithOptions(options, onProgress);
   }, [handleExportWithOptions]);
 
   return (
@@ -385,6 +415,7 @@ const AppContent: React.FC = () => {
           onTogglePublish={handleTogglePublish}
           onGenerateForeword={handleGenerateForeword}
           onGenerateGraph={handleGenerateGraph}
+          onForceGenerateGraph={handleForceGenerateGraph}
           onOpenAiCuration={handleOpenAiCuration}
         />
       }
@@ -419,38 +450,40 @@ const AppContent: React.FC = () => {
         )
       }
       modals={
-        <Suspense fallback={<LazyFallback />}>
-          <KeyboardShortcutsHelpModal
-            isOpen={showShortcutsHelp}
-            onClose={handleCloseShortcutsHelp}
-          />
-          <Editor
-            isOpen={isEditorOpen}
-            article={currentArticle || {}}
-            categories={categories}
-            onClose={handleCloseEditor}
-            onSave={handleSaveArticle}
-            onManageCats={handleManageCats}
-          />
-          <CategoryManagerModal
-            isOpen={isCatManagerOpen}
-            categories={categories}
-            onClose={handleCloseCatManager}
-            onUpdateCategories={setCategories}
-            onRenameCategory={handleRenameCategory}
-          />
-          <ExportOptionsModal
-            isOpen={isExportOptionsModalOpen}
-            currentUseAlternateDesign={useAlternateDesign}
-            onClose={handleCloseExportOptions}
-            onConfirm={handleExportConfirm}
-          />
-          <AiCurationModal
-            isOpen={isAiCurationModalOpen}
-            onClose={handleCloseAiCuration}
-            onAdopt={handleAdoptArticle}
-          />
-        </Suspense>
+        <ErrorBoundary fallbackRender={(error, reset) => <LazyFallback error={error.message} onReset={reset} />}>
+          <Suspense fallback={null}>
+            <KeyboardShortcutsHelpModal
+              isOpen={showShortcutsHelp}
+              onClose={handleCloseShortcutsHelp}
+            />
+            <Editor
+              isOpen={isEditorOpen}
+              article={currentArticle || {}}
+              categories={categories}
+              onClose={handleCloseEditor}
+              onSave={handleSaveArticle}
+              onManageCats={handleManageCats}
+            />
+            <CategoryManagerModal
+              isOpen={isCatManagerOpen}
+              categories={categories}
+              onClose={handleCloseCatManager}
+              onUpdateCategories={setCategories}
+              onRenameCategory={handleRenameCategory}
+            />
+            <ExportOptionsModal
+              isOpen={isExportOptionsModalOpen}
+              currentUseAlternateDesign={useAlternateDesign}
+              onClose={handleCloseExportOptions}
+              onConfirm={handleExportConfirm}
+            />
+            <AiCurationModal
+              isOpen={isAiCurationModalOpen}
+              onClose={handleCloseAiCuration}
+              onAdopt={handleAdoptArticle}
+            />
+          </Suspense>
+        </ErrorBoundary>
       }
       hiddenInputs={
         <>

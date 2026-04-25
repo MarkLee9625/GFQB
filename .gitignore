@@ -24,6 +24,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Trae CN 编辑器产生的垃圾文件
+.trae/
+*shellIntegration*
+
 # 环境配置隔离
 .env
 .env.local

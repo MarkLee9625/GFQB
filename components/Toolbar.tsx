@@ -16,6 +16,7 @@ interface ToolbarProps {
   onTogglePublish?: () => void;
   onGenerateForeword?: () => void;
   onGenerateGraph?: () => void;
+  onForceGenerateGraph?: () => void;
   onOpenAiCuration?: () => void;
 }
 
@@ -34,6 +35,7 @@ const Toolbar = React.memo<ToolbarProps>(({
   onTogglePublish,
   onGenerateForeword,
   onGenerateGraph,
+  onForceGenerateGraph,
   onOpenAiCuration,
 }) => {
   if (isFullscreen) {
@@ -138,12 +140,24 @@ const Toolbar = React.memo<ToolbarProps>(({
           {onGenerateGraph && (
             <button 
               onClick={onGenerateGraph} 
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-emerald-700 hover:bg-emerald-50"
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-emerald-700 hover:bg-emerald-50 border-b border-gray-100"
             >
               <Icon name="settings" className="w-4 h-4" />
               <div className="text-left">
                 <div className="font-bold">提取全局知识图谱</div>
                 <div className="text-xs text-gray-500">生成技术知识图谱</div>
+              </div>
+            </button>
+          )}
+          {onForceGenerateGraph && (
+            <button 
+              onClick={onForceGenerateGraph} 
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-orange-600 hover:bg-orange-50"
+            >
+              <Icon name="refresh" className="w-4 h-4" />
+              <div className="text-left">
+                <div className="font-bold">重新生成知识图谱</div>
+                <div className="text-xs text-gray-500">强制刷新，跳过缓存重新调用 AI</div>
               </div>
             </button>
           )}

@@ -11,6 +11,55 @@
  */
 
 /* ============================================
+   ArticleRenderer 主题变量系统
+   使用 CSS 类切换实现零重绘/零重排的主题切换
+============================================== */
+
+/* 默认主题（原版设计） */
+.article-renderer.default-theme {
+  --theme-primary: #005596;
+  --theme-primary-dark: #003366;
+  --theme-bg: #ffffff;
+  --theme-bg-gradient: transparent;
+  --theme-text: #1f2937;
+  --theme-text-muted: #6b7280;
+  --theme-accent: #60a5fa;
+  --theme-border: #e5e7eb;
+  --theme-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+  --theme-shadow-hover: 0 25px 60px -15px rgba(0, 0, 0, 0.6);
+  --theme-card-bg: rgba(255, 255, 255, 0.8);
+  --theme-font-serif: 'Georgia', 'Times New Roman', 'PingFang SC', 'Microsoft YaHei', 'SimHei', serif;
+  --theme-font-sans: 'Helvetica Neue', 'Arial', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --theme-letter-spacing: 3px;
+  --theme-title-size: 36px;
+  --theme-meta-badge-radius: 4px;
+  --theme-meta-badge-bg: transparent;
+  --theme-meta-badge-border: transparent;
+}
+
+/* 杂志风主题（alternate-design） */
+.article-renderer.alternate-theme {
+  --theme-primary: #005596;
+  --theme-primary-dark: #003366;
+  --theme-bg: #ffffff;
+  --theme-bg-gradient: linear-gradient(to bottom right, #eff6ff, #ffffff, #f9fafb);
+  --theme-text: #1f2937;
+  --theme-text-muted: #9ca3af;
+  --theme-accent: #3b82f6;
+  --theme-border: rgba(0, 85, 150, 0.3);
+  --theme-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.3);
+  --theme-shadow-hover: 0 25px 60px -12px rgba(0, 0, 0, 0.35);
+  --theme-card-bg: rgba(255, 255, 255, 0.5);
+  --theme-font-serif: 'Georgia', 'Times New Roman', 'PingFang SC', 'Microsoft YaHei', 'SimHei', serif;
+  --theme-font-sans: 'Helvetica Neue', 'Arial', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --theme-letter-spacing: 4px;
+  --theme-title-size: 64px;
+  --theme-meta-badge-radius: 9999px;
+  --theme-meta-badge-bg: rgba(255, 255, 255, 0.5);
+  --theme-meta-badge-border: rgba(0, 85, 150, 0.3);
+}
+
+/* ============================================
    基础样式变量
 ============================================== */
 :root {

@@ -231,13 +231,13 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
       {/* 文章底部 */}
       {mode !== 'print' && (
         <>
-          <div className="mt-auto pt-8 border-t border-gray-100 text-center shrink-0">
+          <div className="article-footer-knowledge-base mt-[50px] pt-[20px] border-t border-gray-100 text-center opacity-40 font-sans flex items-center justify-center shrink-0">
             {logo && (
-              <img src={logo} className="h-[25px] opacity-50 inline-block align-middle mr-2" alt="" />
+              <img src={logo} className="footer-logo h-[40px] opacity-50 inline-block align-middle" alt="" />
             )}
-            <span className="text-xs text-gray-400 font-bold tracking-widest">SWS KNOWLEDGE BASE</span>
+            <span className="text-[12px] text-gray-500 font-bold tracking-[2px] ml-2">SWS KNOWLEDGE BASE</span>
           </div>
-          <div className="text-center m-[40px_auto_0] text-[10px] text-gray-200 tracking-[2px] shrink-0">
+          <div className="article-end-mark text-center m-[40px_auto_0] text-[10px] text-gray-200 tracking-[2px] shrink-0">
             - End of Article -
           </div>
         </>

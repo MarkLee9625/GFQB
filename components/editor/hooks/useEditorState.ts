@@ -53,42 +53,41 @@ export function useEditorState({ isOpen, article, categories }: UseEditorStateOp
     localStorage.setItem('SWS_IMG_COMPRESS_FORMAT', imgCompressFormat);
   }, [imgCompressFormat]);
 
-  const prevArticleIdRef = useRef<number | null>(null);
-  const wasOpenRef = useRef(false);
+  const articleRef = useRef(article);
+  articleRef.current = article;
+
+  const categoriesRef = useRef(categories);
+  categoriesRef.current = categories;
 
   const resetForArticle = useCallback((contentRef: React.RefObject<HTMLDivElement | null>) => {
     if (isOpen) {
-      const articleId = article.id ?? null;
-      const justOpened = !wasOpenRef.current;
-      wasOpenRef.current = true;
-      if (prevArticleIdRef.current !== articleId || justOpened) {
-        prevArticleIdRef.current = articleId;
-        const articleTitle = article.title || '';
-        setTitle(articleTitle);
-        setFormData({
-          date: article.date || new Date().toISOString().split('T')[0],
-          category: article.category || (categories[0] || '默认'),
-          content: article.content || '',
-          id: article.id,
-          abstract: article.abstract || '',
-          tags: article.tags || [],
-          fontSize: article.fontSize || 18,
-          lineHeight: article.lineHeight || 2.0,
-          isPublished: article.isPublished || false
-        });
-        if (article.pdfData) {
-          setTempPdf({ name: 'Existing PDF', data: article.pdfData });
-        } else {
-          setTempPdf(null);
-        }
-        if (contentRef.current) {
-          contentRef.current.innerHTML = article.content || '';
-        }
+      const currentArticle = articleRef.current;
+      const currentCategories = categoriesRef.current;
+      const articleTitle = currentArticle?.title || '';
+      setTitle(articleTitle);
+      setFormData({
+        date: currentArticle?.date || new Date().toISOString().split('T')[0],
+        category: currentArticle?.category || (currentCategories?.[0] || '默认'),
+        content: currentArticle?.content || '',
+        id: currentArticle?.id,
+        abstract: currentArticle?.abstract || '',
+        tags: currentArticle?.tags || [],
+        fontSize: currentArticle?.fontSize || 18,
+        lineHeight: currentArticle?.lineHeight || 2.0,
+        isPublished: currentArticle?.isPublished || false
+      });
+
+      if (currentArticle?.pdfData) {
+        setTempPdf({ name: 'Existing PDF', data: currentArticle.pdfData });
+      } else {
+        setTempPdf(null);
       }
-    } else {
-      wasOpenRef.current = false;
+
+      if (contentRef.current) {
+        contentRef.current.innerHTML = currentArticle?.content || '';
+      }
     }
-  }, [isOpen, article, categories]);
+  }, [isOpen]);
 
   return {
     formData, setFormData,

@@ -201,6 +201,7 @@ export async function generatePrintableHTML(
                     <div class="sws-prose">${processedContent}</div>
                     <div class="article-footer-knowledge-base">
                         ${logo ? `<img src="${logo}" class="footer-logo" />` : ''}
+                        SWS KNOWLEDGE BASE
                     </div>
                     <div class="article-end-mark">- End of Article -</div>
                 </div>

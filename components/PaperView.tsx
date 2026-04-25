@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Article } from '../src/types/models';
 import { ArticleRenderer } from './renderers';
 
@@ -13,17 +13,22 @@ interface PaperViewProps {
   setUseAlternateDesign: (value: boolean) => void;
 }
 
-const PaperViewComponent: React.FC<PaperViewProps> = ({ 
-  article, 
-  logo, 
-  isEditMode, 
-  onUpdate, 
-  onImageUpload, 
-  onNext, 
-  useAlternateDesign, 
-  setUseAlternateDesign 
+const PaperViewComponent: React.FC<PaperViewProps> = ({
+  article,
+  logo,
+  isEditMode,
+  onUpdate,
+  onImageUpload,
+  onNext,
+  useAlternateDesign,
+  setUseAlternateDesign
 }) => {
   if (!article) return null;
+
+  const handleSetAlternateDesign = useCallback(
+    (value: boolean) => setUseAlternateDesign(value),
+    [setUseAlternateDesign]
+  );
 
   return (
     <div className="relative">
@@ -32,13 +37,13 @@ const PaperViewComponent: React.FC<PaperViewProps> = ({
         <div className="DesignToggle fixed top-4 right-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-md border border-gray-200">
           <span className="text-xs font-medium text-gray-600">设计模式:</span>
           <button
-            onClick={() => setUseAlternateDesign(false)}
+            onClick={() => handleSetAlternateDesign(false)}
             className={`px-2 py-1 text-xs rounded ${!useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
           >
             原版
           </button>
           <button
-            onClick={() => setUseAlternateDesign(true)}
+            onClick={() => handleSetAlternateDesign(true)}
             className={`px-2 py-1 text-xs rounded ${useAlternateDesign ? 'bg-brand-blue text-white' : 'text-gray-500 hover:bg-gray-100'}`}
           >
             杂志风
@@ -61,4 +66,12 @@ const PaperViewComponent: React.FC<PaperViewProps> = ({
   );
 };
 
-export const PaperView = React.memo(PaperViewComponent);
+export const PaperView = React.memo(PaperViewComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.article.id === nextProps.article.id &&
+    prevProps.article.content === nextProps.article.content &&
+    prevProps.useAlternateDesign === nextProps.useAlternateDesign &&
+    prevProps.isEditMode === nextProps.isEditMode &&
+    prevProps.logo === nextProps.logo
+  );
+});

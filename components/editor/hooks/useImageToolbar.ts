@@ -15,9 +15,13 @@ export function useImageToolbar() {
       setSelectedImgEl(img);
       const rect = img.getBoundingClientRect();
       const toolbarHeight = 40;
+      const toolbarWidth = 320;
       let top = rect.top - toolbarHeight - 8;
       if (top < 8) top = rect.bottom + 8;
-      const left = rect.left + rect.width / 2;
+      let left = rect.left + rect.width / 2;
+      if (left - toolbarWidth / 2 < 8) left = toolbarWidth / 2 + 8;
+      if (left + toolbarWidth / 2 > window.innerWidth - 8) left = window.innerWidth - toolbarWidth / 2 - 8;
+      if (top + toolbarHeight > window.innerHeight - 8) top = window.innerHeight - toolbarHeight - 8;
       setImgToolbarPos({ top, left });
     } else {
       if (selectedImgEl) {

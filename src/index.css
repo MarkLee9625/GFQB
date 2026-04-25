@@ -55,6 +55,14 @@ body,
   box-sizing: border-box;
 }
 
+.editor-area:empty::before {
+  content: attr(data-placeholder);
+  color: #d1d5db;
+  pointer-events: none;
+  display: block;
+  font-style: italic;
+}
+
 .editor-area img, .editor-area video {
   max-width: 100% !important;
   width: 100% !important;
@@ -600,4 +608,17 @@ body,
     box-sizing: border-box !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+}
+
+.media-container,
+.pdf-summary-card,
+.pdf-page-container {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 500px;
+}
+
+.cover-img-selected img,
+.cover-img-selected > .loaded {
+    outline: 3px solid #005596 !important;
+    outline-offset: 4px !important;
 }

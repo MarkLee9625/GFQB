@@ -2,14 +2,6 @@ import { Article } from '../../types/models';
 import { CONSTANTS } from '../../constants';
 import { getReaderSkeleton } from './templates';
 import { saveAs } from 'file-saver';
-import { compressData, uint8ArrayToBase64 } from './compression';
-
-function escapeHtml(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-// 引入自动生成的模板 (运行 npm run build 后会更新此文件)
-const READER_TEMPLATE = "SWS_READER_TEMPLATE_PLACEHOLDER" as string;
 
 export interface ExportOptions {
     useAlternateDesign?: boolean;
@@ -24,6 +16,87 @@ export interface ExportMetadata {
     date?: string;
 }
 
+interface WorkerRequest {
+    type: 'START_EXPORT';
+    articles: Article[];
+    options: ExportOptions;
+    metadata: ExportMetadata;
+    companyInfo: typeof CONSTANTS.COMPANY_INFO;
+}
+
+interface WorkerResponse {
+    type: 'EXPORT_COMPLETE';
+    articlesB64: string;
+    configB64: string;
+    compressionMethod: string;
+}
+
+interface WorkerProgress {
+    type: 'EXPORT_PROGRESS';
+    percent: number;
+    message?: string;
+}
+
+interface WorkerError {
+    type: 'EXPORT_ERROR';
+    error: string;
+}
+
+/**
+ * 优化深拷贝策略 - 分离大对象，减少内存峰值
+ *
+ * 原理：
+ * 1. pdfData、coverImage、backImage 是 Base64 字符串，体积巨大（可能数十MB）
+ * 2. structuredClone 会对整个对象图进行深拷贝
+ * 3. 如果直接深拷贝，内存峰值 = 原对象 + 拷贝对象 = 2x 原始内存
+ *
+ * 优化：
+ * 1. 将大对象引用保存
+ * 2. 清空后深拷贝轻量级元数据（标题、分类、标签等）
+ * 3. 重新关联大对象引用（非拷贝）
+ *
+ * 内存峰值：~1.2x（少量临时对象 + 引用）
+ */
+function optimizeStructuredClone(article: Article): Article {
+    const pdfDataRef = article.pdfData;
+    const coverImageRef = article.coverImage;
+    const backImageRef = article.backImage;
+
+    const articleForClone: Omit<Article, 'pdfData' | 'coverImage' | 'backImage'> = {
+        id: article.id,
+        title: article.title,
+        category: article.category,
+        content: article.content,
+        date: article.date,
+        issueText: article.issueText,
+        dateText: article.dateText,
+        scale: article.scale,
+        posX: article.posX,
+        posY: article.posY,
+        abstract: article.abstract,
+        tags: article.tags,
+        isPublished: article.isPublished,
+        order: article.order,
+        fontSize: article.fontSize,
+        lineHeight: article.lineHeight,
+        blocks: article.blocks
+    };
+
+    const cloned = structuredClone(articleForClone);
+
+    cloned.pdfData = pdfDataRef;
+    cloned.coverImage = coverImageRef;
+    cloned.backImage = backImageRef;
+
+    return cloned;
+}
+
+function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const READER_TEMPLATE = "SWS_READER_TEMPLATE_PLACEHOLDER" as string;
+
 /**
  * 生成离线阅读器 HTML
  * 使用构建生成的 Single File App 作为模板，注入数据
@@ -31,9 +104,9 @@ export interface ExportMetadata {
 export async function generateReaderHTML(
     articles: Article[],
     options: ExportOptions = {},
-    metadata: ExportMetadata = {}
+    metadata: ExportMetadata = {},
+    onProgress?: (percent: number, message?: string) => void
 ): Promise<string> {
-    // 1. 预处理文章 (排序)
     const sortedArticles = [...articles].sort((a, b) => {
         if (a.category === b.category) return 0;
         if (a.category === '封面') return -1;
@@ -43,12 +116,11 @@ export async function generateReaderHTML(
         return 0;
     });
 
-    // 2. 处理文章数据，保持 PDF 数据以便在离线阅读器中显示
     console.log('[Export] 开始处理文章数据，保留PDF数据以支持离线阅读器...');
     const processedArticles = sortedArticles.map((article, idx) => {
         try {
-            const articleCopy = structuredClone ? structuredClone(article) : JSON.parse(JSON.stringify(article));
-            
+            const articleCopy = optimizeStructuredClone(article);
+
             if (article.category === '封面' && !articleCopy.coverImage) {
                 console.warn(`[Export] 文章 #${idx} "${article.title}" (封面) coverImage 为空`);
             }
@@ -56,12 +128,12 @@ export async function generateReaderHTML(
                 console.warn(`[Export] 文章 #${idx} "${article.title}" (封底) backImage 为空`);
             }
             if (article.pdfData && !articleCopy.pdfData) {
-                console.error(`[Export] 文章 #${idx} "${article.title}" pdfData 在深拷贝后丢失！`);
+                console.error(`[Export] 文章 #${idx} "${article.title}" pdfData 在优化拷贝后丢失！`);
             }
-            
+
             return articleCopy;
         } catch (err) {
-            console.warn(`[Export] 文章 "${article.title}" 深拷贝失败，使用浅拷贝:`, err);
+            console.warn(`[Export] 文章 "${article.title}" 优化拷贝失败，使用浅拷贝:`, err);
             return { ...article };
         }
     });
@@ -75,33 +147,77 @@ export async function generateReaderHTML(
         sidebarMeta: metadata.sidebarMeta || ''
     };
 
-    console.log('[Export] 开始进行 JSON 序列化 (这是消耗内存的大户)...');
-    console.time('json-stringify');
-    
-    // 【性能优化】直接使用 stringify 生成大字符串
-    const rawArticlesJson = JSON.stringify(processedArticles);
-    console.timeEnd('json-stringify');
-    console.log(`[Export] 序列化完成，字符串长度: ${(rawArticlesJson.length / 1024 / 1024).toFixed(2)} MB。`);
-    
-    console.time('compress-data');
-    const articlesResult = await compressData(rawArticlesJson, 'gzip');
-    const articlesB64 = uint8ArrayToBase64(articlesResult.data);
-    
-    const configJson = JSON.stringify(config);
-    const configResult = await compressData(configJson, 'gzip');
-    const configB64 = uint8ArrayToBase64(configResult.data);
+    console.log('[Export] 开始 Web Worker 导出流程...');
 
-    const compressionMethod = articlesResult.method === 'none' && configResult.method === 'none' ? 'none' : articlesResult.method;
+    return new Promise((resolve, reject) => {
+        const worker = new Worker(
+            new URL('./reader.worker.ts', import.meta.url),
+            { type: 'module' }
+        );
 
-    console.timeEnd('compress-data');
-    console.log(`[Export] 数据压缩完成，原始大小: ${(rawArticlesJson.length / 1024 / 1024).toFixed(2)} MB，压缩后: ${(articlesResult.data.length / 1024 / 1024).toFixed(2)} MB，压缩率: ${((articlesResult.data.length / rawArticlesJson.length) * 100).toFixed(1)}%`);
-    console.log(`[Export] 数据 Base64 转码完成。正在拼装 HTML...`);
+        worker.onmessage = (event: MessageEvent<WorkerResponse | WorkerProgress | WorkerError>) => {
+            const data = event.data;
 
-    // 4. 如果是开发模式 (模板未被替换)，则使用内置的 Skeleton 模板
+            if (data.type === 'EXPORT_PROGRESS') {
+                onProgress?.(data.percent, data.message);
+                return;
+            }
+
+            if (data.type === 'EXPORT_COMPLETE') {
+                const { articlesB64, configB64, compressionMethod } = data;
+
+                console.log('[Export] Worker 返回数据，准备生成 HTML...');
+
+                const htmlContent = buildReaderHTML(
+                    articlesB64,
+                    configB64,
+                    compressionMethod,
+                    processedArticles,
+                    options,
+                    metadata
+                );
+
+                worker.terminate();
+                resolve(htmlContent);
+            }
+        };
+
+        worker.onerror = (error) => {
+            worker.terminate();
+            console.error('[Export] Worker 错误:', error);
+            reject(error);
+        };
+
+        const request: WorkerRequest = {
+            type: 'START_EXPORT',
+            articles: processedArticles,
+            options,
+            metadata,
+            companyInfo: CONSTANTS.COMPANY_INFO
+        };
+        worker.postMessage(request);
+    });
+}
+
+function buildReaderHTML(
+    articlesB64: string,
+    configB64: string,
+    compressionMethod: string,
+    processedArticles: Article[],
+    options: ExportOptions,
+    metadata: ExportMetadata
+): string {
+    const config = {
+        company: CONSTANTS.COMPANY_INFO,
+        version: '1.0.0',
+        alternateDesign: options.useAlternateDesign ?? false,
+        logo: metadata.logo || '',
+        sidebarMeta: metadata.sidebarMeta || ''
+    };
+
     if (READER_TEMPLATE === "SWS_READER_TEMPLATE_PLACEHOLDER") {
         console.log("[Export] Using dynamic skeleton template for export...");
 
-        // 生成简易目录 HTML
         const tocListHtml = processedArticles
             .filter(a => a.category !== '封面' && a.category !== '封底')
             .map((a, i) => `<li class="toc-item"><span class="toc-title">${escapeHtml(a.title)}</span><span class="toc-dots"></span><span class="toc-page">${i + 1}</span></li>`)
@@ -117,7 +233,6 @@ export async function generateReaderHTML(
         });
     }
 
-    // 5. 构建环境下，注入到编译好的 READER_TEMPLATE 中 (在 </body> 之前)
     const safeArticlesB64 = articlesB64.replace(/<\//g, '<\\/');
     const safeConfigB64 = configB64.replace(/<\//g, '<\\/');
 
@@ -143,34 +258,31 @@ export async function generateReaderHTML(
 export async function exportReaderHTML(
     articles: Article[],
     options: ExportOptions = {},
-    metadata: ExportMetadata = {}
+    metadata: ExportMetadata = {},
+    onProgress?: (percent: number, message?: string) => void
 ): Promise<void> {
     try {
         console.log('[Export] 开始生成阅读版 HTML...');
-        
-        // 1. 生成 HTML 内容
-        const htmlContent = await generateReaderHTML(articles, options, metadata);
-        
-        // 2. 创建 Blob 并下载
+        onProgress?.(0, '开始导出...');
+
+        const htmlContent = await generateReaderHTML(articles, options, metadata, onProgress);
+
+        onProgress?.(95, '正在生成文件...');
         const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-        
-        // 获取当前日期，用于文件名
+
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
         const dateStr = `${year}${month}${day}`;
-        
-        // 3. 使用 file-saver 保存文件
+
         const fileName = `SWS_工法情报_${dateStr}.html`;
         saveAs(blob, fileName);
-        
+
+        onProgress?.(100, '导出完成');
         console.log(`[Export] HTML 文件生成成功: ${fileName}`);
     } catch (error) {
         console.error('[Export] HTML 文件生成失败:', error);
         throw error;
     }
 }
-
-
-

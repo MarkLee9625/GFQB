@@ -1,4 +1,4 @@
-﻿﻿﻿import { SHARED_STYLES, MAGAZINE_STYLES, PRINT_STYLES, MISC_STYLES, SEASONAL_STYLES, SVG_ICONS } from '../assets';
+﻿﻿import { SHARED_STYLES, MAGAZINE_STYLES, PRINT_STYLES, MISC_STYLES, SEASONAL_STYLES, SVG_ICONS } from '../assets';
 
 export function getReaderTemplates() {
     return `
@@ -57,18 +57,18 @@ export function getReaderTemplates() {
             <div class="magazine-back-footer">
                 <div class="magazine-back-left">
                     <div class="magazine-back-company">SWS OFFSHORE</div>
-                    <div class="magazine-back-address">Shanghai Waigaoqiao Shipbuilding Co., Ltd.<br/>上海外高桥造船有限公司</div>
-                    <div class="magazine-back-copyright">漏 2025 Ship Construction Method Information</div>
+                    <div class="magazine-back-address">Shanghai Waigaoqiao Shipbuilding Co., Ltd.<br/>上海外高桥造船海洋工程有限公司</div>
+                    <div class="magazine-back-copyright">© 2025 Ship Construction Method Information</div>
                 </div>
                 <div class="magazine-back-center">
                     <div class="magazine-back-team">
-                        <div class="magazine-back-team-item"><div class="magazine-back-team-label">编辑部</div><b>椹潕鐞?/b></div>
+                        <div class="magazine-back-team-item"><div class="magazine-back-team-label">编辑</div><b>马李琛</b></div>
                         <div class="magazine-back-team-item"><div class="magazine-back-team-label">校对</div><b>胡国超</b></div>
-                        <div class="magazine-back-team-item"><div class="magazine-back-team-label">审核</div><b>傅年生</b></div>
+                        <div class="magazine-back-team-item"><div class="magazine-back-team-label">审核</div><b>储年生</b></div>
                     </div>
                     <div class="magazine-back-barcode"><div class="magazine-back-barcode-line"></div><div class="magazine-back-barcode-text">ISSN 0000-0000</div></div>
                 </div>
-                <div class="magazine-back-right"><img data-field="logo" class="magazine-back-logo" alt="Logo" /><div class="magazine-back-info">Official Publication<br/>Volume <span data-field="issueText">01</span>  <span data-field="dateText">JAN 2025</span></div></div>
+                <div class="magazine-back-right"><img data-field="logo" class="magazine-back-logo" alt="Logo" /><div class="magazine-back-info">Official Publication<br/>Volume <span data-field="issueText">01</span> · <span data-field="dateText">JAN 2025</span></div></div>
             </div>
         </div>
     </template>
@@ -81,15 +81,24 @@ export function getReaderTemplates() {
             <div class="normal-back-footer">
                 <div class="normal-back-left">
                     <div class="normal-back-company-short">SWS OFFSHORE</div>
-                    <div class="normal-back-company-full"><span>Shanghai Waigaoqiao Shipbuilding Co., Ltd.</span></div>
+                    <div class="normal-back-company-full">
+                        <span>Shanghai Waigaoqiao Shipbuilding Co., Ltd.</span><br/>
+                        <span>上海外高桥造船海洋工程有限公司</span>
+                    </div>
+                </div>
+                <div class="normal-back-center">
+                    <div class="normal-back-bottom-meta">
+                        <div class="flex gap-[4px] whitespace-nowrap"><span>编辑:</span> <b>马李琛</b></div>
+                        <div class="flex gap-[4px] whitespace-nowrap"><span>校对:</span> <b>胡国超</b></div>
+                        <div class="flex gap-[4px] whitespace-nowrap"><span>审核:</span> <b>储年生</b></div>
+                    </div>
                 </div>
                 <div class="normal-back-right">
-                    <div class="normal-back-bottom-meta">
-                        <div class="flex gap-[4px] whitespace-nowrap"><span>编辑部:</span> <b>椹潕鐞?/b></div>
-                        <div class="flex gap-[4px] whitespace-nowrap"><span>校对:</span> <b>胡国超</b></div>
-                        <div class="flex gap-[4px] whitespace-nowrap"><span>审核:</span> <b>傅年生</b></div>
-                    </div>
                     <img data-field="logo" class="normal-back-logo" style="height:20px; width:auto;" alt="Logo" />
+                    <div class="normal-back-info" style="font-size: 10px; color: #6B7280; margin-top: 5px; text-align: right;">
+                        Official Publication<br/>
+                        Volume <span data-field="issueText">01</span> · <span data-field="dateText">JAN 2025</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -98,7 +107,7 @@ export function getReaderTemplates() {
     <template id="tpl-article">
         <div class="normal-container">
             <div class="article-header"><h1 data-field="title"></h1><div class="article-meta"><div class="tag-cloud" data-field="tags"></div><span data-field="category-label">分类: <span data-field="category"></span></span></div></div>
-            <div class="summary-card"><div class="summary-label">摘要 / 导读</div><p data-field="abstract"></p></div>
+            <div class="summary-card"><div class="summary-label">摘要</div><p data-field="abstract"></p></div>
             <div class="sws-prose article-body" data-field="content"></div>
         <div data-field="pdf-viewer" style="display: none;">
                 <div class="pdf-viewer-container" data-id="pdf-container">
@@ -119,3 +128,4 @@ export function getReaderTemplates() {
     </template>
     `;
 }
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useBlobManager } from '../../hooks/useBlobManager';
 import { useInView } from '../../hooks/useInView';
 
@@ -34,32 +34,34 @@ export const LazyImage: React.FC<{
   alt: string;
   className: string;
   style?: React.CSSProperties;
-}> = ({ src, alt, className, style }) => {
+  onClick?: React.MouseEventHandler<HTMLImageElement>;
+  onDoubleClick?: React.MouseEventHandler<HTMLImageElement>;
+}> = ({ src, alt, className, style, onClick, onDoubleClick }) => {
   const [loaded, setLoaded] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const blobManager = useBlobManager();
   const { ref, inView } = useInView({ rootMargin: '50px', threshold: 0.01 });
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
-    if (!inView || !src) {
+    if (!src) {
       setBlobUrl(null);
+      setLoaded(false);
+      hasLoadedRef.current = false;
       return;
     }
+    const url = blobManager.getBlobUrl(src);
+    setBlobUrl(url);
+    setLoaded(false);
+    hasLoadedRef.current = false;
+  }, [src, blobManager]);
 
-    const timer = setTimeout(() => {
-      const url = blobManager.getBlobUrl(src);
-      setBlobUrl(url);
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [inView, src, blobManager]);
-
-  const imageSrc = inView ? (blobUrl || src) : undefined;
+  const imageSrc = blobUrl || src || undefined;
 
   return (
     <img
       ref={ref}
-      src={imageSrc}
+      src={inView ? imageSrc : undefined}
       alt={alt}
       className={`${className} ${loaded ? 'loaded' : ''}`}
       style={{
@@ -67,7 +69,14 @@ export const LazyImage: React.FC<{
         opacity: loaded ? 1 : 0.8,
         transition: 'opacity 0.2s ease-out',
       }}
-      onLoad={() => setLoaded(true)}
+      onLoad={() => {
+        if (!hasLoadedRef.current) {
+          hasLoadedRef.current = true;
+          setLoaded(true);
+        }
+      }}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
     />
   );
 };

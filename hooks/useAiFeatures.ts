@@ -4,11 +4,11 @@ import { generateForeword, extractGlobalKnowledgeGraph, buildSuperContextForGrap
 import { generateGraphHtml } from '../src/utils/graphRenderer';
 import { parseMarkdownToHtml } from '../src/utils/fileHelpers';
 import { UniversalArticleMeta } from '../src/types/intelligence';
-import { getGraphCache, saveGraphCache, contentHash } from '../services/graphCache';
+import { getGraphCache, saveGraphCache, removeGraphCache, contentHash } from '../services/graphCache';
 
 interface UseAiFeaturesOptions {
   articles: Article[];
-  createArticle: (article: Partial<Article>) => Promise<Article | null>;
+  createArticle: (article: Partial<Article>) => Promise<Article | undefined>;
   setCurrentId: (id: number | null) => void;
   setImportProgress: (progress: { stage: string; details: string } | null) => void;
   importProgress: { stage: string; details: string } | null;
@@ -35,20 +35,16 @@ export function useAiFeatures({
       return;
     }
 
-    const articlesSummary = validArticles.map((a, index) =>
-      `【文章 ${index + 1}】标题：${a.title}\n摘要：${a.abstract || '暂无摘要，请根据标题推测'}\n标签：${(a.tags || []).join(', ')}`
-    ).join('\n\n');
-
-    setImportProgress({ stage: 'generating', details: 'DeepSeek 正在纵览全局，撰写本期卷首语，请稍候 (约 15-30 秒)...' });
+    setImportProgress({ stage: 'generating', details: 'DeepSeek 正在纵览全文，撰写本期卷首语，请稍候 (约 30-60 秒)...' });
 
     try {
-      const htmlContent = await generateForeword(articlesSummary);
+      const htmlContent = await generateForeword(validArticles);
 
       const newArt = await createArticle({
         title: '本期导读 / 卷首语',
         category: '特别报道',
         content: htmlContent,
-        abstract: '本文由 AI 根据本期收录的工法情报自动统稿生成，旨在为您提供宏观的技术导览。',
+        abstract: '本文由 AI 根据本期收录的工法情报(含正文)自动统稿生成，旨在为您提供宏观的技术导览。',
         isPublished: true
       });
 
@@ -63,7 +59,7 @@ export function useAiFeatures({
     }
   }, [articles, createArticle, setCurrentId, setImportProgress, importProgress]);
 
-  const handleGenerateGraph = useCallback(async () => {
+  const handleGenerateGraph = useCallback(async (forceRefresh?: boolean) => {
     if (importProgress) return;
     const validArticles = articles.filter(a =>
       a.category !== '封面' &&
@@ -81,9 +77,17 @@ export function useAiFeatures({
       const allText = await buildSuperContextForGraph(validArticles);
       const finalContext = allText.slice(0, 150000);
 
-      // 【缓存检查】按内容 hash 查找，避免重复调用 AI
+      // 计算内容 hash，用于缓存键
       const articleIds = validArticles.map(a => a.id).join(',');
       const contentHashValue = await contentHash(articleIds + ':' + finalContext);
+
+      // 【强制刷新】如果 forceRefresh 为 true，先删除已有缓存
+      if (forceRefresh) {
+        await removeGraphCache(contentHashValue);
+        console.log('[App] 强制刷新模式，已清除缓存，将重新调用 AI');
+      }
+
+      // 【缓存检查】按内容 hash 查找，避免重复调用 AI
       const cached = await getGraphCache(contentHashValue);
       
       let graphData: KnowledgeGraphData;
@@ -141,6 +145,10 @@ export function useAiFeatures({
     }
   }, [articles, createArticle, setCurrentId, setImportProgress, importProgress]);
 
+  const handleForceGenerateGraph = useCallback(async () => {
+    await handleGenerateGraph(true);
+  }, [handleGenerateGraph]);
+
   const handleAdoptArticle = useCallback(async (article: UniversalArticleMeta) => {
     try {
       const htmlContent = parseMarkdownToHtml(article.content);
@@ -166,6 +174,7 @@ export function useAiFeatures({
   return {
     handleGenerateForeword,
     handleGenerateGraph,
+    handleForceGenerateGraph,
     handleAdoptArticle,
   };
 }

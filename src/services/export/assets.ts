@@ -483,7 +483,6 @@ export const PRINT_STYLES = `
         padding: 14pt 18pt !important;
         background: #f7f8fa !important;
         border: 1px solid #d1d5db !important;
-        border-left: 4px solid #005596 !important;
         border-radius: 0 !important;
         box-shadow: none !important;
         page-break-inside: avoid !important;
@@ -746,9 +745,8 @@ ${UNIFIED_STYLES}
 
 
 /* Summary Card */
-.summary-card { margin-top: 24px; margin-bottom: 32px; padding: 18px 24px; background: #F3F4F6; border-left: 5px solid #005596; border-radius: 6px; animation: fadeIn 0.5s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.summary-card { margin-top: 24px; margin-bottom: 32px; padding: 18px 24px; background: #F3F4F6; border-radius: 6px; animation: fadeIn 0.5s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
 .summary-label { font-size: 10px; font-weight: 900; color: #005596; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
-.summary-label::before { content: ""; display: inline-block; width: 3px; height: 12px; background: #005596; border-radius: 2px; }
 .summary-card p { margin: 0; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 15px; line-height: 1.7; color: #111827; font-style: italic; }
 
 /* Seasonal Styles */

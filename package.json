@@ -1,19 +1,25 @@
 {
   "name": "sws-工法情报系统",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.8.0",
   "type": "module",
   "scripts": {
     "sync:worker": "node scripts/copy-worker.js",
     "dev": "npm run sync:worker && vite",
+    "dev:all": "bash scripts/start-all.sh dev",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 npm run sync:worker && vite build && node scripts/post-build.js",
     "preview": "vite preview",
     "server": "node server.js",
     "server:dev": "nodemon server.js",
     "start": "cross-env NODE_ENV=production node server.js",
+    "typecheck": "npx tsc --noEmit --pretty",
+    "typecheck:watch": "npx tsc --noEmit --pretty --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:file": "bash scripts/test-file.sh",
+    "check:env": "bash scripts/check-env.sh",
+    "clean": "rm -rf dist public/pdf.min.mjs public/pdf.worker.min.mjs public/cmaps public/standard_fonts public/wasm && echo 'Cleaned build artifacts'"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.2",

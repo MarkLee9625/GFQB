@@ -53,14 +53,18 @@ export function useExportManager({
     return url;
   }, [addTemporaryBlobUrl]);
 
-  const handleExportWithOptions = useCallback(async (options: {
-    useAlternateDesign: boolean;
-    includeImages: boolean;
-    optimizeForPrint: boolean;
-    exportType: 'reader' | 'printable' | 'pdf';
-  }) => {
+  const handleExportWithOptions = useCallback(async (
+    options: {
+      useAlternateDesign: boolean;
+      includeImages: boolean;
+      optimizeForPrint: boolean;
+      exportType: 'reader' | 'printable' | 'pdf';
+    },
+    onProgress?: (percent: number, message?: string) => void
+  ) => {
     try {
       if (options.exportType === 'pdf') {
+        onProgress?.(0, '开始生成 PDF...');
         const pdfOptions: PdfExportOptions = {
           useAlternateDesign: options.useAlternateDesign,
           includeImages: options.includeImages,
@@ -68,16 +72,21 @@ export function useExportManager({
           logo
         };
         await exportToPdf(articles, pdfOptions);
+        onProgress?.(100, 'PDF 生成完成');
       } else if (options.exportType === 'reader') {
-        await exportReaderHTML(articles, options, { logo, sidebarMeta });
+        await exportReaderHTML(articles, options, { logo, sidebarMeta }, onProgress);
       } else {
+        onProgress?.(0, '开始生成打印版...');
         const htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
+        onProgress?.(90, '正在打开预览...');
         const url = createExportBlob(htmlContent);
         window.open(url, '_blank');
+        onProgress?.(100, '打印版生成完成');
       }
     } catch (error) {
       console.error('导出失败:', error);
       alert('导出过程中发生错误，请查看控制台。');
+      throw error;
     }
   }, [articles, logo, sidebarMeta, createExportBlob]);
 

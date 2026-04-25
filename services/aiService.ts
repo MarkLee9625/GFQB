@@ -5,23 +5,23 @@
 
 import { extractAbstractFromPdf } from '../src/services/pdf/index';
 
-const REASONER_MODEL = 'deepseek-reasoner';
-const CHAT_MODEL = 'deepseek-chat';
+const REASONER_MODEL = 'deepseek-v4-flash';
+const CHAT_MODEL = 'deepseek-v4-flash';
 const API_URL = `/api/deepseek/generate`;
 
 const API_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 2000;
-const GRAPH_TIMEOUT_MS = 600_000;
-const GRAPH_NODES_TIMEOUT = 480_000;
-const GRAPH_LINKS_TIMEOUT = 480_000;
-const GRAPH_SUPPLEMENT_TIMEOUT = 240_000;
+const GRAPH_TIMEOUT_MS = 900_000;
+const GRAPH_NODES_TIMEOUT = 600_000;
+const GRAPH_LINKS_TIMEOUT = 600_000;
+const GRAPH_SUPPLEMENT_TIMEOUT = 360_000;
 
-// DeepSeek V3.2 (reasoner) token 配额，根据官方文档：默认32K/最大64K
-// max_tokens 同时控制 thinking + answer，留足余量
-const GRAPH_NODES_MAX_TOKENS = 32768;
-const GRAPH_LINKS_MAX_TOKENS = 32768;
-const GRAPH_SUPPLEMENT_MAX_TOKENS = 16384;
+// DeepSeek V4 (deepseek-v4-flash) token 配额，上下文1M/输出最大384K
+// max_tokens 同时控制 thinking + answer，留足推理空间
+const GRAPH_NODES_MAX_TOKENS = 65536;
+const GRAPH_LINKS_MAX_TOKENS = 65536;
+const GRAPH_SUPPLEMENT_MAX_TOKENS = 32768;
 
 export type ProgressCallback = (stage: string, detail: string) => void;
 
@@ -59,18 +59,18 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
         const timeoutId = setTimeout(() => controller.abort(new Error(`请求超时 (${timeoutMs / 1000}s)`)), timeoutMs);
 
         if (attempt > 1 && isEmptyContent) {
-            effectiveMaxTokens = Math.min(Math.round((effectiveMaxTokens || 16384) * 1.5), 65536);
+            effectiveMaxTokens = Math.min(Math.round((effectiveMaxTokens || 16384) * 1.5), 131072);
             console.warn(`[aiService] content 为空重试，max_tokens 提升至 ${effectiveMaxTokens}`);
         }
 
         if (attempt > 1 && lastError?.name === 'AbortError') {
             effectiveMessages = effectiveMessages.map(m => {
-                if (m.content.length > 20000) {
-                    return { ...m, content: m.content.substring(0, Math.floor(m.content.length * 0.6)) + '\n\n[内容已截断...]' };
+                if (m.content.length > 50000) {
+                    return { ...m, content: m.content.substring(0, Math.floor(m.content.length * 0.75)) + '\n\n[内容已截断...]' };
                 }
                 return m;
             });
-            console.warn('[aiService] 超时重试，上下文截断至 60%');
+            console.warn('[aiService] 超时重试，上下文截断至 75%');
         }
 
         try {
@@ -79,6 +79,8 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
             const body: Record<string, unknown> = { model, messages: effectiveMessages };
             if (effectiveMaxTokens !== undefined) body.max_tokens = effectiveMaxTokens;
             if (temperature !== undefined) body.temperature = temperature;
+            body.reasoning_effort = 'max';
+            body.extra_body = { thinking: { type: 'enabled' } };
 
             const response = await fetch(API_URL, {
                 method: 'POST',
@@ -402,8 +404,9 @@ export async function extractGlobalKnowledgeGraph(
 
 【任务目标】
 1. 深度覆盖：识别原文中最核心的技术概念、工法、材料与装备。
-2. 节点规模：必须提取 30-50 个高质量节点，覆盖造船全生命周期（设计、加工、组装、舾装、涂装、交付）。
-3. 输出要求：仅输出节点列表的 JSON 结构，不要输出任何其他文字。
+2. 节点规模：必须提取 40-70 个高质量节点，覆盖造船全生命周期（设计、加工、组装、舾装、涂装、交付）。
+3. 关系提取：请同时尽可能多地输出节点间的核心逻辑关系，至少输出节点数×1.0 条连线，遵循 concept/material → process → technology/equipment 的工业传递链。
+4. 输出要求：仅输出包含节点和关系的 JSON 结构，不要输出任何其他文字。
 
 【ID 命名规则 - 极其重要】
 - ID 必须是纯英文小写 + 下划线，如：hull_assembly, subsea_pipeline, fpso_mooring
@@ -435,7 +438,7 @@ export async function extractGlobalKnowledgeGraph(
 - 3-4: 辅助技术/次要概念
 - 1-2: 仅提及的边缘概念`;
 
-    const nodeUserPrompt = `请从以下文章内容中提取 35-45 个核心节点，不要输出连线(links)：\n\n${articlesText}`;
+    const nodeUserPrompt = `请从以下文章内容中提取 45-65 个核心节点，并同时输出节点间的核心关系(links)：\n\n${articlesText}`;
 
     try {
         const nodeRawText = await callDeepSeekAPI({
@@ -505,7 +508,7 @@ export async function extractGlobalKnowledgeGraph(
 
 【挖掘准则】
 1. 关系强度：深挖节点间的因果、依赖、优化、应用关系，避免泛泛的"相关"或"涉及"。
-2. 关系规模：连线总数必须在节点数的 1.5 倍到 2.5 倍之间。
+2. 关系规模：连线总数必须在节点数的 2.0 倍到 3.0 倍之间。
 3. 流向控制：遵循工业传递链。concept/material -> process -> technology/equipment。
 4. 关系动词：使用精确的技术动词，如"驱动"、"支撑"、"优化"、"应用于"、"转化为"、"依赖于"、"配套于"。
 5. 输出要求：仅输出连线列表的 JSON 结构，不要输出任何其他文字。
@@ -528,7 +531,7 @@ strength 范围 1-5，5 表示强因果/直接依赖，1 表示弱关联。`;
         const relevantParagraphs = articlesText.split('\n').filter(para =>
           nodeNames.some(name => para.includes(name))
         ).join('\n');
-        const linkContext = relevantParagraphs.substring(0, 40000) || articlesText.substring(0, 40000);
+        const linkContext = relevantParagraphs.substring(0, 120000) || articlesText.substring(0, 120000);
 
         const linkUserPrompt = `
 【原文相关段落】
@@ -537,7 +540,7 @@ ${linkContext}
 【已确定的节点列表 (按类型分组)】
 ${nodeContext}
 
-请为以上节点构建 ${Math.round(nodesResult.nodes.length * 1.5)}-${Math.round(nodesResult.nodes.length * 2.5)} 条逻辑连线，仅输出 links JSON 结构：`;
+请为以上节点构建 ${Math.round(nodesResult.nodes.length * 2.0)}-${Math.round(nodesResult.nodes.length * 3.0)} 条逻辑连线，仅输出 links JSON 结构：`;
 
         const linkRawText = await callDeepSeekAPI({
             model: REASONER_MODEL,
@@ -677,7 +680,7 @@ async function supplementOrphanLinks(
 
     const orphanInfo = orphanNodes.map(n => `${n.id}(${n.name}, ${n.type})`).join(', ');
 
-    const orphanContextSnippets = orphanNodes.slice(0, 8).map(n => {
+    const orphanContextSnippets = orphanNodes.slice(0, 12).map(n => {
         const idx = articlesText.indexOf(n.name);
         if (idx === -1) return '';
         const start = Math.max(0, idx - 200);
@@ -689,7 +692,7 @@ async function supplementOrphanLinks(
 
 【关系规则】
 1. concept/material → process → technology/equipment 的工业传递链
-2. 连线数：至少为每个孤立节点建立 1-2 条连线
+2. 连线数：至少为每个孤立节点建立 1-3 条连线
 3. 关系动词使用精确的技术动词：驱动、支撑、优化、应用于、转化为、依赖于、配套于
 
 【输出格式】严格输出 JSON（不要包裹在 markdown 代码块中）：
@@ -697,7 +700,7 @@ async function supplementOrphanLinks(
 
     const userPrompt = `
 【原文背景】
-${articlesText.substring(0, 80000)}
+${articlesText.substring(0, 200000)}
 
 ${orphanContextSnippets ? `【孤立节点上下文片段】\n${orphanContextSnippets}\n\n` : ''}【孤立节点】
 ${orphanInfo}
@@ -880,18 +883,23 @@ export async function translateAndFormatAcademic(article: { title: string, conte
     }
 }
 
-export async function generateForeword(articlesSummary: string): Promise<string> {
-    const systemPrompt = `你是一名资深的工程期刊主编，拥有 20 年海工装备行业经验。请根据提供的文章摘要列表，撰写本期期刊的卷首语（宏观导读）。
+export async function generateForeword(articles: any[]): Promise<string> {
+    console.log(`[aiService] 开始为 ${articles.length} 篇文章组装导读上下文...`);
+    const articlesContext = await buildForewordContext(articles);
+    console.log('[aiService] 导读上下文组装完成，总长度:', articlesContext.length);
+
+    const systemPrompt = `你是一名资深的工程期刊主编，拥有 20 年海工装备行业经验。请根据提供的文章全文信息，撰写本期期刊的卷首语（宏观导读）。
 
 ### 【撰写要求】
 1. **定位与视角**：站在行业宏观高度，洞察本期文章的技术脉络与产业价值。
-2. **结构层次**：
+2. **基于原文**：请基于提供的原文技术细节进行点评，引用文章中的具体技术关键词、工艺名称或数据来增强说服力，避免空泛的学术化描述。
+3. **结构层次**：
    - 开篇：点明本期核心主题与技术趋势
    - 中段：逐一点评各篇文章的亮点与创新（不要简单罗列，要有机串联）
    - 结尾：总结本期价值，展望行业未来发展
-3. **语言风格**：专业但不晦涩，权威但不高冷。采用技术主编的口吻，既要有学术深度，又要有行业温度。
-4. **字数控制**：约 500 字。
-5. **输出格式**：必须输出完整的 HTML 片段，使用标准的 HTML 标签（如 <p>, <h3>, <strong> 等），确保可直接嵌入网页显示。
+4. **语言风格**：专业但不晦涩，权威但不高冷。采用技术主编的口吻，既要有学术深度，又要有行业温度。
+5. **字数控制**：600-800 字。
+6. **输出格式**：必须输出完整的 HTML 片段，使用标准的 HTML 标签（如 <p>, <h3>, <strong> 等），确保可直接嵌入网页显示。
 
 ### 【输出格式示例】
 <p>本期《海洋工程智能建造》聚焦于船舶制造领域的关键技术创新...</p>
@@ -899,17 +907,16 @@ export async function generateForeword(articlesSummary: string): Promise<string>
 <p>在大型邮轮薄板激光复合焊方面...</p>
 <p>...</p>`;
 
-    const userPrompt = `请为以下文章摘要列表撰写卷首语：\n\n${articlesSummary}`;
+    const userPrompt = `请为以下文章撰写卷首语：\n\n${articlesContext}`;
 
     try {
-        console.log('[aiService] 开始生成卷首语，摘要长度:', articlesSummary.length);
-
         const rawText = await callDeepSeekAPI({
             model: REASONER_MODEL,
             messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt },
             ],
+            max_tokens: 8192,
         });
 
         const cleanedHtml = cleanHtmlResponse(rawText);
@@ -919,6 +926,54 @@ export async function generateForeword(articlesSummary: string): Promise<string>
         console.error('[aiService] 卷首语生成失败:', error);
         throw error;
     }
+}
+
+export async function buildForewordContext(articles: any[]): Promise<string> {
+    console.log(`[aiService] 开始为 ${articles.length} 篇文章组装导读上下文...`);
+    const allTexts: string[] = [];
+
+    for (let i = 0; i < articles.length; i++) {
+        const article = articles[i];
+        let articleText = `【文章 ${i+1}】\n标题：${article.title}\n`;
+
+        if (article.abstract && article.abstract.trim().length > 10) {
+            articleText += `摘要：${article.abstract}\n`;
+        }
+        if (article.tags && Array.isArray(article.tags) && article.tags.length > 0) {
+            articleText += `标签：${article.tags.join(', ')}\n`;
+        }
+
+        if (article.content && article.content.trim().length > 10) {
+            const plainText = article.content.replace(/<[^>]+>/g, '\n').replace(/\s+/g, ' ').trim();
+            articleText += `正文：${plainText.substring(0, 15000)}\n`;
+            console.log(`[aiService]   第${i+1}篇正文，提取 ${Math.min(plainText.length, 15000)} 字`);
+        }
+
+        if (article.pdfData && article.pdfData.trim().length > 100) {
+            try {
+                const timeoutPromise = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('PDF 提取超时')), 10000)
+                );
+                const extractionPromise = extractAbstractFromPdf(article.pdfData, 5, 10000);
+                const result = await Promise.race([extractionPromise, timeoutPromise]);
+                if (result.success && result.fullText && result.fullText.trim().length > 50) {
+                    articleText += `PDF原文：${result.fullText.substring(0, 20000)}\n`;
+                    console.log(`[aiService]   第${i+1}篇PDF，提取 ${Math.min(result.fullText.length, 20000)} 字`);
+                } else if (result.success && result.abstract) {
+                    articleText += `PDF摘要：${result.abstract}\n`;
+                    console.log(`[aiService]   第${i+1}篇PDF摘要`);
+                }
+            } catch (pdfErr) {
+                console.warn(`[aiService]   第${i+1}篇PDF 提取失败:`, pdfErr);
+            }
+        }
+
+        allTexts.push(articleText);
+    }
+
+    const combinedText = allTexts.join('\n\n');
+    console.log(`[aiService] 导读上下文组装完成，总长度: ${combinedText.length}`);
+    return combinedText;
 }
 
 export async function buildSuperContextForGraph(articles: any[]): Promise<string> {
@@ -932,7 +987,7 @@ export async function buildSuperContextForGraph(articles: any[]): Promise<string
 
         if (article.content && article.content.trim().length > 10) {
             const plainText = article.content.replace(/<[^>]+>/g, '\n').replace(/\s+/g, ' ').trim();
-            allTexts.push(`【文章 ${i+1}】标题：${article.title}\n正文：${plainText.substring(0, 10000)}`);
+            allTexts.push(`【文章 ${i+1}】标题：${article.title}\n正文：${plainText.substring(0, 30000)}`);
             console.log(`[aiService]   使用正文内容，长度: ${plainText.length}`);
         }
 
@@ -943,11 +998,11 @@ export async function buildSuperContextForGraph(articles: any[]): Promise<string
                     setTimeout(() => reject(new Error('PDF 提取超时')), 10000)
                 );
 
-                const extractionPromise = extractAbstractFromPdf(article.pdfData, 5, 10000);
+                const extractionPromise = extractAbstractFromPdf(article.pdfData, 5, 40000);
                 const result = await Promise.race([extractionPromise, timeoutPromise]);
 
                 if (result.success && result.fullText && result.fullText.trim().length > 50) {
-                    allTexts.push(`【PDF附件 ${i+1}】标题：${article.title}\n原文：${result.fullText.substring(0, 15000)}`);
+                    allTexts.push(`【PDF附件 ${i+1}】标题：${article.title}\n原文：${result.fullText.substring(0, 40000)}`);
                     console.log(`[aiService]   PDF 抽字成功，提取 ${result.fullText.length} 字`);
                 } else if (result.success && result.abstract) {
                     allTexts.push(`【PDF附件 ${i+1}】标题：${article.title}\n摘要：${result.abstract}`);

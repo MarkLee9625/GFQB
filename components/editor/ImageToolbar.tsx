@@ -7,7 +7,7 @@ interface ImageToolbarProps {
   onReplace: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCaption: () => void;
   onDelete: () => void;
-  replaceInputRef: React.RefObject<HTMLInputElement>;
+  replaceInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
 const ImageToolbar = React.memo(({ position, onAlign, onSize, onReplace, onCaption, onDelete, replaceInputRef }: ImageToolbarProps) => (

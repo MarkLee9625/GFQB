@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Article } from '../../src/types/models';
 import { Icon } from '../Icons';
 
@@ -17,12 +17,46 @@ interface EditorRightPanelProps {
   setImgCompressMaxWidth: React.Dispatch<React.SetStateAction<number>>;
   imgCompressFormat: 'webp' | 'jpeg' | 'original';
   setImgCompressFormat: React.Dispatch<React.SetStateAction<'webp' | 'jpeg' | 'original'>>;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
+
+const SectionBlock: React.FC<{
+  title: string;
+  icon?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}> = ({ title, icon, defaultOpen = true, children }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="space-y-3">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center justify-between w-full group"
+      >
+        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+          {icon && <Icon name={icon} className="w-3 h-3" />}
+          {title}
+        </h3>
+        <svg
+          className={`w-3 h-3 text-gray-300 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div className={`overflow-hidden transition-all duration-200 ${open ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        {children}
+      </div>
+    </div>
+  );
+};
 
 const EditorRightPanel = React.memo(({
   formData, onFieldChange, categories, onManageCats, isGeneratingAi, handleAiSummary,
   tempPdf, setTempPdf, imgCompressQuality, setImgCompressQuality,
-  imgCompressMaxWidth, setImgCompressMaxWidth, imgCompressFormat, setImgCompressFormat
+  imgCompressMaxWidth, setImgCompressMaxWidth, imgCompressFormat, setImgCompressFormat,
+  collapsed, onToggleCollapse
 }: EditorRightPanelProps) => {
   const category = formData.category || '';
   const tags = formData.tags || [];
@@ -31,15 +65,66 @@ const EditorRightPanel = React.memo(({
   const lineHeight = formData.lineHeight || 2.0;
   const pdfData = formData.pdfData;
 
-  return (
-  <div className="w-[400px] flex flex-col bg-white overflow-y-auto scrollbar-hide border-l border-gray-100">
-    <div className="p-8 flex flex-col gap-8">
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">基础信息</h3>
+  if (collapsed) {
+    return (
+      <div className="w-[48px] flex flex-col items-center py-4 bg-white border-l border-gray-100 gap-3">
+        <button
+          onClick={onToggleCollapse}
+          className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-50 text-brand-blue hover:bg-blue-100 transition-colors"
+          title="展开面板"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <div className="w-7 h-px bg-gray-200 my-1"></div>
+        <button
+          onClick={handleAiSummary}
+          disabled={isGeneratingAi}
+          className="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-600 to-brand-blue text-white hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+          title="AI 一键生成摘要"
+        >
+          ✨
+        </button>
+        <div className="w-7 h-px bg-gray-200 my-1"></div>
+        <div className="flex flex-col items-center gap-1 text-[8px] text-gray-400 font-bold">
+          <span>{fontSize}</span>
+          <span>字号</span>
         </div>
+        <div className="flex flex-col items-center gap-1 text-[8px] text-gray-400 font-bold">
+          <span>{lineHeight}</span>
+          <span>行距</span>
+        </div>
+        {tempPdf && (
+          <>
+            <div className="w-7 h-px bg-gray-200 my-1"></div>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 text-red-500" title={`PDF: ${tempPdf.name}`}>
+              <Icon name="pdf" className="w-3.5 h-3.5" />
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
+  return (
+  <div className="w-[400px] flex flex-col bg-white overflow-y-auto scrollbar-hide border-l border-gray-100 transition-all duration-300">
+    <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">属性面板</span>
+      <button
+        onClick={onToggleCollapse}
+        className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+        title="收起面板 (获得更大编辑区)"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
+
+    <div className="p-6 flex flex-col gap-6">
+
+      <SectionBlock title="基础信息" icon="edit" defaultOpen={true}>
         <div className="space-y-4 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
           {(category === '封面' || category === '封底') ? (
             <div className="flex flex-col gap-2">
@@ -78,7 +163,7 @@ const EditorRightPanel = React.memo(({
                       }}
                       className="hover:text-red-500"
                     >
-                      <Icon name="maximize" className="w-2.5 h-2.5 rotate-45" />
+                      <Icon name="x" className="w-2.5 h-2.5" />
                     </button>
                   </span>
                 ))}
@@ -118,10 +203,9 @@ const EditorRightPanel = React.memo(({
             </div>
           )}
         </div>
-      </div>
+      </SectionBlock>
 
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">排版控制</h3>
+      <SectionBlock title="排版控制" icon="layout" defaultOpen={true}>
         <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 space-y-6">
           <div className="space-y-3">
             <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
@@ -148,10 +232,9 @@ const EditorRightPanel = React.memo(({
             />
           </div>
         </div>
-      </div>
+      </SectionBlock>
 
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">图片压缩</h3>
+      <SectionBlock title="图片压缩" icon="image" defaultOpen={true}>
         <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 space-y-5">
           <div className="space-y-3">
             <div className="flex justify-between items-center text-[10px] font-bold text-gray-500">
@@ -207,28 +290,27 @@ const EditorRightPanel = React.memo(({
             </div>
           </div>
         </div>
-      </div>
+      </SectionBlock>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">摘要/导读 (Why & How)</h3>
+      <SectionBlock title="摘要" icon="file-text" defaultOpen={true}>
+        <div className="space-y-3">
           <button
             onClick={handleAiSummary}
             disabled={isGeneratingAi}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold transition-all ${isGeneratingAi ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-brand-blue text-white shadow-lg shadow-blue-200 hover:scale-105 active:scale-95'}`}
+            className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-all ${isGeneratingAi ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-brand-blue text-white shadow-lg shadow-blue-200 hover:scale-[1.02] active:scale-[0.98]'}`}
             title="一键生成标题与摘要"
           >
             {isGeneratingAi ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : '✨'}
-            一键生成标题与摘要
+            AI 一键生成标题与摘要
           </button>
+          <textarea
+            className="w-full h-[160px] bg-gray-50/50 border border-gray-100 rounded-xl p-4 text-[13px] leading-relaxed text-gray-600 focus:bg-white focus:border-brand-blue outline-none transition-all resize-none placeholder:text-gray-300"
+            placeholder={pdfData ? "摘要：建议重点总结 PDF 的核心内容及效益... 将展示在阅读器顶部。" : "点击上方按钮生成摘要，或者在这里手动输入... 摘要将展示在导出版的标题正下方。建议重点描述：为什么要开展此项工法？能带来哪些效益？"}
+            value={abstract || ''}
+            onChange={e => onFieldChange('abstract', e.target.value)}
+          />
         </div>
-        <textarea
-          className="w-full h-[180px] bg-gray-50/50 border border-gray-100 rounded-xl p-4 text-[13px] leading-relaxed text-gray-600 focus:bg-white focus:border-brand-blue outline-none transition-all resize-none placeholder:text-gray-300"
-          placeholder={pdfData ? "摘要：建议重点总结 PDF 的核心内容及效益... 将展示在阅读器顶部。" : "点击上方按钮生成摘要，或者在这里手动输入... 摘要将展示在导出版的标题正下方。建议重点描述：为什么要开展此项工法？能带来哪些效益？"}
-          value={abstract || ''}
-          onChange={e => onFieldChange('abstract', e.target.value)}
-        />
-      </div>
+      </SectionBlock>
 
       {tempPdf && (
         <div className="p-4 rounded-xl bg-red-50 border border-red-100 flex items-center justify-between">

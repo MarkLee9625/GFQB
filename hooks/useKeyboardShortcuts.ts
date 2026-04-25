@@ -9,7 +9,7 @@ interface UseKeyboardShortcutsOptions {
   setCurrentId: (id: number | null) => void;
   setIsSidebarHidden: React.Dispatch<React.SetStateAction<boolean>>;
   setShowShortcutsHelp: (v: boolean) => void;
-  handleExportRef: React.MutableRefObject<((isReader: boolean) => void) | null>;
+  handleExportRef: React.MutableRefObject<((isReader: boolean, categories?: string[]) => void) | null>;
   toggleReadingModeRef: React.MutableRefObject<(() => void) | null>;
   handleDeleteRef: React.MutableRefObject<(() => void) | null>;
   handleNavigateRef: React.MutableRefObject<((direction: 'prev' | 'next') => void) | null>;

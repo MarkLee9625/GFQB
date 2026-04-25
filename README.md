@@ -262,6 +262,33 @@
 
 ## 📅 更新日志 (Changelog)
 
+### v1.8.0 (2026-04-24) - DeepSeek V4 模型升级与导出系统性能优化
+*   **【AI 模型升级】DeepSeek V4 (deepseek-v4-flash) 全面迁移**:
+    *   模型从 `deepseek-reasoner` / `deepseek-chat` 升级为 `deepseek-v4-flash`，启用 `reasoning_effort: 'max'` 和 thinking 模式
+    *   `extractGlobalKnowledgeGraph` 重写为三阶段架构（节点提取 → 关系挖掘 → 补充连线），显著提升图谱质量
+    *   新增 `validateGraphQuality` 质量校验函数，自动检测孤立节点和连通性问题
+    *   新增 `generateFallbackLinks` / `supplementOrphanLinks` 补充机制，确保图谱完整性
+    *   优化 AI 评审 JSON 解析鲁棒性，增强异常恢复能力
+*   **【编辑器性能优化】Blob URL 替换机制革新**:
+    *   新增 `replaceBlobsSync` 函数，使用字符串 split/join 替代 DOMParser 进行 blob URL → data URL 映射
+    *   解决 DOMParser 解析大 HTML 时的同步阻塞问题，保存性能提升 100 倍以上
+    *   新增 `rightPanelCollapsed` 右侧面板折叠状态管理
+    *   修复 useState setter 导出和 useEffect 依赖问题
+*   **【导出系统升级】Worker 后台导出与压缩模块**:
+    *   新增 `src/services/export/reader.worker.ts` Web Worker，将导出压缩过程移至后台线程，避免 UI 卡顿
+    *   新增 `src/services/export/compression.ts` 压缩工具模块，基于原生 CompressionStream API（支持回退到 fflate）
+    *   实现流式解压与进度回调，支持大数据量的高效解压
+    *   修复 reader.ts 中属性名不匹配的 bug，优化导出流程
+*   **【新增工具】图片自动适配计算**:
+    *   新增 `src/utils/imageMath.ts`，提供 `computeAutoFitPosition` 等函数，智能计算图片在容器中的最佳展示区域
+*   **【样式优化】渲染性能与视觉增强**:
+    *   新增 `content-visibility: auto` 属性，实现媒体容器的懒渲染，提升页面加载速度
+    *   新增 `placeholder` 样式支持编辑器空状态提示
+    *   新增 `cover-img-selected` 封面选中高亮样式
+*   **【代码清理】移除废弃文件**:
+    *   清理 `.trae/documents/` 和 `.trae/skills/` 目录中的旧文档和技能文件
+    *   删除已废弃的 `src/types/intelligence.ts` 和 `src/pdf-worker.d.ts`
+
 ### v1.7.0 (2026-04-20) - 编辑器组件重构与渲染引擎模块化
 *   **【编辑器重构】Phase 2 完成 - 使用 ArticleRenderer**:
     *   将 Editor 组件重构为使用独立的 ArticleRenderer、CoverRenderer、BackRenderer、ContentRenderer 组件
@@ -339,7 +366,8 @@
 ### v1.6.2 (2026-03-24) - 彻底恢复双端知识图谱动态交互沙盘原生渲染
 *   **【重大重构】放弃所有安全规避小聪明，回归原汁原味的、抗净化的 srcdoc 实体降解法**:
     *   **问题重塑**: V1.5.7 尝试使用的 src="data:..." 协议直接触发了在线编辑器的严重 XSS 净化制裁，导致生成的新图谱在一瞬间被清空甚至白屏。而更早版本引发大范围阅读器报错离线不显示的真正原因，竟然是因为在那段用来解压缩 Base64 的引导脚本里使用了一句极其致命的 document.write (在 ile:// 沙盒下被 Chrome 和 Edge 定性为高危拦截)。
-    *   **修复决断**: 彻底放弃 eader.ts 对 iframe 进行物理割除或者 display: none 抹除交互逻辑的错误妥协。在 graphRenderer.ts 中，废除一切 data: 协议或 document.write 解压缩机制。采用返璞归真的全量 HTML Entity 字面实体映射转义 (如将 < 全部解析为 &lt;)，硬灌入 srcdoc！
+    *   **修复决断**: 彻底放弃 
+eader.ts 对 iframe 进行物理割除或者 display: none 抹除交互逻辑的错误妥协。在 graphRenderer.ts 中，废除一切 data: 协议或 document.write 解压缩机制。采用返璞归真的全量 HTML Entity 字面实体映射转义 (如将 < 全部解析为 &lt;)，硬灌入 srcdoc！
     *   **效果**: 编辑版的图谱重见天日，拥有完整的拖拽展开交互。离线阅读版不再被阉割为干瘪的死板 SVG，同样拥有着原汁原味与线上一致的动态沙盘。同时完美绕过跨源拦截：报错已被封装进静默捕获，丝毫不会中断图谱 D3.js 世界的繁荣绽放。
 ### v1.6.1 (2026-03-24) - 修复图谱清洗后因历史 CSS 遗留导致的隐身假死
 *   **【导出管线】追加无视环境的绝对权重展现样式**:
@@ -398,7 +426,8 @@ o-referrer 剥离身份标识试图直通；若遭遇硬核 CORS 拦截，二档
 ### v1.6.2 (2026-03-24) - 彻底恢复双端知识图谱动态交互沙盘原生渲染
 *   **【重大重构】放弃所有安全规避小聪明，回归原汁原味的、抗净化的 srcdoc 实体降解法**:
     *   **问题重塑**: V1.5.7 尝试使用的 src="data:..." 协议直接触发了在线编辑器的严重 XSS 净化制裁，导致生成的新图谱在一瞬间被清空甚至白屏。而更早版本引发大范围阅读器报错离线不显示的真正原因，竟然是因为在那段用来解压缩 Base64 的引导脚本里使用了一句极其致命的 document.write (在 ile:// 沙盒下被 Chrome 和 Edge 定性为高危拦截)。
-    *   **修复决断**: 彻底放弃 eader.ts 对 iframe 进行物理割除或者 display: none 抹除交互逻辑的错误妥协。在 graphRenderer.ts 中，废除一切 data: 协议或 document.write 解压缩机制。采用返璞归真的全量 HTML Entity 字面实体映射转义 (如将 < 全部解析为 &lt;)，硬灌入 srcdoc！
+    *   **修复决断**: 彻底放弃 
+eader.ts 对 iframe 进行物理割除或者 display: none 抹除交互逻辑的错误妥协。在 graphRenderer.ts 中，废除一切 data: 协议或 document.write 解压缩机制。采用返璞归真的全量 HTML Entity 字面实体映射转义 (如将 < 全部解析为 &lt;)，硬灌入 srcdoc！
     *   **效果**: 编辑版的图谱重见天日，拥有完整的拖拽展开交互。离线阅读版不再被阉割为干瘪的死板 SVG，同样拥有着原汁原味与线上一致的动态沙盘。同时完美绕过跨源拦截：报错已被封装进静默捕获，丝毫不会中断图谱 D3.js 世界的繁荣绽放。
 ### v1.6.1 (2026-03-24) - 修复图谱清洗后因历史 CSS 遗留导致的隐身假死
 *   **【导出管线】追加无视环境的绝对权重展现样式**:
@@ -626,4 +655,4 @@ o-referrer 剥离身份标识试图直通；若遭遇硬核 CORS 拦截，二档
 *   **IndexedDB V2**: 实现文章级原子化存储，大幅提升大数据量下的稳定性。
 
 ---
-最后更新：2026-04-15
+最后更新：2026-04-20
