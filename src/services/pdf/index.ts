@@ -2,7 +2,7 @@ import { pdfjsLib, ensurePdfLibLoaded, workerUrl } from './wrapper';
 import { extractTitle } from './strategies/title';
 import { extractAbstract } from './strategies/abstract';
 import { extractKeywords } from './strategies/keywords';
-import { compressImage } from '../../utils/fileHelpers';
+import { compressImage, base64ToUint8Array } from '../../utils/fileHelpers';
 
 const ensurePdfJsReady = async () => {
     await ensurePdfLibLoaded();
@@ -64,11 +64,7 @@ export async function extractAbstractFromPdf(
             }
 
             // 2. 加载文档 - 转换为 Uint8Array 以获得更好的兼容性
-            const binaryString = atob(cleanPdfData);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
+            const bytes = base64ToUint8Array(cleanPdfData);
 
             const loadingTask = pdfjsLib.getDocument({
                 data: bytes,

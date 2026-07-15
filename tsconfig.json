@@ -11,13 +11,13 @@
     ],
     // 添加更严格的类型检查，但放宽一些选项以避免破坏现有代码
     "strict": true,
-    "noImplicitAny": false, // 放宽：允许隐式any类型
+    "noImplicitAny": true, // 严格：不允许隐式any类型
     "strictNullChecks": true,
     "strictFunctionTypes": true,
     "strictBindCallApply": true,
     "strictPropertyInitialization": false, // 放宽：不强制属性初始化
     "noImplicitThis": true,
-    "useUnknownInCatchVariables": false, // 放宽：catch变量可以是any
+    "useUnknownInCatchVariables": true, // 严格：catch变量必须是unknown
     "alwaysStrict": true,
     "noUnusedLocals": false, // 放宽：允许未使用的局部变量
     "noUnusedParameters": false, // 放宽：允许未使用的参数

@@ -38,17 +38,17 @@ if (!DEEPSEEK_API_KEY) {
 console.log('\x1b[32m%s\x1b[0m', '✅  BFF 代理服务器启动配置验证通过');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 4513;
 
 // 中间件配置
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? false // 生产环境禁止跨域（因为前端和代理在同一域名下）
-    : 'http://localhost:3000', // 开发环境允许前端访问
+    : 'http://localhost:4512', // 开发环境允许前端访问
   credentials: true,
 }));
 
-// 安全修复：限制请求体大小为 1MB，防止恶意发送超大文本耗尽内存
+// 限制请求体大小为 5MB，防止恶意发送超大文本耗尽内存
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -80,22 +80,29 @@ app.get('/api/health', (req, res) => {
 // DeepSeek API 代理端点
 app.post('/api/deepseek/generate', async (req, res) => {
   try {
-    const proxySecret = process.env.PROXY_SECRET;
-    if (!proxySecret) {
-      console.warn('⚠️  PROXY_SECRET 未配置，代理接口拒绝所有请求');
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: '代理服务未正确配置',
-      });
-    }
-    const requestSecret = req.headers['x-sws-proxy-secret'];
-    
-    if (requestSecret !== proxySecret) {
-      console.warn('🚨 非法代理接口访问尝试：缺少或错误的 x-sws-proxy-secret 头部');
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: '无权访问此 API 接口',
-      });
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isSameOrigin = req.headers.origin === `http://localhost:${PORT}`;
+
+    // 生产模式且同源请求：跳过 proxy-secret 校验（前端由同一 server.js 托管）
+    // ⚠️ 安全：不信任缺失的 Origin 头，必须显式匹配才视为同源
+    if (!(isProduction && isSameOrigin)) {
+      const proxySecret = process.env.PROXY_SECRET;
+      if (!proxySecret) {
+        console.warn('⚠️  PROXY_SECRET 未配置，代理接口拒绝所有请求');
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: '代理服务未正确配置',
+        });
+      }
+      const requestSecret = req.headers['x-sws-proxy-secret'];
+
+      if (requestSecret !== proxySecret) {
+        console.warn('🚨 非法代理接口访问尝试：缺少或错误的 x-sws-proxy-secret 头部');
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: '无权访问此 API 接口',
+        });
+      }
     }
     
     const { messages } = req.body;
@@ -108,12 +115,12 @@ app.post('/api/deepseek/generate', async (req, res) => {
     }
 
     const apiUrl = DEEPSEEK_API_URL;
-    const requestedModel = req.body.model || 'unknown';
-    
+    const requestedModel = (req.body.model || 'unknown').substring(0, 50);
+
     console.log(`📤 转发请求到 DeepSeek API (模型: ${requestedModel})...`);
 
     const controller = new AbortController();
-    const upstreamTimeout = setTimeout(() => controller.abort(), 300_000);
+    const upstreamTimeout = setTimeout(() => controller.abort(), 600_000);
 
     const response = await fetch(apiUrl, {
       method: 'POST',

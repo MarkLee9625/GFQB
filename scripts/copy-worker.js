@@ -71,6 +71,17 @@ async function main() {
         }
     }
 
+    // 同步 d3.min.js 到 public/（供知识图谱 iframe 外部引用）
+    console.log('\n📦 同步 D3 库...');
+    const d3Src = path.resolve(__dirname, '../node_modules/d3/dist/d3.min.js');
+    const d3Dest = path.join(publicDir, 'd3.min.js');
+    if (fs.existsSync(d3Src)) {
+        copyFileSafe(d3Src, d3Dest);
+        console.log('   ✅ d3.min.js 已同步');
+    } else {
+        console.warn('   ⚠️ d3.min.js 未找到，跳过');
+    }
+
     console.log('\n✨ 同步脚本执行完毕。Errors were logged if any occurred.');
 }
 

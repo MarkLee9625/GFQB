@@ -1,4 +1,5 @@
-import { UniversalArticleMeta } from '../../types/intelligence';
+import type { UniversalArticleMeta } from '../../types';
+import { fetchWithTimeout } from './utils';
 
 // 经过架构师筛选的全球海事造船顶级 RSS 源（去除了死链，增加了高可用源）
 export const RSS_PRESETS = [
@@ -17,7 +18,7 @@ export async function fetchRssFeed(url: string, sourceName: string): Promise<Uni
   // ==========================================
   try {
     const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&count=50`;
-    const response = await fetch(rss2jsonUrl);
+    const response = await fetchWithTimeout(rss2jsonUrl);
     
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
@@ -45,7 +46,7 @@ export async function fetchRssFeed(url: string, sourceName: string): Promise<Uni
     try {
       // AllOrigins 是极其强壮的 CORS 代理，可以绕过很多基础墙
       const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-      const proxyRes = await fetch(proxyUrl);
+      const proxyRes = await fetchWithTimeout(proxyUrl);
       if (!proxyRes.ok) throw new Error("代理请求失败");
       
       const proxyData = await proxyRes.json();

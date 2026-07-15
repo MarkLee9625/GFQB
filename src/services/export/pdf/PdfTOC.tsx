@@ -1,6 +1,6 @@
 import React from 'react';
 import { Page, View, Text } from '@react-pdf/renderer';
-import { Article } from '../../../types/models';
+import type { Article } from '../../../types';
 import styles from './pdfStyles';
 
 interface TOCProps {

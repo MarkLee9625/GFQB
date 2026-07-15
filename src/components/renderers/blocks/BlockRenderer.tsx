@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import type {
   ContentBlock,
   TextBlock,
@@ -12,7 +13,7 @@ import type {
   CodeBlock,
   FigureBlock,
   RawHtmlBlock,
-} from '../../../types/blocks';
+} from '../../../types';
 import { useInView } from '../../../../hooks/useInView';
 import { useBlobManager } from '../../../../hooks/useBlobManager';
 
@@ -22,12 +23,12 @@ interface BlockRendererProps {
 }
 
 const ParagraphBlock = React.memo<{ block: TextBlock }>(({ block }) => (
-  <p dangerouslySetInnerHTML={{ __html: block.content }} />
+  <p dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.content) }} />
 ));
 
 const HeadingBlockComponent = React.memo<{ block: HeadingBlock }>(({ block }) => {
   const Tag = `h${block.level}` as keyof React.JSX.IntrinsicElements;
-  return <Tag dangerouslySetInnerHTML={{ __html: block.content }} />;
+  return <Tag dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.content) }} />;
 });
 
 const ImageBlockComponent = React.memo<{ block: ImageBlock; mode: string }>(({ block, mode }) => {
@@ -76,7 +77,7 @@ const AudioBlockComponent = React.memo<{ block: AudioBlock }>(({ block }) => (
 ));
 
 const BlockquoteBlockComponent = React.memo<{ block: BlockquoteBlock }>(({ block }) => (
-  <blockquote dangerouslySetInnerHTML={{ __html: block.content }} />
+  <blockquote dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.content) }} />
 ));
 
 const ListBlockComponent = React.memo<{ block: ListBlock }>(({ block }) => {
@@ -84,7 +85,7 @@ const ListBlockComponent = React.memo<{ block: ListBlock }>(({ block }) => {
   return (
     <Tag>
       {block.items.map((item, i) => (
-        <li key={i} dangerouslySetInnerHTML={{ __html: item }} />
+        <li key={i} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item) }} />
       ))}
     </Tag>
   );
@@ -96,7 +97,7 @@ const TableBlockComponent = React.memo<{ block: TableBlock }>(({ block }) => (
       {block.rows.map((row, i) => (
         <tr key={i}>
           {row.map((cell, j) => (
-            <td key={j} dangerouslySetInnerHTML={{ __html: cell }} />
+            <td key={j} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cell) }} />
           ))}
         </tr>
       ))}
@@ -119,9 +120,51 @@ const FigureBlockComponent = React.memo<{ block: FigureBlock; mode: string }>(({
   </figure>
 ));
 
-const RawHtmlBlockComponent = React.memo<{ block: RawHtmlBlock }>(({ block }) => (
-  <div dangerouslySetInnerHTML={{ __html: block.html }} />
-));
+/**
+ * 检查 HTML 是否是由系统生成的受信任知识图谱容器
+ *
+ * 系统生成的 graph HTML（graphRenderer.ts）具有以下不可伪造的结构特征：
+ *   - 根元素是 knowledge-graph-container 并含 contenteditable="false"
+ *   - 内部包含 <script type="text/plain"> 数据容器（DOMPurify 默认移除）
+ *   - 内部包含 <iframe>（DOMPurify 默认移除）
+ *
+ * 通过验证这组结构特征而非单一 class name，防止攻击者注入伪装容器绕过净化。
+ */
+function isSelfGeneratedHtml(html: string): boolean {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const root = doc.body.firstElementChild;
+    if (!root) return false;
+
+    // ① 根元素必须是 knowledge-graph-container（系统唯一注册的容器类）
+    if (!root.classList.contains('knowledge-graph-container')) return false;
+
+    // ② 必须有关闭编辑的属性（graphRenderer 生成时固定设置）
+    if (root.getAttribute('contenteditable') !== 'false') return false;
+
+    // ③ 必须包含系统内置的数据脚本容器（script[type=text/plain] by graphRenderer）
+    const dataScript = root.querySelector('script[type="text/plain"]');
+    if (!dataScript) return false;
+    const scriptId = dataScript.getAttribute('id');
+    if (!scriptId || !/^data-[\w-]+$/.test(scriptId)) return false;
+
+    // ④ 必须包含 iframe 图谱渲染区域
+    if (!root.querySelector('iframe')) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const RawHtmlBlockComponent = React.memo<{ block: RawHtmlBlock }>(({ block }) => {
+  // 系统自生成的 HTML（知识图谱等）跳过净化，否则 iframe/script 会被剥离
+  const sanitized = isSelfGeneratedHtml(block.html)
+    ? block.html
+    : DOMPurify.sanitize(block.html);
+  return <div dangerouslySetInnerHTML={{ __html: sanitized }} />;
+});
 
 export const BlockRenderer = React.memo<BlockRendererProps>(({ block, mode }) => {
   switch (block.type) {

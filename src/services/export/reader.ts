@@ -1,7 +1,9 @@
-import { Article } from '../../types/models';
+import type { Article } from '../../types';
 import { CONSTANTS } from '../../constants';
-import { getReaderSkeleton } from './templates';
+import { getReaderSkeleton } from './reader/readerSkeleton';
 import { saveAs } from 'file-saver';
+import { sortArticlesByPriority } from '../../utils/articleSort';
+import { escapeHtml } from '../../utils/stringUtils';
 
 export interface ExportOptions {
     useAlternateDesign?: boolean;
@@ -75,24 +77,16 @@ function optimizeStructuredClone(article: Article): Article {
         posY: article.posY,
         abstract: article.abstract,
         tags: article.tags,
-        isPublished: article.isPublished,
-        order: article.order,
-        fontSize: article.fontSize,
-        lineHeight: article.lineHeight,
-        blocks: article.blocks
+        order: article.order
     };
 
-    const cloned = structuredClone(articleForClone);
+    const cloned = structuredClone(articleForClone) as Article;
 
     cloned.pdfData = pdfDataRef;
     cloned.coverImage = coverImageRef;
     cloned.backImage = backImageRef;
 
     return cloned;
-}
-
-function escapeHtml(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 const READER_TEMPLATE = "SWS_READER_TEMPLATE_PLACEHOLDER" as string;
@@ -107,14 +101,7 @@ export async function generateReaderHTML(
     metadata: ExportMetadata = {},
     onProgress?: (percent: number, message?: string) => void
 ): Promise<string> {
-    const sortedArticles = [...articles].sort((a, b) => {
-        if (a.category === b.category) return 0;
-        if (a.category === '封面') return -1;
-        if (b.category === '封面') return 1;
-        if (a.category === '封底') return 1;
-        if (b.category === '封底') return -1;
-        return 0;
-    });
+    const sortedArticles = sortArticlesByPriority(articles);
 
     console.log('[Export] 开始处理文章数据，保留PDF数据以支持离线阅读器...');
     const processedArticles = sortedArticles.map((article, idx) => {
@@ -150,6 +137,13 @@ export async function generateReaderHTML(
     console.log('[Export] 开始 Web Worker 导出流程...');
 
     return new Promise((resolve, reject) => {
+        // 安全超时：5 分钟后自动拒绝，防止 Promise 挂死
+        const timeoutMs = 5 * 60 * 1000;
+        const timeoutId = setTimeout(() => {
+            worker.terminate();
+            reject(new Error('导出超时：Worker 在 5 分钟内未完成'));
+        }, timeoutMs);
+
         const worker = new Worker(
             new URL('./reader.worker.ts', import.meta.url),
             { type: 'module' }
@@ -163,7 +157,17 @@ export async function generateReaderHTML(
                 return;
             }
 
+            if (data.type === 'EXPORT_ERROR') {
+                clearTimeout(timeoutId);
+                worker.terminate();
+                const errMsg = data.error || 'Worker 内部错误';
+                console.error('[Export] Worker 报告错误:', errMsg);
+                reject(new Error(errMsg));
+                return;
+            }
+
             if (data.type === 'EXPORT_COMPLETE') {
+                clearTimeout(timeoutId);
                 const { articlesB64, configB64, compressionMethod } = data;
 
                 console.log('[Export] Worker 返回数据，准备生成 HTML...');
@@ -182,10 +186,15 @@ export async function generateReaderHTML(
             }
         };
 
-        worker.onerror = (error) => {
+        worker.onerror = (error: Event | ErrorEvent) => {
+            clearTimeout(timeoutId);
             worker.terminate();
-            console.error('[Export] Worker 错误:', error);
-            reject(error);
+            // ErrorEvent 有 message 属性，普通 Event 没有
+            const errMsg = 'message' in error
+                ? (error as ErrorEvent).message
+                : `Worker 加载或执行失败 (${error.type})`;
+            console.error('[Export] Worker 错误:', errMsg);
+            reject(new Error(errMsg));
         };
 
         const request: WorkerRequest = {

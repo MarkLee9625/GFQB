@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { base64ToBlob } from '../src/utils/fileHelpers';
 
 /**
@@ -29,20 +29,41 @@ const cleanupExpiredUrls = (): void => {
   }
 };
 
-let cleanupTimerStarted = false;
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
+let activeUserCount = 0;
+
 function startCleanupTimer() {
-  if (cleanupTimerStarted) return;
-  cleanupTimerStarted = true;
-  setInterval(cleanupExpiredUrls, 60 * 1000);
+  if (cleanupIntervalId !== null) return;
+  cleanupIntervalId = setInterval(cleanupExpiredUrls, 60 * 1000);
 }
 
-startCleanupTimer();
+function stopCleanupTimer() {
+  if (cleanupIntervalId !== null) {
+    clearInterval(cleanupIntervalId);
+    cleanupIntervalId = null;
+  }
+}
 
 /**
  * 优化Blob URL管理的自定义Hook
  * 避免重复创建Blob URL，防止内存泄漏
  */
 export function useBlobManager() {
+  const unsubRef = useRef(false);
+
+  useEffect(() => {
+    activeUserCount++;
+    startCleanupTimer();
+    return () => {
+      activeUserCount--;
+      if (activeUserCount <= 0) {
+        activeUserCount = 0;
+        if (!unsubRef.current) {
+          stopCleanupTimer();
+        }
+      }
+    };
+  }, []);
 
   // 创建或获取缓存的Blob URL
   const getBlobUrl = useCallback((dataUrl: string | null | undefined): string | null => {

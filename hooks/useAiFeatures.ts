@@ -1,10 +1,9 @@
 import { useCallback } from 'react';
-import { Article } from '../src/types/models';
+import type { Article, UniversalArticleMeta } from '../src/types';
 import { generateForeword, extractGlobalKnowledgeGraph, buildSuperContextForGraph, validateGraphQuality, KnowledgeGraphData } from '../services/aiService';
 import { generateGraphHtml } from '../src/utils/graphRenderer';
 import { parseMarkdownToHtml } from '../src/utils/fileHelpers';
-import { UniversalArticleMeta } from '../src/types/intelligence';
-import { getGraphCache, saveGraphCache, removeGraphCache, contentHash } from '../services/graphCache';
+import { getGraphCache, saveGraphCache, contentHash } from '../services/graphCache';
 
 interface UseAiFeaturesOptions {
   articles: Article[];
@@ -59,7 +58,7 @@ export function useAiFeatures({
     }
   }, [articles, createArticle, setCurrentId, setImportProgress, importProgress]);
 
-  const handleGenerateGraph = useCallback(async (forceRefresh?: boolean) => {
+  const handleGenerateGraph = useCallback(async () => {
     if (importProgress) return;
     const validArticles = articles.filter(a =>
       a.category !== '封面' &&
@@ -75,17 +74,11 @@ export function useAiFeatures({
 
     try {
       const allText = await buildSuperContextForGraph(validArticles);
-      const finalContext = allText.slice(0, 150000);
+      const finalContext = allText.slice(0, 120000);
 
       // 计算内容 hash，用于缓存键
       const articleIds = validArticles.map(a => a.id).join(',');
       const contentHashValue = await contentHash(articleIds + ':' + finalContext);
-
-      // 【强制刷新】如果 forceRefresh 为 true，先删除已有缓存
-      if (forceRefresh) {
-        await removeGraphCache(contentHashValue);
-        console.log('[App] 强制刷新模式，已清除缓存，将重新调用 AI');
-      }
 
       // 【缓存检查】按内容 hash 查找，避免重复调用 AI
       const cached = await getGraphCache(contentHashValue);
@@ -146,8 +139,27 @@ export function useAiFeatures({
   }, [articles, createArticle, setCurrentId, setImportProgress, importProgress]);
 
   const handleForceGenerateGraph = useCallback(async () => {
-    await handleGenerateGraph(true);
-  }, [handleGenerateGraph]);
+    if (importProgress) return;
+
+    const confirmed = window.confirm(
+      '⚠️ 重新生成将调用 AI 重新提取知识图谱（约消耗 2-3 次 API 调用，可能需要 3-5 分钟）。\n\n' +
+      '如果文章内容未变化，建议使用"提取全局知识图谱"直接加载缓存。\n\n确定继续？'
+    );
+    if (!confirmed) return;
+
+    const validArticles = articles.filter(a =>
+      a.category !== '封面' &&
+      a.category !== '封底' &&
+      (a.content || a.pdfData)
+    );
+
+    if (validArticles.length === 0) {
+      return alert("当前无有效内容或 PDF 附件，无法提取图谱！");
+    }
+
+    // 重新生成成功后由 handleGenerateGraph 自动更新缓存，无需提前删除
+    await handleGenerateGraph();
+  }, [articles, handleGenerateGraph, importProgress]);
 
   const handleAdoptArticle = useCallback(async (article: UniversalArticleMeta) => {
     try {

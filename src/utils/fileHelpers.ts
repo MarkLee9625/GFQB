@@ -80,13 +80,20 @@ export const compressImage = async (
             return reject(new Error('图片数据为空或格式错误'));
         }
 
+        // 检测 GIF：跳过压缩，保持动画
+        const isGif = /^data:image\/gif/.test(base64OrUrl);
+        if (isGif) {
+            resolve(base64OrUrl);
+            return;
+        }
+
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        
+
         img.onload = () => {
             let width = img.width;
             let height = img.height;
-            
+
             if (width > maxWidth) {
                 const ratio = maxWidth / width;
                 width = maxWidth;
@@ -131,26 +138,22 @@ export const compressImage = async (
                 if (compressedDataUrl.length < 100 || (format === 'webp' && compressedDataUrl.startsWith('data:image/png'))) {
                     const fallbackMime = 'image/jpeg';
                     const fallbackDataUrl = canvas.toDataURL(fallbackMime, 0.8);
-                    if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
                     resolve(fallbackDataUrl);
                     return;
                 }
-                
+
                 const originalSize = base64OrUrl.length;
                 const compressedSize = compressedDataUrl.length;
                 const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
                 console.log(`📊 图片压缩完成: ${originalSize} → ${compressedSize} bytes (压缩率: ${compressionRatio}%)，格式: ${mimeType}`);
-                
-                if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+
                 resolve(compressedDataUrl);
             } catch (error) {
                 console.error('图片压缩失败，降级到JPEG:', error);
                 try {
                     const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                    if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
                     resolve(jpegDataUrl);
                 } catch (jpegError) {
-                    if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
                     resolve(base64OrUrl);
                 }
             }
@@ -242,6 +245,29 @@ export const base64ToBlob = (dataURI: string): Blob => {
         return new Blob([]);
     }
 };
+
+/**
+ * Base64 字符串转换为 Uint8Array
+ */
+export function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Uint8Array 转换为 Base64 字符串
+ */
+export function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binaryString = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binaryString += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binaryString);
+}
 
 /**
  * 极简 Markdown 转 HTML 转换器（轻量级）

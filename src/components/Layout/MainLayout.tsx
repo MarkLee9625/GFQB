@@ -8,7 +8,7 @@ interface MainLayoutProps {
     isSidebarHidden: boolean;
     isImmersive: boolean;
     onFloatMenuClick: () => void;
-    contentScrollRef?: React.RefObject<HTMLDivElement>;
+    contentScrollRef?: React.RefObject<HTMLDivElement | null>;
     sidebar: React.ReactNode;
     toolbar: React.ReactNode;
     content: React.ReactNode;

@@ -1,4 +1,4 @@
-﻿﻿import { SHARED_STYLES, MAGAZINE_STYLES, PRINT_STYLES, MISC_STYLES, SEASONAL_STYLES, SVG_ICONS } from '../assets';
+﻿import { SHARED_STYLES, MAGAZINE_STYLES, PRINT_STYLES, MISC_STYLES, SEASONAL_STYLES, SVG_ICONS } from '../assets';
 
 export function getReaderTemplates() {
     return `
@@ -115,7 +115,7 @@ export function getReaderTemplates() {
     <template id="tpl-article">
         <div class="normal-container">
             <div class="article-header"><h1 data-field="title"></h1><div class="article-meta"><div class="tag-cloud" data-field="tags"></div><span data-field="category-label">分类: <span data-field="category"></span></span></div></div>
-            <div class="summary-card"><div class="summary-label">摘要</div><p data-field="abstract"></p></div>
+            <div class="summary-card"><div class="summary-label">摘要</div><p data-field="abstract"></p></div>
             <div class="sws-prose article-body" data-field="content"></div>
         <div data-field="pdf-viewer" style="display: none;">
                 <div class="pdf-viewer-container" data-id="pdf-container">

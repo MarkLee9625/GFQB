@@ -1,6 +1,6 @@
 import React from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
-import { Article } from '../../../types/models';
+import type { Article } from '../../../types';
 import { CONSTANTS } from '../../../constants';
 import styles from './pdfStyles';
 

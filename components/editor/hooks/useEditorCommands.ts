@@ -1,10 +1,12 @@
 import { useCallback } from 'react';
+import type { Article } from '../../../src/types';
 import { generateArticleMeta, generateTitleOnly, scaleText } from '../../../services/aiService';
 
 interface UseEditorCommandsOptions {
   contentRef: React.RefObject<HTMLDivElement | null>;
   formData: { title?: string | null; abstract?: string | null; tags?: string[] };
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
+  setFormData: React.Dispatch<React.SetStateAction<Partial<Article>>>;
+  setTitle: React.Dispatch<React.SetStateAction<string>>;
   setIsGeneratingAi: (v: boolean) => void;
   setIsGeneratingTitle: (v: boolean) => void;
   setShowAiLoading: (v: boolean) => void;
@@ -18,6 +20,7 @@ export function useEditorCommands({
   contentRef,
   formData,
   setFormData,
+  setTitle,
   setIsGeneratingAi,
   setIsGeneratingTitle,
   setShowAiLoading,
@@ -166,14 +169,14 @@ export function useEditorCommands({
     setIsGeneratingTitle(true);
     try {
       const title = await generateTitleOnly(text);
-      setFormData(prev => ({ ...prev, title }));
+      setTitle(title);
     } catch (err) {
       alert("AI 标题生成失败: " + (err instanceof Error ? err.message : "未知错误"));
     } finally {
       setShowTitleLoading(false);
       setIsGeneratingTitle(false);
     }
-  }, [contentRef, setFormData, setShowTitleLoading, setIsGeneratingTitle]);
+  }, [contentRef, setTitle, setFormData, setShowTitleLoading, setIsGeneratingTitle]);
 
   const insertHtml = useCallback((htmlOrNode: string | Node) => {
     const editorElement = contentRef.current;

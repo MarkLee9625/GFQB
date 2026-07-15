@@ -1,14 +1,11 @@
 import React from 'react';
-import { Article } from '../../src/types/models';
+import type { Article } from '../../src/types';
 import { CoverRenderer } from './CoverRenderer';
 import { BackRenderer } from './BackRenderer';
 import { ContentRenderer } from './ContentRenderer';
+import type { ArticleRendererBaseProps } from './types';
 
-export interface ArticleRendererBaseProps {
-  article: Article;
-  logo?: string;
-  useAlternateDesign?: boolean;
-}
+export type { ArticleRendererBaseProps } from './types';
 
 export interface ArticleRendererEditProps extends ArticleRendererBaseProps {
   mode: 'edit';
@@ -102,7 +99,6 @@ export const ArticleRenderer = React.memo<ArticleRendererProps>((props) => {
         article={article}
         mode={mode}
         logo={logo}
-        isEditable={mode === 'edit'}
       />
     );
   };

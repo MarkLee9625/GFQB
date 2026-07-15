@@ -1,15 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Article } from '../../src/types/models';
+import type { Article, ContentBlock } from '../../src/types';
 import { Icon } from '../Icons';
 import { useBlobManager } from '../../hooks/useBlobManager';
-import { ArticleRendererBaseProps } from './ArticleRenderer';
+import { ArticleRendererBaseProps } from './types';
 import { htmlToBlocks } from '../../src/utils/blockParser';
 import { BlockRenderer } from '../../src/components/renderers/blocks/BlockRenderer';
-import { ContentBlock } from '../../src/types/blocks';
-
 interface ContentRendererProps extends ArticleRendererBaseProps {
   mode: 'edit' | 'read' | 'print';
-  isEditable?: boolean;
   logo?: string;
 }
 
@@ -51,7 +48,6 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
   article,
   mode,
   logo,
-  isEditable = false
 }) => {
   const blobManager = useBlobManager();
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -155,25 +151,52 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
                   PDF PREVIEW
                 </div>
                 {mode !== 'print' && (
-                  <button
-                    className="pdf-expand-btn bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue border border-brand-blue/20 rounded-md px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-2 transition-all"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const container = e.currentTarget.closest('.pdf-viewer-container');
-                      if (container) {
-                        if (container.classList.contains('expanded')) {
-                          container.classList.remove('expanded');
-                          document.exitFullscreen?.();
-                        } else {
-                          container.classList.add('expanded');
-                          container.requestFullscreen?.();
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!pdfUrl) {
+                          alert('PDF 正在处理中，请稍后再试...');
+                          return;
                         }
-                      }
-                    }}
-                  >
-                    <Icon name="maximize" className="w-3.5 h-3.5" />
-                    <span>全屏阅读</span>
-                  </button>
+                        try {
+                          const link = document.createElement('a');
+                          link.href = pdfUrl || '';
+                          link.download = article.title ? `${article.title}.pdf` : 'document.pdf';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        } catch (err) {
+                          console.error('下载 PDF 失败', err);
+                          alert('下载失败，请重试');
+                        }
+                      }}
+                      className="bg-white hover:bg-gray-50 text-brand-blue border border-gray-300 rounded-md px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-2 transition-all"
+                    >
+                      <Icon name="download" className="w-3.5 h-3.5" />
+                      <span>下载完整 PDF</span>
+                    </button>
+                    <button
+                      className="pdf-expand-btn bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue border border-brand-blue/20 rounded-md px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-2 transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const container = e.currentTarget.closest('.pdf-viewer-container');
+                        if (container) {
+                          if (container.classList.contains('expanded')) {
+                            container.classList.remove('expanded');
+                            document.exitFullscreen?.();
+                          } else {
+                            container.classList.add('expanded');
+                            container.requestFullscreen?.();
+                          }
+                        }
+                      }}
+                    >
+                      <Icon name="maximize" className="w-3.5 h-3.5" />
+                      <span>全屏阅读</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -194,34 +217,7 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
                     <div className="text-gray-400 text-sm">正在加载 PDF...</div>
                   </div>
                 )}
-                {mode !== 'print' && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (!pdfUrl) {
-                        alert('PDF 正在处理中，请稍后再试...');
-                        return;
-                      }
-                      try {
-                        // 纯粹的安全下载机制
-                        const link = document.createElement('a');
-                        link.href = pdfUrl || '';
-                        link.download = article.title ? `${article.title}.pdf` : 'document.pdf';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      } catch (err) {
-                        console.error('下载 PDF 失败', err);
-                        alert('下载失败，请重试');
-                      }
-                    }}
-                    className="absolute bottom-4 right-4 z-[20] bg-white px-3 py-2 text-xs border border-gray-300 rounded text-brand-blue cursor-pointer flex items-center gap-1 hover:bg-gray-50 shadow-md transition-colors"
-                  >
-                    <Icon name="download" className="w-3 h-3" />
-                    下载完整 PDF
-                  </button>
-                )}
+
               </div>
             </div>
           </div>

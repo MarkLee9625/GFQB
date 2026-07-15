@@ -1,7 +1,8 @@
 // 核心业务实体定义
 
 export type MediaType = 'image' | 'video' | 'audio' | 'pdf';
-export type ArticleCategory = '封面' | '封底' | string;
+export type SpecialCategory = '封面' | '封底';
+export type ArticleCategory = SpecialCategory | (string & {});
 
 import type { ContentBlock } from './blocks';
 

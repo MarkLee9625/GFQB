@@ -1,11 +1,12 @@
 import React from 'react';
 import { Document } from '@react-pdf/renderer';
-import { Article } from '../../../types/models';
+import type { Article } from '../../../types';
 import Cover from './PdfCover';
 import TOC from './PdfTOC';
 import ArticlePage from './PdfArticlePage';
 import BackCover from './PdfBackCover';
 import './pdfStyles';
+import { sortArticlesByPriority } from '../../../utils/articleSort';
 
 interface MyDocumentProps {
   articles: Article[];
@@ -18,13 +19,7 @@ interface MyDocumentProps {
 const MyDocument: React.FC<MyDocumentProps> = ({ articles, options }) => {
   const { useAlternateDesign = false, logo = '' } = options || {};
   
-  const sortedArticles = [...articles].sort((a, b) => {
-    if (a.category === '封面') return -1;
-    if (b.category === '封面') return 1;
-    if (a.category === '封底') return 1;
-    if (b.category === '封底') return -1;
-    return (Number(a.order) || 0) - (Number(b.order) || 0);
-  });
+  const sortedArticles = sortArticlesByPriority(articles);
 
   const coverArticle = sortedArticles.find((article) => article.category === '封面');
   const backCoverArticle = sortedArticles.find((article) => article.category === '封底');

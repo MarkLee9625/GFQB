@@ -13,15 +13,11 @@ const API_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 2000;
 const GRAPH_TIMEOUT_MS = 900_000;
-const GRAPH_NODES_TIMEOUT = 600_000;
-const GRAPH_LINKS_TIMEOUT = 600_000;
-const GRAPH_SUPPLEMENT_TIMEOUT = 360_000;
-
-// DeepSeek V4 (deepseek-v4-flash) token 配额，上下文1M/输出最大384K
-// max_tokens 同时控制 thinking + answer，留足推理空间
-const GRAPH_NODES_MAX_TOKENS = 65536;
-const GRAPH_LINKS_MAX_TOKENS = 65536;
-const GRAPH_SUPPLEMENT_MAX_TOKENS = 32768;
+// 单次调用同时生成节点+关系。输出 JSON 约 5K tokens，留足 thinking trace 余量
+const GRAPH_MAX_TOKENS = 32768;
+const GRAPH_TIMEOUT_SINGLE = 600_000;
+const GRAPH_SUPPLEMENT_TIMEOUT = 300_000;
+const GRAPH_SUPPLEMENT_MAX_TOKENS = 16384;
 
 export type ProgressCallback = (stage: string, detail: string) => void;
 
@@ -86,6 +82,7 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'x-sws-proxy-secret': import.meta.env.VITE_PROXY_SECRET || '',
                 },
                 body: JSON.stringify(body),
                 signal: controller.signal,
@@ -148,23 +145,27 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
 }
 
 function extractJsonFromReasoning(text: string): string {
-    text = text.replace(/<think[\s\S]*?<\/think>/g, '');
+    // 先剥离 think 标签和 markdown 代码块标记
+    let cleaned = text.replace(/<think[\s\S]*?<\/think>/g, '')
+                     .replace(/```json\s*/g, '')
+                     .replace(/```\s*/g, '')
+                     .trim();
 
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
 
-    if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
-        const firstBracket = text.indexOf('[');
-        const lastBracket = text.lastIndexOf(']');
-        if (firstBracket !== -1 && lastBracket !== -1 && firstBracket < lastBracket) {
-            const arrStr = text.substring(firstBracket, lastBracket + 1);
-            return arrStr.replace(/```json/g, '').replace(/```/g, '').trim();
-        }
-        throw new Error('无法从 AI 响应中提取有效的 JSON 数据');
+    if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
+        return cleaned.substring(firstBrace, lastBrace + 1);
     }
 
-    const jsonStr = text.substring(firstBrace, lastBrace + 1);
-    return jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+    // 无包裹对象，尝试提取数组
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1 && firstBracket < lastBracket) {
+        return cleaned.substring(firstBracket, lastBracket + 1);
+    }
+
+    throw new Error('无法从 AI 响应中提取有效的 JSON 数据');
 }
 
 function cleanPlainTextResponse(text: string): string {
@@ -398,66 +399,71 @@ export async function extractGlobalKnowledgeGraph(
 ): Promise<KnowledgeGraphData> {
     const progress = onProgress || (() => {});
 
-    progress('节点提取', '正在从全刊内容中提取核心技术节点 (约需 30-90 秒)...');
+    progress('知识图谱生成', '正在从全刊内容中一次性提取节点与关系 (约需 30-90 秒)...');
 
-    const nodeSystemPrompt = `你是一名顶级船舶与海洋工程领域的知识图谱专家。从海工装备技术长文中提取核心节点。
+    const systemPrompt = `你是船舶海洋工程领域的资深技术专家。请一次性完成知识图谱的完整构建（节点 + 关系），不要分步回答。
 
-【任务目标】
-1. 深度覆盖：识别原文中最核心的技术概念、工法、材料与装备。
-2. 节点规模：必须提取 40-70 个高质量节点，覆盖造船全生命周期（设计、加工、组装、舾装、涂装、交付）。
-3. 关系提取：请同时尽可能多地输出节点间的核心逻辑关系，至少输出节点数×1.0 条连线，遵循 concept/material → process → technology/equipment 的工业传递链。
-4. 输出要求：仅输出包含节点和关系的 JSON 结构，不要输出任何其他文字。
+【节点命名规范 ★最重要】
+  name 必须是具体的、独一无二的技术实体名称，长度 2-12 字。
+  ✅ 正确示例：船体焊接、舾装件标准化设计、激光复合焊、涂装防腐、分段吊装、压载水处理、LNG动力系统、爬壁机器人、数字孪生、总装精度控制
+  ❌ 绝对禁止：技术、工艺、材料、设备、理念、概念、方法、系统 等万能通用词
+  ❌ 同样禁止：焊接技术、涂装工艺、材料特性 等"X+类型名"的偷懒命名
+  规则：name 中不得包含 type 字段的值
 
-【ID 命名规则 - 极其重要】
-- ID 必须是纯英文小写 + 下划线，如：hull_assembly, subsea_pipeline, fpso_mooring
-- 禁止使用中文、空格、连字符、特殊字符
-- ID 应简短但有意义，不超过 30 个字符
+【节点数量与类型】
+  提取 35-50 个节点。type 字段独立于 name：
+  - technology(技术): 如"激光复合焊"
+  - process(工艺): 如"分段涂装"
+  - material(材料): 如"高强钢"
+  - equipment(设备): 如"爬壁机器人"
+  - concept(概念): 如"模块化设计"
+  weight: 1-10 (9-10=核心主题, 7-8=关键支撑, 5-6=常规, 3-4=辅助, 1-2=边缘)
+  ID: 纯英文小写+下划线，≤30字符
 
-【反面示例 - 禁止提取】
-- 禁止提取泛泛概念：如"技术创新"、"行业趋势"、"高质量发展"、"智能化转型"
-- 禁止提取管理术语：如"精益管理"、"战略规划"、"组织架构"、"人才培养"
-- 禁止提取市场宣传：如"品牌优势"、"市场份额"、"客户满意度"、"战略合作"
-- 仅提取有实质技术内涵的节点（具体工艺、材料牌号、设备型号、技术原理）
+【关系 ★必须包含，且数量不少于节点数×2.5】
+  遵循 concept/material→process→technology/equipment 传递链。
+  每个节点至少 2 条连线，孤立节点不可接受。
+  动词: 驱动/决定/影响/制约/应用于/服务于/实现/配套于/包含/属于/组成/依赖/基于/协同
+  strength: 1-5 (5=强因果/直接依赖, 1=弱关联)
 
-【输出格式】严格输出以下 JSON（不要包裹在 markdown 代码块中）：
-{"nodes": [{"id": "hull_welding", "name": "船体焊接", "type": "process", "weight": 8, "description": "船体结构焊接工艺，含对接焊与角焊"}], "links": [{"source": "hull_welding", "target": "high_strength_steel", "relationship": "依赖", "strength": 4}]}
+【输出格式】严格 JSON，无 markdown 包裹，一次性输出 nodes 和 links：
+{"nodes":[{"id":"hull_welding","name":"船体焊接","type":"process","weight":8,"description":"船体结构焊接工艺"}],"links":[{"source":"hull_welding","target":"high_strength_steel","relationship":"依赖","strength":4}]}`;
 
-请同时输出节点间最核心的逻辑关系，至少输出节点数×1.0 条连线。关系必须遵循 concept/material → process → technology/equipment 的工业传递链。
-
-【type 枚举值说明】
-- technology: 核心技术/工艺技术（如：模块化建造技术、数字孪生技术）
-- process: 工序/流程（如：分段装焊、涂装施工、管系安装）
-- material: 材料物质（如：高强钢、环氧涂料、牺牲阳极）
-- equipment: 装备设备（如：龙门吊、焊接机器人、FPSO）
-- concept: 概念原理（如：疲劳分析、腐蚀防护、稳性校核）
-
-【weight 权重规则】
-- 9-10: 全文核心主题，反复出现
-- 7-8: 重要支撑技术/关键工序
-- 5-6: 常规技术/标准工序
-- 3-4: 辅助技术/次要概念
-- 1-2: 仅提及的边缘概念`;
-
-    const nodeUserPrompt = `请从以下文章内容中提取 45-65 个核心节点，并同时输出节点间的核心关系(links)：\n\n${articlesText}`;
+    const userPrompt = `从以下内容一次性提取 35-50 个核心节点及关系（links 必须 ≥ 节点数×2.5）：\n\n${articlesText}`;
 
     try {
-        const nodeRawText = await callDeepSeekAPI({
-            model: REASONER_MODEL,
-            messages: [
-                { role: 'system', content: nodeSystemPrompt },
-                { role: 'user', content: nodeUserPrompt },
-            ],
-            max_tokens: GRAPH_NODES_MAX_TOKENS,
-            timeoutMs: GRAPH_NODES_TIMEOUT,
-        });
+    let nodesResult: { nodes: KnowledgeNode[]; links?: KnowledgeLink[] } | null = null;
+    let nodeRawText = '';
+    const NODE_MAX_RETRIES = 2;
+    for (let attempt = 1; attempt <= NODE_MAX_RETRIES; attempt++) {
+        try {
+            nodeRawText = await callDeepSeekAPI({
+                model: REASONER_MODEL,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt },
+                ],
+                max_tokens: GRAPH_MAX_TOKENS,
+                timeoutMs: GRAPH_TIMEOUT_SINGLE,
+            });
 
-        const nodesResult = robustJsonParse<{ nodes: KnowledgeNode[]; links?: KnowledgeLink[] }>(nodeRawText);
+            nodesResult = robustJsonParse<{ nodes: KnowledgeNode[]; links?: KnowledgeLink[] }>(nodeRawText);
 
-        if (!nodesResult.nodes || !Array.isArray(nodesResult.nodes) || nodesResult.nodes.length === 0) {
-            throw new Error('未能识别到有效的 nodes 结构');
+            if (!nodesResult.nodes || !Array.isArray(nodesResult.nodes) || nodesResult.nodes.length === 0) {
+                throw new Error('未能识别到有效的 nodes 结构');
+            }
+            break; // 成功则跳出重试循环
+        } catch (err: any) {
+            if (attempt < NODE_MAX_RETRIES) {
+                console.warn(`[aiService] Phase 1 解析失败 (尝试 ${attempt}/${NODE_MAX_RETRIES})，max_tokens 提升至 ${GRAPH_MAX_TOKENS} 后重试:`, err.message);
+                continue;
+            }
+            throw err; // 最后一次失败则向外抛出
         }
+    }
 
-        const initialLinks: KnowledgeLink[] = Array.isArray(nodesResult.links) ? nodesResult.links : [];
+    if (!nodesResult) throw new Error('Phase 1: 所有重试均未能获取有效节点');
+    const initialLinks: KnowledgeLink[] = Array.isArray(nodesResult.links) ? nodesResult.links : [];
 
         const VALID_TYPES = new Set(['technology', 'process', 'material', 'equipment', 'concept']);
         const TYPE_ALIASES: Record<string, string> = {
@@ -471,6 +477,17 @@ export async function extractGlobalKnowledgeGraph(
 
         const seenIds = new Set<string>();
         const seenNames = new Set<string>();
+        // 通用词黑名单：禁止 AI 将类型标签偷懒用作节点名
+        const GENERIC_NAME_PATTERNS = [
+          /^技术$/, /^工艺$/, /^材料$/, /^设备$/, /^理念$/, /^概念$/, /^方法$/, /^系统$/,
+          /^technology$/i, /^process$/i, /^material$/i, /^equipment$/i, /^concept$/i,
+          /^.{0,2}(技术|工艺|材料|设备|理念|概念|方法|系统)$/, // "X技术""XX工艺"等偷懒命名
+        ];
+        function isGenericName(name: string): boolean {
+          if (!name || name.length <= 1) return true;
+          return GENERIC_NAME_PATTERNS.some(p => p.test(name));
+        }
+        let genericFilteredCount = 0;
         nodesResult.nodes = nodesResult.nodes.filter(node => {
             if (!node.id || !node.name) return false;
             node.id = String(node.id).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
@@ -478,6 +495,7 @@ export async function extractGlobalKnowledgeGraph(
             if (seenIds.has(node.id)) return false;
             seenIds.add(node.id);
             if (seenNames.has(node.name)) return false;
+            if (isGenericName(node.name)) { genericFilteredCount++; return false; }
             seenNames.add(node.name);
             const normalizedType = (node.type || '').toLowerCase().trim();
             node.type = VALID_TYPES.has(normalizedType) ? normalizedType as any : (TYPE_ALIASES[normalizedType] || 'concept') as any;
@@ -486,96 +504,29 @@ export async function extractGlobalKnowledgeGraph(
             return true;
         });
 
-        console.log(`[aiService] [阶段 1/3] 节点提取完成，获得 ${nodesResult.nodes.length} 个节点，${initialLinks.length} 条初步关系（清洗后）。`);
+        if (genericFilteredCount > 0) {
+          console.log(`[aiService] [安检] 过滤了 ${genericFilteredCount} 个通用词节点（如"技术""工艺"等偷懒命名）`);
+        }
+        console.log(`[aiService] 图谱生成完成，获得 ${nodesResult.nodes.length} 个节点，${initialLinks.length} 条关系（清洗后）。`);
+        progress('处理中', `已提取 ${nodesResult.nodes.length} 个节点和 ${initialLinks.length} 条关系...`);
 
-        let allLinks: KnowledgeLink[] = [];
-
-        if (initialLinks.length >= nodesResult.nodes.length * 1.0) {
-            console.log(`[aiService] 初步关系已足够 (${initialLinks.length} 条)，跳过关系挖掘阶段`);
-            progress('关系挖掘', `初步关系已足够 (${initialLinks.length} 条)，跳过独立关系挖掘...`);
-            allLinks = initialLinks.filter(l => {
-                if (!l.source || !l.target || l.source === l.target) return false;
-                l.source = String(l.source).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-                l.target = String(l.target).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-                l.strength = Math.max(1, Math.min(5, Math.round(Number(l.strength) || 3)));
-                l.relationship = (l.relationship || '关联').substring(0, 20);
-                return l.source !== l.target;
-            });
-        } else {
-            progress('关系挖掘', `已提取 ${nodesResult.nodes.length} 个节点和 ${initialLinks.length} 条初步关系，正在补充更多关系 (约需 30-90 秒)...`);
-
-        const linkSystemPrompt = `你是一名顶级船舶与海洋工程领域的知识图谱专家。根据原文，构建已有节点之间的逻辑连线。
-
-【挖掘准则】
-1. 关系强度：深挖节点间的因果、依赖、优化、应用关系，避免泛泛的"相关"或"涉及"。
-2. 关系规模：连线总数必须在节点数的 2.0 倍到 3.0 倍之间。
-3. 流向控制：遵循工业传递链。concept/material -> process -> technology/equipment。
-4. 关系动词：使用精确的技术动词，如"驱动"、"支撑"、"优化"、"应用于"、"转化为"、"依赖于"、"配套于"。
-5. 输出要求：仅输出连线列表的 JSON 结构，不要输出任何其他文字。
-
-【输出格式】严格输出以下 JSON（不要包裹在 markdown 代码块中）：
-{"links": [{"source": "hull_welding", "target": "high_strength_steel", "relationship": "依赖", "strength": 4}]}
-source 和 target 必须仅使用我提供给你的节点 ID 列表，不要编造新 ID。
-relationship 必须是 2-6 个字的中文动词短语。
-strength 范围 1-5，5 表示强因果/直接依赖，1 表示弱关联。`;
-
-        const groupedNodes = nodesResult.nodes.reduce((acc: Record<string, string[]>, n) => {
-          (acc[n.type] = acc[n.type] || []).push(`${n.id}(${n.name})`);
-          return acc;
-        }, {});
-        const nodeContext = Object.entries(groupedNodes)
-          .map(([type, ids]) => `【${type}】${ids.join(', ')}`)
-          .join('\n');
-
-        const nodeNames = nodesResult.nodes.map(n => n.name);
-        const relevantParagraphs = articlesText.split('\n').filter(para =>
-          nodeNames.some(name => para.includes(name))
-        ).join('\n');
-        const linkContext = relevantParagraphs.substring(0, 120000) || articlesText.substring(0, 120000);
-
-        const linkUserPrompt = `
-【原文相关段落】
-${linkContext}
-
-【已确定的节点列表 (按类型分组)】
-${nodeContext}
-
-请为以上节点构建 ${Math.round(nodesResult.nodes.length * 2.0)}-${Math.round(nodesResult.nodes.length * 3.0)} 条逻辑连线，仅输出 links JSON 结构：`;
-
-        const linkRawText = await callDeepSeekAPI({
-            model: REASONER_MODEL,
-            messages: [
-                { role: 'system', content: linkSystemPrompt },
-                { role: 'user', content: linkUserPrompt },
-            ],
-            max_tokens: GRAPH_LINKS_MAX_TOKENS,
-            timeoutMs: GRAPH_LINKS_TIMEOUT,
-        });
-
-        const linksResult = robustJsonParse<{ links: KnowledgeLink[] }>(linkRawText);
-        if (!linksResult.links) linksResult.links = [];
-
-        linksResult.links = linksResult.links.filter(l => {
+        const allLinks: KnowledgeLink[] = initialLinks.filter(l => {
             if (!l.source || !l.target || l.source === l.target) return false;
             l.source = String(l.source).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
             l.target = String(l.target).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-            l.strength = Math.max(1, Math.min(5, Math.round(Number(l.strength) || 3)));
-            l.relationship = (l.relationship || '关联').substring(0, 20);
+            const strongRels = ['驱动', '支撑', '决定', '转化', '依赖', '控制', '主导'];
+            const weakRels = ['关联', '涉及', '相关', '包含', '具有'];
+            const rel = l.relationship || '关联';
+            if (strongRels.some(r => rel.includes(r))) {
+                l.strength = Math.max(1, Math.min(5, Math.round(Number(l.strength) || 4)));
+            } else if (weakRels.some(r => rel.includes(r))) {
+                l.strength = Math.max(1, Math.min(5, Math.round(Number(l.strength) || 2)));
+            } else {
+                l.strength = Math.max(1, Math.min(5, Math.round(Number(l.strength) || 3)));
+            }
+            l.relationship = rel.substring(0, 20);
             return l.source !== l.target;
         });
-
-        console.log(`[aiService] [阶段 2/3] 关系挖掘完成，获得 ${linksResult.links.length} 条关系（清洗后）。`);
-
-        const mergedLinks = [...initialLinks, ...linksResult.links];
-        const seenLinkKeys = new Set<string>();
-        allLinks = mergedLinks.filter(l => {
-            const key = l.source + '->' + l.target;
-            if (seenLinkKeys.has(key)) return false;
-            seenLinkKeys.add(key);
-            return true;
-        });
-
-        } // end of else (关系挖掘阶段)
 
         const nodeIds = new Set(nodesResult.nodes.map(n => n.id));
         const finalData: KnowledgeGraphData = {
@@ -590,32 +541,16 @@ ${nodeContext}
         const qualityReport = validateGraphQuality(finalData);
         console.log('[aiService] 质量校验报告:', qualityReport);
 
-        if (qualityReport.orphanNodeCount > 0 && qualityReport.connectivityRatio < 0.7) {
-            console.log('[aiService] [阶段 3/3] 检测到较多孤立节点，启动补充关系挖掘...');
-            progress('补充连线', `检测到 ${qualityReport.orphanNodeCount} 个孤立节点，正在补充连线...`);
-
-            if (qualityReport.orphanNodeCount <= 5) {
-                console.log('[aiService] 孤立节点 ≤ 5，直接使用规则 fallback');
-                const fallbackLinks = generateFallbackLinks(finalData);
-                finalData.links = [...finalData.links, ...fallbackLinks];
-            } else {
-                const supplementData = await supplementOrphanLinks(finalData, articlesText);
-                finalData.links = [
-                    ...finalData.links,
-                    ...supplementData.links.filter(l =>
-                        nodeIds.has(l.source) && nodeIds.has(l.target) &&
-                        !finalData.links.some(existing =>
-                            existing.source === l.source && existing.target === l.target
-                        )
-                    ),
-                ];
-            }
-
+        // 规则兜底：孤立节点用同类型最近节点连接
+        if (qualityReport.orphanNodeCount > 0) {
+            console.log(`[aiService] 检测到 ${qualityReport.orphanNodeCount} 个孤立节点，规则兜底...`);
+            const fallbackLinks = generateFallbackLinks(finalData);
+            finalData.links = [...finalData.links, ...fallbackLinks];
             const updatedReport = validateGraphQuality(finalData);
-            console.log('[aiService] 补充后质量:', updatedReport);
+            console.log('[aiService] 兜底后质量:', updatedReport);
         }
 
-        console.log('[aiService] 知识图谱提取完成，最终节点:', finalData.nodes.length, '关系:', finalData.links.length);
+        console.log('[aiService] 知识图谱提取完成（单次调用），最终节点:', finalData.nodes.length, '关系:', finalData.links.length);
         return finalData;
 
     } catch (error) {
@@ -623,6 +558,8 @@ ${nodeContext}
         throw error;
     }
 }
+
+/* ========== 辅助函数 ========== */
 
 function generateFallbackLinks(currentData: KnowledgeGraphData): KnowledgeLink[] {
     const linkedNodeIds = new Set<string>();
@@ -640,26 +577,40 @@ function generateFallbackLinks(currentData: KnowledgeGraphData): KnowledgeLink[]
     const conceptNodes = currentData.nodes.filter(n => n.type === 'concept');
 
     for (const orphan of orphanNodes) {
-        let target: typeof orphan | undefined;
-        let relationship = '应用于';
+        const usedTargetIds = new Set<string>();
 
         if (orphan.type === 'concept' || orphan.type === 'material') {
-            target = processNodes.find(p => !fallbackLinks.some(l => l.source === orphan.id && l.target === p.id));
-            relationship = orphan.type === 'material' ? '用于' : '指导';
+            const relationship = orphan.type === 'material' ? '用于' : '指导';
+            const candidates = processNodes.filter(p => p.id !== orphan.id && !fallbackLinks.some(l => l.source === orphan.id && l.target === p.id));
+            candidates.slice(0, 2).forEach((target, idx) => {
+                fallbackLinks.push({ source: orphan.id, target: target.id, relationship: idx === 0 ? relationship : '配合', strength: 3 - idx });
+                usedTargetIds.add(target.id);
+            });
         } else if (orphan.type === 'process') {
-            target = techNodes.find(t => !fallbackLinks.some(l => l.source === t.id && l.target === orphan.id));
-            relationship = '实现';
-            if (target) {
-                fallbackLinks.push({ source: target.id, target: orphan.id, relationship, strength: 3 });
-                continue;
+            const candidates = techNodes.filter(t => t.id !== orphan.id && !fallbackLinks.some(l => l.source === t.id && l.target === orphan.id));
+            candidates.slice(0, 2).forEach((target, idx) => {
+                fallbackLinks.push({ source: target.id, target: orphan.id, relationship: idx === 0 ? '实现' : '支撑', strength: 3 - idx });
+                usedTargetIds.add(target.id);
+            });
+            // 如果还没有连线，再尝试连 material
+            if (usedTargetIds.size === 0) {
+                const mCandidates = materialNodes.filter(m => m.id !== orphan.id && !fallbackLinks.some(l => l.source === m.id && l.target === orphan.id));
+                if (mCandidates.length > 0) {
+                    fallbackLinks.push({ source: mCandidates[0].id, target: orphan.id, relationship: '用于', strength: 2 });
+                }
             }
         } else if (orphan.type === 'equipment') {
-            target = processNodes.find(p => !fallbackLinks.some(l => l.source === orphan.id && l.target === p.id));
-            relationship = '服务于';
-        }
-
-        if (target) {
-            fallbackLinks.push({ source: orphan.id, target: target.id, relationship, strength: 2 });
+            const candidates = processNodes.filter(p => p.id !== orphan.id && !fallbackLinks.some(l => l.source === orphan.id && l.target === p.id));
+            candidates.slice(0, 2).forEach((target, idx) => {
+                fallbackLinks.push({ source: orphan.id, target: target.id, relationship: idx === 0 ? '服务于' : '配套于', strength: 3 - idx });
+                usedTargetIds.add(target.id);
+            });
+        } else {
+            // technology 或其他类型
+            const candidates = processNodes.filter(p => p.id !== orphan.id && !fallbackLinks.some(l => l.source === orphan.id && l.target === p.id));
+            if (candidates.length > 0) {
+                fallbackLinks.push({ source: orphan.id, target: candidates[0].id, relationship: '应用于', strength: 2 });
+            }
         }
     }
     return fallbackLinks;
@@ -688,15 +639,7 @@ async function supplementOrphanLinks(
         return `【${n.name}】...${articlesText.substring(start, end)}...`;
     }).filter(Boolean).join('\n\n');
 
-    const systemPrompt = `你是知识图谱专家。以下是一些孤立节点（没有任何连线），请根据原文背景、上下文片段和造船工程常识，为它们建立与已有节点的逻辑关系。
-
-【关系规则】
-1. concept/material → process → technology/equipment 的工业传递链
-2. 连线数：至少为每个孤立节点建立 1-3 条连线
-3. 关系动词使用精确的技术动词：驱动、支撑、优化、应用于、转化为、依赖于、配套于
-
-【输出格式】严格输出 JSON（不要包裹在 markdown 代码块中）：
-{"links": [{"source": "节点ID", "target": "节点ID", "relationship": "关系动词", "strength": 1-5}]}`;
+    const systemPrompt = `为孤立节点建立与已有节点的逻辑连线。每个孤立节点至少 1 条连线。关系动词: 驱动/支撑/优化/应用于/转化为/依赖于/配套于。格式: {"links":[{"source":"id","target":"id","relationship":"动词","strength":1-5}]}`;
 
     const userPrompt = `
 【原文背景】
@@ -760,14 +703,16 @@ ${currentData.nodes.map(n => n.id).join(', ')}
     }
 }
 
-export async function generateArticleSummary(content: string): Promise<string> {
-    const res = await generateArticleMeta(content);
-    return res.abstract;
-}
 
 export async function generateTitleOnly(content: string): Promise<string> {
     const plainText = content.replace(/<[^>]+>/g, '\n').slice(0, 50000);
-    const systemPrompt = `你是一个专业的船舶工程编辑助手。请为用户提供的文章拟定一个专业的标题。`;
+    const systemPrompt = `你是一个专业的船舶工程编辑助手。请为用户提供的文章拟定一个简短有力的标题。
+要求：
+- 字数：12 - 25 字
+- 风格：干练、专业、有工程实战感
+- 结构：核心技术名词 + 动词/应用场景/成效
+- 禁止直接复制原文标题，必须重新提炼
+- 只输出标题本身，不要加引号或多余文字`;
     const userPrompt = `文章内容如下：\n\n${plainText}`;
 
     const rawText = await callDeepSeekAPI({
@@ -980,6 +925,7 @@ export async function buildSuperContextForGraph(articles: any[]): Promise<string
     console.log(`[aiService] 开始为 ${articles.length} 篇文章组装超级上下文...`);
 
     const allTexts: string[] = [];
+    const pdfTasks: Promise<void>[] = [];
 
     for (let i = 0; i < articles.length; i++) {
         const article = articles[i];
@@ -987,43 +933,37 @@ export async function buildSuperContextForGraph(articles: any[]): Promise<string
 
         if (article.content && article.content.trim().length > 10) {
             const plainText = article.content.replace(/<[^>]+>/g, '\n').replace(/\s+/g, ' ').trim();
-            allTexts.push(`【文章 ${i+1}】标题：${article.title}\n正文：${plainText.substring(0, 30000)}`);
-            console.log(`[aiService]   使用正文内容，长度: ${plainText.length}`);
+            allTexts.push(`【文章 ${i+1}】${article.title}\n${plainText.substring(0, 15000)}`);
+        } else if (article.abstract && article.abstract.trim().length > 10) {
+            allTexts.push(`【文章 ${i+1}】${article.title}\n${article.abstract.substring(0, 5000)}`);
         }
 
+        // 并行化 PDF 提取（分批并发，每批 4 个 PDF，防 OOM）
         if (article.pdfData && article.pdfData.trim().length > 100) {
-            console.log(`[aiService]   检测到 PDF 附件，开始静默抽字...`);
-            try {
-                const timeoutPromise = new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('PDF 提取超时')), 10000)
-                );
-
-                const extractionPromise = extractAbstractFromPdf(article.pdfData, 5, 40000);
-                const result = await Promise.race([extractionPromise, timeoutPromise]);
-
-                if (result.success && result.fullText && result.fullText.trim().length > 50) {
-                    allTexts.push(`【PDF附件 ${i+1}】标题：${article.title}\n原文：${result.fullText.substring(0, 40000)}`);
-                    console.log(`[aiService]   PDF 抽字成功，提取 ${result.fullText.length} 字`);
-                } else if (result.success && result.abstract) {
-                    allTexts.push(`【PDF附件 ${i+1}】标题：${article.title}\n摘要：${result.abstract}`);
-                    console.log(`[aiService]   使用 PDF 摘要`);
-                } else {
-                    console.warn(`[aiService]   PDF 提取失败: ${result.error}`);
+            const pdfTask = (async () => {
+                console.log(`[aiService]   检测到 PDF 附件 #${i+1}，开始静默抽字...`);
+                try {
+                    const result = await extractAbstractFromPdf(article.pdfData, 5, 20000);
+                    if (result.success && result.fullText && result.fullText.trim().length > 50) {
+                        allTexts.push(`【PDF ${i+1}】${article.title}\n${result.fullText.substring(0, 20000)}`);
+                        console.log(`[aiService]   PDF #${i+1} 抽字成功，提取 ${result.fullText.length} 字`);
+                    }
+                } catch (pdfErr) {
+                    console.warn(`[aiService]   PDF #${i+1} 提取异常:`, pdfErr);
                 }
-            } catch (pdfErr) {
-                console.warn(`[aiService]   PDF 提取异常:`, pdfErr);
-            }
+            })();
+            pdfTasks.push(pdfTask);
         }
+    }
 
-        if (article.abstract && article.abstract.trim().length > 10) {
-            allTexts.push(`【摘要 ${i+1}】${article.abstract}`);
+    // 分批等待所有 PDF 提取完成（每批 PDF_PDF_CONCURRENCY 个，防 OOM）
+    if (pdfTasks.length > 0) {
+        const PDF_PDF_CONCURRENCY = 4;
+        console.log(`[aiService] 等待 ${pdfTasks.length} 个 PDF 分批提取（每批 ${PDF_PDF_CONCURRENCY} 个）...`);
+        for (let batchStart = 0; batchStart < pdfTasks.length; batchStart += PDF_PDF_CONCURRENCY) {
+            const batch = pdfTasks.slice(batchStart, batchStart + PDF_PDF_CONCURRENCY);
+            await Promise.allSettled(batch);
         }
-
-        if (article.tags && Array.isArray(article.tags) && article.tags.length > 0) {
-            allTexts.push(`【标签 ${i+1}】${article.tags.join(', ')}`);
-        }
-
-        allTexts.push('');
     }
 
     const combinedText = allTexts.join('\n\n');

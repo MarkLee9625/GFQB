@@ -65,7 +65,6 @@ body,
 
 .editor-area img, .editor-area video {
   max-width: 100% !important;
-  width: 100% !important;
   height: auto !important;
 }
 
@@ -129,11 +128,9 @@ body,
 }
 
 /* 6. 幽灵空行粉碎机：清理富文本导入时产生的不可见空行 (这是导致间距突然变大的元凶) */
-.editor-area p:empty,
-.sws-prose p:empty,
+.sws-prose:not(.editor-area) p:empty,
 .article-body p:empty,
-.editor-area p:has(> br:only-child),
-.sws-prose p:has(> br:only-child),
+.sws-prose:not(.editor-area) p:has(> br:only-child),
 .article-body p:has(> br:only-child) {
   display: none !important;
   margin: 0 !important;

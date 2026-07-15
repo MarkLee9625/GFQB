@@ -16,7 +16,7 @@ import type {
   RawHtmlBlock,
   HeadingLevel,
   ListType,
-} from '../types/blocks';
+} from '../types';
 
 const INLINE_TAGS = new Set([
   'b', 'i', 'a', 'strong', 'em', 'u', 's', 'code', 'br',

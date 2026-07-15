@@ -45,13 +45,19 @@ export function getPrintableSkeleton(options: {
         
 
         @media print {
-            /* 1. Page and margin reset */
+            /* 1. Page and margin reset — 底部留 12mm 用于 @bottom-center 显示实际页码 */
             @page {
                 size: 210mm 297mm !important;
-                margin: 0 !important;
+                margin: 0 0 12mm 0 !important;
+                @bottom-center {
+                    content: counter(page);
+                    font-size: 9pt;
+                    font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+                    color: #999;
+                }
             }
             @page :first {
-                margin: 0 !important;
+                margin: 0 0 12mm 0 !important;
             }
             html, body, .print-all {
                 display: block !important;
@@ -60,7 +66,6 @@ export function getPrintableSkeleton(options: {
                 padding: 0 !important;
                 height: auto !important;
                 overflow: visible !important;
-                counter-reset: toc-page print-page;
             }
 
             /* 2. Page container reset */
@@ -140,8 +145,7 @@ export function getPrintableSkeleton(options: {
                 max-width: none !important;
                 margin-left: 0 !important;
                 margin-right: 0 !important;
-                padding-left: 0 !important;
-                padding-right: 0 !important;
+                padding: 0 !important;
                 box-sizing: border-box !important;
             }
 
@@ -156,12 +160,12 @@ export function getPrintableSkeleton(options: {
             /* 4. Page-specific height and spacing rules */
             .print-page-wrapper.article-wrapper,
             .print-page-wrapper.toc-page {
-                padding: 15mm 20mm !important;
+                padding: 5mm 20mm !important;
                 height: auto !important;
                 min-height: 0 !important;
             }
             .print-page-wrapper:not(.article-wrapper):not(.pdf-full-page) {
-                min-height: 297mm !important;
+                min-height: 285mm !important;
             }
 
             /* 5. TOC page fix */
@@ -191,29 +195,23 @@ export function getPrintableSkeleton(options: {
                 border: none !important;
             }
 
-            /* Page number footer */
-            .print-page-wrapper.article-wrapper::after {
-                content: "— " counter(print-page) " —";
-                display: block;
-                text-align: center;
-                font-size: 9pt;
-                color: #999;
-                margin-top: 20pt;
-                padding-top: 10pt;
-                border-top: 1px solid #e5e7eb;
-            }
-            .article-wrapper {
-                counter-increment: print-page;
-            }
-
             .no-print { display: none !important; }
 
-            /* Page number counter for TOC */
-            .toc-page-number::after {
-                content: counter(toc-page);
+            /* Ghost line killer: hide empty paragraphs in print */
+            .sws-prose p:empty,
+            .sws-prose p:has(> br:only-child) {
+                display: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }
-            .article-wrapper {
-                counter-increment: toc-page;
+
+            /* Remove top margin from first element in article wrapper */
+            .print-page-wrapper.article-wrapper > .normal-container > .article-header {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
+            }
+            .print-page-wrapper.article-wrapper > .normal-container > .article-header h1 {
+                margin-top: 0 !important;
             }
         }
 
@@ -306,13 +304,33 @@ export function getPrintableSkeleton(options: {
     ${options.contentHtml}
 
     <script>
-        // Lazy load images
         window.onload = function() {
+            // Lazy load images
             var imgs = document.getElementsByTagName('img');
             for (var i = 0; i < imgs.length; i++) {
                 if (imgs[i].getAttribute('data-src')) {
                     imgs[i].src = imgs[i].getAttribute('data-src');
                 }
+            }
+            // 估算目录页码：利用屏幕渲染高度推算每个文章占几页
+            // 封面=1页，目录=1页，正文从第3页开始
+            // 打印正文使用 10.5pt/1.8 行高，屏幕使用 18px/2.0，比例约 0.7
+            var MM = 96 / 25.4; // 1mm 对应的 px
+            var pageContentPx = 285 * MM; // 一页正文可用高度 285mm (297mm - 12mm 底边距)
+            var fontRatio = 0.7; // 屏幕 → 打印 字体缩放比
+            var NORMAL_PAD = 160; // normal-container padding top+bottom (80px each)
+
+            var articleWrappers = document.querySelectorAll('.print-page-wrapper.article-wrapper');
+            var tocItems = document.querySelectorAll('.toc-item');
+            var currentPage = 3; // 封面=1, 目录=2
+            for (var i = 0; i < articleWrappers.length; i++) {
+                if (tocItems[i]) {
+                    tocItems[i].querySelector('.toc-page-number').textContent = currentPage;
+                }
+                var h = articleWrappers[i].offsetHeight;
+                var contentH = Math.max(0, h - NORMAL_PAD) * fontRatio;
+                var pages = Math.max(1, Math.ceil(contentH / pageContentPx));
+                currentPage += pages;
             }
         };
     </script>

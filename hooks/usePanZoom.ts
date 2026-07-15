@@ -36,7 +36,7 @@ export interface UsePanZoomReturn {
   };
   
   // DOM 引用
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
   
   // 其他
   setZoom: (zoom: { scale?: number; x?: number; y?: number }) => void;

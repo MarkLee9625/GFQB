@@ -1,9 +1,10 @@
 import React from 'react';
 import { Icon } from './Icons';
-import { Article } from '../src/types/models';
+import type { Article } from '../src/types';
 
 interface SidebarProps {
   articles: Article[];
+  displayArticles: Article[];
   currentId: number | null;
   logo: string;
   sidebarMeta: string;
@@ -21,6 +22,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
   articles,
+  displayArticles,
   currentId,
   logo,
   sidebarMeta,
@@ -35,10 +37,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   onToggleEditMode,
   onReorder,
 }) => {
-  // Filter articles but PRESERVE array order (except for Search)
-  const displayArticles = React.useMemo(() => {
-    return articles.filter(a => (a.title ?? '').toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [articles, searchQuery]);
 
   // Drag and Drop Logic
   const [draggedId, setDraggedId] = React.useState<number | null>(null);

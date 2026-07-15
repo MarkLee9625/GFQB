@@ -5,5 +5,5 @@ export function decodeB64Utf8(b64: string): string {
 }
 
 export function createImageHtml(src: string): string {
-  return `<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box; text-align: center; display: block;"><img src="${src}" style="width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0 auto; object-fit: contain;" class="max-w-full h-auto object-contain" /></div><p><br/></p>`;
+  return `<div style="width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box; text-align: center; display: block;"><img src="${src}" style="max-width: 100% !important; height: auto !important; display: block; margin: 0 auto; object-fit: contain;" class="max-w-full h-auto object-contain" /></div><p><br/></p>`;
 }

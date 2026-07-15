@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
-import { Article } from '../src/types/models';
+import type { Article } from '../src/types';
 import { isSpecialCategory } from '../src/constants';
 import { Icon } from './Icons';
 import LoadingOverlay from './LoadingOverlay';
@@ -24,25 +24,7 @@ interface EditorProps {
   onManageCats: () => void;
 }
 
-/**
- * 替换 Blob URL 为 Data URL
- *
- * 使用字符串 split().join() 替代 DOMParser
- * 原因：DOMParser 解析大 HTML 是同步阻塞的，而字符串替换只需要 1-2ms
- *
- * @param html - 富文本 HTML 内容
- * @param blobMap - blob URL 到 data URL 的映射
- * @returns 替换后的 HTML
- */
-function replaceBlobsSync(html: string, blobMap: Map<string, string>): string {
-  let finalContent = html;
-
-  blobMap.forEach((dataUrl, blobUrl) => {
-    finalContent = finalContent.split(blobUrl).join(dataUrl);
-  });
-
-  return finalContent;
-}
+const noop = () => {};
 
 export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onClose, onSave, onManageCats }) => {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -67,7 +49,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     resetForArticle,
   } = useEditorState({ isOpen, article, categories });
 
-  const { saveSelection, restoreSelection } = useSelectionManager();
+  const { saveSelection, saveSelectionSync, restoreSelection } = useSelectionManager();
 
   const {
     execCmd,
@@ -80,6 +62,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     contentRef,
     formData,
     setFormData,
+    setTitle,
     setIsGeneratingAi,
     setIsGeneratingTitle,
     setShowAiLoading,
@@ -103,7 +86,6 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   const {
     handlePaste,
     handleFile,
-    blobToDataMapRef,
   } = useFileUpload({
     contentRef,
     formData,
@@ -143,10 +125,6 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
     let finalContent = contentRef.current?.innerHTML || '';
 
-    if (blobToDataMapRef.current.size > 0) {
-      finalContent = replaceBlobsSync(finalContent, blobToDataMapRef.current);
-    }
-
     onSave({
       ...formData,
       title,
@@ -155,13 +133,6 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
       isPublished: targetPublishState !== undefined ? targetPublishState : formData.isPublished
     });
   }, [formData, title, tempPdf, onSave]);
-
-  const stableOnManageCats = useRef(onManageCats);
-  stableOnManageCats.current = onManageCats;
-
-  const handleManageCatsStable = useCallback(() => {
-    stableOnManageCats.current();
-  }, []);
 
   const handleImgReplaceWithSettings = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     handleImgReplace(e, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
@@ -196,7 +167,6 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     [formData, title]
   );
 
-  const noop = useCallback(() => {}, []);
 
   if (!isOpen) return null;
 
@@ -294,7 +264,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
                   onClick={handleContentClick}
                   onMouseUp={saveSelection}
                   onKeyUp={saveSelection}
-                  onBlur={saveSelection}
+                  onBlur={saveSelectionSync}
                   style={contentAreaStyle}
                   data-placeholder="开始输入正文，或粘贴内容… 支持直接粘贴图片和 PDF"
                 />
@@ -317,17 +287,19 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
             formData={formData}
             onFieldChange={handleFieldChange}
             categories={categories}
-            onManageCats={handleManageCatsStable}
+            onManageCats={onManageCats}
             isGeneratingAi={isGeneratingAi}
             handleAiSummary={handleAiSummary}
             tempPdf={tempPdf}
             setTempPdf={setTempPdf}
-            imgCompressQuality={imgCompressQuality}
-            setImgCompressQuality={setImgCompressQuality}
-            imgCompressMaxWidth={imgCompressMaxWidth}
-            setImgCompressMaxWidth={setImgCompressMaxWidth}
-            imgCompressFormat={imgCompressFormat}
-            setImgCompressFormat={setImgCompressFormat}
+            imageCompress={{
+              quality: imgCompressQuality,
+              setQuality: setImgCompressQuality,
+              maxWidth: imgCompressMaxWidth,
+              setMaxWidth: setImgCompressMaxWidth,
+              format: imgCompressFormat,
+              setFormat: setImgCompressFormat,
+            }}
             collapsed={rightPanelCollapsed}
             onToggleCollapse={() => setRightPanelCollapsed(v => !v)}
           />

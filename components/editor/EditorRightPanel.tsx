@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
-import { Article } from '../../src/types/models';
+import type { Article } from '../../src/types';
 import { Icon } from '../Icons';
+
+interface ImageCompressSettings {
+  quality: number;
+  setQuality: React.Dispatch<React.SetStateAction<number>>;
+  maxWidth: number;
+  setMaxWidth: React.Dispatch<React.SetStateAction<number>>;
+  format: 'webp' | 'jpeg' | 'original';
+  setFormat: React.Dispatch<React.SetStateAction<'webp' | 'jpeg' | 'original'>>;
+}
 
 interface EditorRightPanelProps {
   formData: Partial<Article>;
@@ -11,12 +20,7 @@ interface EditorRightPanelProps {
   handleAiSummary: () => void;
   tempPdf: { name: string; data: string } | null;
   setTempPdf: React.Dispatch<React.SetStateAction<{ name: string; data: string } | null>>;
-  imgCompressQuality: number;
-  setImgCompressQuality: React.Dispatch<React.SetStateAction<number>>;
-  imgCompressMaxWidth: number;
-  setImgCompressMaxWidth: React.Dispatch<React.SetStateAction<number>>;
-  imgCompressFormat: 'webp' | 'jpeg' | 'original';
-  setImgCompressFormat: React.Dispatch<React.SetStateAction<'webp' | 'jpeg' | 'original'>>;
+  imageCompress: ImageCompressSettings;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }
@@ -54,8 +58,11 @@ const SectionBlock: React.FC<{
 
 const EditorRightPanel = React.memo(({
   formData, onFieldChange, categories, onManageCats, isGeneratingAi, handleAiSummary,
-  tempPdf, setTempPdf, imgCompressQuality, setImgCompressQuality,
-  imgCompressMaxWidth, setImgCompressMaxWidth, imgCompressFormat, setImgCompressFormat,
+  tempPdf, setTempPdf, imageCompress: {
+    quality: imgCompressQuality, setQuality: setImgCompressQuality,
+    maxWidth: imgCompressMaxWidth, setMaxWidth: setImgCompressMaxWidth,
+    format: imgCompressFormat, setFormat: setImgCompressFormat,
+  },
   collapsed, onToggleCollapse
 }: EditorRightPanelProps) => {
   const category = formData.category || '';

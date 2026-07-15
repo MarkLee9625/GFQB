@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef } from 'react';
-import { Article } from '../src/types/models';
+import type { Article } from '../src/types';
 
 interface UseArticleNavigationOptions {
   articles: Article[];

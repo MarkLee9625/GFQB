@@ -68,6 +68,7 @@ export function getClientScript() {
                 this.data = Array.isArray(window.__SWS_DATA_ARTICLES__) ? window.__SWS_DATA_ARTICLES__ : [];
                 var newConfig = window.__SWS_DATA_CONFIG__ || {};
                 var LOGO = newConfig.logo || "";
+                window._SWS_LOGO = LOGO;
                 var APP_COMPANY = newConfig.company || {};
                 if (newConfig.alternateDesign !== undefined) this.alternateDesign = newConfig.alternateDesign;
 
@@ -205,6 +206,8 @@ export function getClientScript() {
             var mediaEl;
             if (mediaType === 'img') {
                 mediaEl = document.createElement('img');
+                mediaEl.loading = 'lazy';
+                mediaEl.decoding = 'async';
                 mediaEl.src = blobUrl || placeholder.dataset.src;
                 mediaEl.alt = placeholder.dataset.alt || '';
                 if (placeholder.dataset.className) mediaEl.className = placeholder.dataset.className;
@@ -393,6 +396,8 @@ export function getClientScript() {
             var imageLayer = node.querySelector('.cover-image-layer');
             if (coverImgUrl) {
                 var img = document.createElement('img');
+                img.loading = 'eager';
+                img.decoding = 'async';
                 img.src = coverImgUrl;
                 img.alt = "Cover";
                 img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
@@ -447,6 +452,8 @@ export function getClientScript() {
                 var placeholder = imageLayer ? imageLayer.querySelector('.magazine-image-placeholder') : null;
                 if (backImgUrl && placeholder && imageLayer) {
                     var img = document.createElement('img');
+                    img.loading = 'lazy';
+                    img.decoding = 'async';
                     img.src = backImgUrl;
                     img.alt = "Back Cover";
                     img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
@@ -474,6 +481,8 @@ export function getClientScript() {
                 var placeholder = imageLayer ? imageLayer.querySelector('.cover-img-placeholder') : null;
                 if (backImgUrl && placeholder && imageLayer) {
                     var img = document.createElement('img');
+                    img.loading = 'lazy';
+                    img.decoding = 'async';
                     img.src = backImgUrl;
                     img.alt = "Back Cover";
                     img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
@@ -616,11 +625,11 @@ export function getClientScript() {
                 var svgPrevArrow = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; transform:rotate(180deg);"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
                 navMount.innerHTML = '<div class="bottom-nav">' +
                     '<a class="nav-link ' + (!prevArt ? 'disabled' : '') + '" onclick="' + (prevArt ? 'app.prev()' : '') + '">' +
-                        '<div class="nav-card"><div class="nav-card-label">' + svgPrevArrow + ' Previous</div>' +
-                            '<div class="nav-card-title">' + (prevArt ? escapeForJS(prevArt.title) : 'First article') + '</div></div></a>' +
+                        '<div class="nav-card"><div class="nav-card-label">' + svgPrevArrow + ' 上一篇</div>' +
+                            '<div class="nav-card-title">' + (prevArt ? escapeForJS(prevArt.title) : '已是第一篇') + '</div></div></a>' +
                     '<a class="nav-link next ' + (!nextArt ? 'disabled' : '') + '" onclick="' + (nextArt ? 'app.next()' : '') + '">' +
-                        '<div class="nav-card next"><div class="nav-card-label">Next ' + svgArrow + '</div>' +
-                            '<div class="nav-card-title">' + (nextArt ? escapeForJS(nextArt.title) : 'Last article') + '</div></div></a></div>';
+                        '<div class="nav-card next"><div class="nav-card-label">下一篇 ' + svgArrow + '</div>' +
+                            '<div class="nav-card-title">' + (nextArt ? escapeForJS(nextArt.title) : '已是最后一篇') + '</div></div></a></div>';
             }
             var sidebar = document.getElementById('sidebar');
             if (isSpecial) sidebar.classList.add('hidden'); else sidebar.classList.remove('hidden');

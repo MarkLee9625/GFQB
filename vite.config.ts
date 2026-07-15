@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
     server: {
-      port: 3000,
+      port: 4512,
       host: '0.0.0.0',
       // 添加热更新优化
       hmr: {
@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       // 开发环境代理配置：将前端 /api 请求转发到 BFF 代理服务器
       proxy: {
         '/api': {
-          target: 'http://localhost:3001',
+          target: 'http://localhost:4513',
           changeOrigin: true,
           headers: {
             'x-sws-proxy-secret': env.VITE_PROXY_SECRET || env.PROXY_SECRET || '',
@@ -46,9 +46,11 @@ export default defineConfig(({ mode }) => {
           assetFileNames: 'assets/[name]-[hash].[ext]',
         },
       },
-      // 构建输出优化
       reportCompressedSize: true,
       chunkSizeWarningLimit: 1000,
+      esbuild: {
+        drop: ["console", "debugger"],
+      },
     },
     worker: {
       format: 'es',

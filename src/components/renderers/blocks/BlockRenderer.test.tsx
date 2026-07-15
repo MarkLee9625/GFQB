@@ -12,7 +12,7 @@ import type {
   CodeBlock,
   FigureBlock,
   TableBlock,
-} from '../../../types/blocks';
+} from '../../../types';
 
 function makeBlock(overrides: Partial<ContentBlock> & { type: ContentBlock['type'] }): ContentBlock {
   return {

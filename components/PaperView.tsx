@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Article } from '../src/types/models';
+import type { Article } from '../src/types';
 import { ArticleRenderer } from './renderers';
 
 interface PaperViewProps {
@@ -34,7 +34,7 @@ const PaperViewComponent: React.FC<PaperViewProps> = ({
     <div className="relative">
       {/* 设计模式切换器 */}
       {isEditMode && (
-        <div className="DesignToggle fixed top-4 right-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-md border border-gray-200">
+        <div className="DesignToggle fixed top-16 right-4 z-40 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-md border border-gray-200">
           <span className="text-xs font-medium text-gray-600">设计模式:</span>
           <button
             onClick={() => handleSetAlternateDesign(false)}
@@ -53,14 +53,16 @@ const PaperViewComponent: React.FC<PaperViewProps> = ({
 
       {/* 使用统一的 ArticleRenderer 组件 */}
       <ArticleRenderer
-        article={article}
-        mode={isEditMode ? 'edit' : 'read'}
-        logo={logo}
-        isEditable={isEditMode}
-        onArticleUpdate={onUpdate}
-        onImageUpload={onImageUpload}
-        onNext={onNext}
-        useAlternateDesign={useAlternateDesign}
+        {...({
+          article,
+          mode: isEditMode ? 'edit' as const : 'read' as const,
+          logo,
+          isEditable: isEditMode,
+          onArticleUpdate: onUpdate,
+          onImageUpload,
+          onNext,
+          useAlternateDesign,
+        } as import('./renderers/ArticleRenderer').ArticleRendererProps)}
       />
     </div>
   );
@@ -68,8 +70,8 @@ const PaperViewComponent: React.FC<PaperViewProps> = ({
 
 export const PaperView = React.memo(PaperViewComponent, (prevProps, nextProps) => {
   return (
-    prevProps.article.id === nextProps.article.id &&
-    prevProps.article.content === nextProps.article.content &&
+    prevProps.article?.id === nextProps.article?.id &&
+    prevProps.article?.content === nextProps.article?.content &&
     prevProps.useAlternateDesign === nextProps.useAlternateDesign &&
     prevProps.isEditMode === nextProps.isEditMode &&
     prevProps.logo === nextProps.logo

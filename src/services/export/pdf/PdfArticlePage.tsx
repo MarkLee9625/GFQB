@@ -1,7 +1,7 @@
 import React from 'react';
 import { Page, View, Text, Image } from '@react-pdf/renderer';
 import { Html } from 'react-pdf-html';
-import { Article } from '../../../types/models';
+import type { Article } from '../../../types';
 import styles from './pdfStyles';
 
 interface ArticlePageProps {

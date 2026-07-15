@@ -1,18 +1,12 @@
 import { Article } from '../../types/models';
 import { CONSTANTS } from '../../constants';
-import { getPrintableSkeleton } from './templates';
+import { getPrintableSkeleton } from './print/printableSkeleton';
 import { convertPdfToImages } from '../pdf';
 import { processMediaForPrint, inlineOnlineImages } from './utils/media';
 import { base64ToFile } from './utils/file';
 import { ExportOptions, ExportMetadata } from './reader';
-
-function escapeHtml(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function escapeAttr(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+import { sortArticlesByPriority } from '../../utils/articleSort';
+import { escapeHtml, escapeAttr } from '../../utils/stringUtils';
 
 
 /**
@@ -23,14 +17,7 @@ export async function generatePrintableHTML(
     options: ExportOptions = {},
     metadata: ExportMetadata = {}
 ): Promise<string> {
-    const sortedArticles = [...articles].sort((a, b) => {
-        if (a.category === b.category) return 0;
-        if (a.category === '封面') return -1;
-        if (b.category === '封面') return 1;
-        if (a.category === '封底') return 1;
-        if (b.category === '封底') return -1;
-        return 0;
-    });
+    const sortedArticles = sortArticlesByPriority(articles);
 
     const alternateDesign = options.useAlternateDesign ?? false;
     const logo = metadata.logo || '';
@@ -70,7 +57,7 @@ export async function generatePrintableHTML(
             const dateText = article.dateText || 'JAN 2025';
             const hasCover = !!article.coverImage;
             const coverImageHtml = hasCover
-                ? `<img src="${escapeAttr(article.coverImage)}" alt="Cover" style="width:100%;height:100%;object-fit:cover;display:block;" />`
+                ? `<img src="${escapeAttr(article.coverImage ?? "")}" alt="Cover" style="width:100%;height:100%;object-fit:cover;display:block;" />`
                 : '<div class="cover-img-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;background:#f3f4f6;">暂无封面图片</div>';
 
             if (isMagazine) {
@@ -114,7 +101,7 @@ export async function generatePrintableHTML(
             const isMagazine = alternateDesign;
             const hasBack = !!article.backImage;
             const backImageHtml = hasBack
-                ? `<img src="${escapeAttr(article.backImage)}" alt="Back" style="width:100%;height:100%;object-fit:cover;display:block;" />`
+                ? `<img src="${escapeAttr(article.backImage ?? "")}" alt="Back" style="width:100%;height:100%;object-fit:cover;display:block;" />`
                 : '<div class="cover-img-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;background:#f3f4f6;">暂无封底图片</div>';
             const company = CONSTANTS.COMPANY_INFO;
 
@@ -177,26 +164,46 @@ export async function generatePrintableHTML(
             let pdfHtmlContent = '';
 
             // 处理 PDF 附件
+            let pdfConversionFailed = false;
             if (article.pdfData) {
                 try {
                     const pdfFile = base64ToFile(article.pdfData, 'document.pdf');
                     const pdfImages = await convertPdfToImages(pdfFile);
 
-                    // 关键修复：采用模板要求的 pdf-full-page 类名，防止高度逻辑冲突
                     pdfHtmlContent = pdfImages.map((imgData, idx) =>
                         `<div class="print-page-wrapper pdf-full-page">
                             <img src="${imgData}" alt="PDF Page ${idx + 1}" />
                         </div>`
                     ).join('');
                 } catch (error) {
+                    pdfConversionFailed = true;
                     console.error('[Export] PDF转换失败:', error);
-                    processedContent += `<div class="media-print-placeholder" style="margin: 30px 0; padding: 40px; border: 2px dashed #d1d5db; border-radius: 8px; text-align: center; background: #f9fafb;">
-                        <p style="color: #6b7280; font-size: 14px; margin: 0;">📄 PDF文档转换失败，请查看阅读版获取完整PDF内容</p>
-                    </div>`;
                 }
             }
 
-            // 常规文章 HTML
+            // 判断文章是否有实质性正文内容（解码 HTML 实体后去标签 > 80 字才算有内容）
+            const rawText = processedContent
+                .replace(/<[^>]+>/g, '')
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&[a-z]+;/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const hasContent = rawText.length > 80;
+
+            // === 纯 PDF 文章（无正文）===
+            if (article.pdfData && !hasContent) {
+                if (pdfHtmlContent.length > 0) {
+                    // PDF 转换成功：直接输出 PDF 页面图片，不包装任何壳
+                    articleHtml = pdfHtmlContent;
+                } else {
+                    // PDF 转换失败：只输出一行提示，无壳、无结束标记
+                    articleHtml = `<div class="print-page-wrapper article-wrapper"><div class="normal-container" style="text-align:center;padding:40px;"><p style="color:#999;font-size:13px;margin:0;">📄 PDF 转换失败，请在阅读版中查看</p></div></div>`;
+                }
+                bodyHtml += articleHtml;
+                continue; // 跳过后续 bodyHtml 拼接（已在上面提前拼好），直接进入下一篇
+            }
+
+            // === 常规文章 HTML ===
             articleHtml = `
             <div class="print-page-wrapper article-wrapper">
                 <div class="normal-container">
@@ -204,23 +211,24 @@ export async function generatePrintableHTML(
                         <h1>${escapeHtml(article.title)}</h1>
                         <div class="article-meta">
                             <div class="tag-cloud">${tagsHtml}</div>
-                            <span>分类: ${escapeHtml(article.category)}</span>
                         </div>
                     </div>
-                    ${article.abstract ? `<div class="summary-card"><div class="summary-label">摘要</div><p>${escapeHtml(article.abstract)}</p></div>` : ''}
-                    <div class="sws-prose">${processedContent}</div>
+                    ${article.abstract && !pdfConversionFailed ? `<div class="summary-card"><div class="summary-label">摘要</div><p>${escapeHtml(article.abstract)}</p></div>` : ''}
+                    ${hasContent ? `<div class="sws-prose">${processedContent}</div>` : ''}
+                    ${pdfConversionFailed ? `<div class="media-print-placeholder" style="margin: 30px 0; padding: 40px; border: 2px dashed #d1d5db; border-radius: 8px; text-align: center; background: #f9fafb;">
+                        <p style="color: #6b7280; font-size: 14px; margin: 0;">📄 PDF文档转换失败，请查看阅读版获取完整PDF内容</p>
+                    </div>` : ''}
                     <div class="article-footer-knowledge-base">
                         ${logo ? `<img src="${logo}" class="footer-logo" />` : ''}
                         SWS KNOWLEDGE BASE
                     </div>
-                    <div class="article-end-mark">- End of Article -</div>
+                    ${hasContent ? `<div class="article-end-mark">- End of Article -</div>` : ''}
                 </div>
             </div>`;
 
             // 将 PDF 页面衔接在文章末尾
             articleHtml += pdfHtmlContent;
         }
-
         bodyHtml += articleHtml;
 
         // 如果是封面，封面后紧跟目录

@@ -1,8 +1,57 @@
-import React from 'react';
-import { pdf } from '@react-pdf/renderer';
+import { createElement } from 'react';
+import { pdf, Font } from '@react-pdf/renderer';
 import { PDFDocument } from 'pdf-lib';
-import { Article } from '../../types/models';
+import type { Article } from '../../types';
 import { MyDocument } from './pdfComponents';
+import { base64ToUint8Array } from '../../utils/fileHelpers';
+
+/**
+ * @react-pdf/renderer v4.x 字体加载在 Vite ESM 环境中存在惰性加载失效问题：
+ * Font.register() 仅注册字体名称，实际 woff2 数据应在渲染时自动获取，
+ * 但 Vite 模块上下文中 fetch 可能被推迟或静默跳过，导致 data=null → 输出 0 页空 PDF。
+ *
+ * 此函数在渲染前手动预取字体二进制数据并注入 FontStore，绕过惰性加载机制。
+ */
+const FONT_URLS = {
+  regular: 'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@5.2.9/chinese-simplified-400-normal.woff2',
+  bold: 'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@5.2.9/chinese-simplified-700-normal.woff2',
+};
+
+async function preloadFonts(): Promise<void> {
+  try {
+    const fonts = (Font as any).fontFamilies?.NotoSansSC?.sources as Array<{ src: string; data: ArrayBuffer | null }> | undefined;
+    if (!fonts || fonts.length === 0) return;
+
+    // 只对仍未加载的字体源进行预取
+    const urlsToFetch = fonts
+      .map((s, i) => ({ idx: i, url: s.src as string }))
+      .filter(({ idx }) => !fonts[idx].data);
+
+    if (urlsToFetch.length === 0) return;
+
+    const results = await Promise.allSettled(
+      urlsToFetch.map(({ url }) =>
+        fetch(url, { credentials: 'omit' }).then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.arrayBuffer();
+        })
+      )
+    );
+
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      const { idx } = urlsToFetch[i];
+      if (result.status === 'fulfilled') {
+        fonts[idx].data = result.value;
+      } else {
+        console.warn('[PDF Engine] 字体预取失败，将使用回退字体:', result.reason);
+      }
+    }
+  } catch (error) {
+    // 预取失败不应阻塞导出流程，@react-pdf/renderer 会使用内置回退字体
+    console.warn('[PDF Engine] 字体预取异常，将使用回退字体:', error);
+  }
+}
 
 /**
  * PDF 导出引擎选项
@@ -19,19 +68,6 @@ export interface PdfExportOptions {
 }
 
 /**
- * 将 Base64 字符串转换为 ArrayBuffer
- */
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64);
-  const length = binaryString.length;
-  const bytes = new Uint8Array(length);
-  for (let i = 0; i < length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
-/**
  * 检查是否为有效的 Base64 PDF 数据
  */
 function isValidPdfData(data: string): boolean {
@@ -43,8 +79,8 @@ function isValidPdfData(data: string): boolean {
     const base64Pattern = /^[A-Za-z0-9+/]+={0,2}$/;
     if (!base64Pattern.test(rawBase64)) return false;
     try {
-        const buffer = base64ToArrayBuffer(rawBase64);
-        const header = new Uint8Array(buffer.slice(0, 4));
+        const bytes = base64ToUint8Array(rawBase64);
+        const header = bytes.slice(0, 4);
         const headerStr = String.fromCharCode(...header);
         return headerStr === '%PDF';
     } catch {
@@ -57,8 +93,11 @@ function isValidPdfData(data: string): boolean {
  */
 async function renderDocumentBuffer(articles: Article[], options: PdfExportOptions): Promise<ArrayBuffer> {
   try {
-    // 创建 React-PDF 文档组件
-    const documentElement = React.createElement(MyDocument, {
+    // 预取字体数据，修复 Vite ESM 下 @react-pdf/renderer 惰性加载失效问题
+    await preloadFonts();
+
+    // 创建 React-PDF 文档组件 - 使用直接导入的 createElement，避免 Vite 模块上下文中 createElement 引用差异
+    const documentElement = createElement(MyDocument, {
       articles: articles,
       options: {
         useAlternateDesign: options.useAlternateDesign || false,
@@ -67,7 +106,7 @@ async function renderDocumentBuffer(articles: Article[], options: PdfExportOptio
     });
 
     // 渲染为 Blob，然后转换为 ArrayBuffer
-    const pdfInstance = pdf(documentElement);
+    const pdfInstance = pdf(documentElement as any);
     const blob = await pdfInstance.toBlob();
     return await blob.arrayBuffer();
   } catch (error) {
@@ -90,7 +129,7 @@ async function loadPdfAttachment(pdfData: string): Promise<PDFDocument> {
     if (pdfData.includes('base64,')) {
         rawBase64 = pdfData.split('base64,')[1];
     }
-    const buffer = base64ToArrayBuffer(rawBase64);
+    const buffer = base64ToUint8Array(rawBase64).buffer;
     const pdfDoc = await PDFDocument.load(buffer);
     
     // 验证 PDF 文档是否有效

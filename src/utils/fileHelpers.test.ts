@@ -14,7 +14,7 @@ describe('fileHelpers', () => {
         onload: null as any,
         onerror: null as any,
         onabort: null as any,
-        readAsDataURL: vi.fn(function() {
+        readAsDataURL: vi.fn(function(this: any) {
           setTimeout(() => {
             this.onload({ target: { result: this.result } });
           }, 0);

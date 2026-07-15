@@ -1,28 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Article } from '../src/types/models';
+import type { Article } from '../src/types';
 import { db } from '../services/db';
+import { debounce } from '../src/utils/debounce';
+import { sortArticlesByPriority } from '../src/utils/articleSort';
 
 export function useJournal() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const idCounterRef = useRef(0);
+  const mountedRef = useRef(true);
 
-  // 核心：强制排序逻辑
-  const enforceOrder = useCallback((list: Article[]): Article[] => {
-    const cover = list.find(a => a.category === '封面');
-    const back = list.find(a => a.category === '封底');
-    // 修复：增加 sort 确保普通文章严格按照 order 排序
-    const others = list
-      .filter(a => a.category !== '封面' && a.category !== '封底')
-      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
-
-    return [
-      ...(cover ? [cover] : []),
-      ...others,
-      ...(back ? [back] : [])
-    ];
-  }, []); // 保持引用稳定
 
   // 集中式清洗函数：确保所有文章数据的 id 和 order 都是数字类型
   const sanitizeArticles = useCallback((list: Article[]): Article[] => {
@@ -39,63 +28,52 @@ export function useJournal() {
     });
   }, []);
 
-  // 简易 debounce 实现
-  const debounce = (fn: Function, ms = 1000) => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-    return function (this: any, ...args: any[]) {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => fn.apply(this, args), ms);
-    };
-  };
-
   // 初始化加载
   useEffect(() => {
+    const abortController = new AbortController();
+    mountedRef.current = true;
     async function load() {
+      const aborted = () => !mountedRef.current || abortController.signal.aborted;
       try {
-        // 关键修复：确保数据库先连接
         await db.init();
+        if (aborted()) return;
 
         const rawData = await db.getArticles();
-        // 使用统一的清洗函数确保所有 ID 和 Order 都是数字类型
+        if (aborted()) return;
         const data = sanitizeArticles(rawData);
 
-        // 兜底逻辑：如果数据为空，创建默认封面和封底
         if (data.length === 0) {
           const now = Date.now();
           const fresh: Article[] = [
-            {
-              id: now,
-              title: "封面",
-              category: "封面",
-              content: "",
-              issueText: "NO.01",
-              dateText: "JAN " + new Date().getFullYear(),
-              order: 0
-            },
-            {
-              id: now + 1,
-              title: "封底",
-              category: "封底",
-              content: "",
-              order: 99999
-            }
+            { id: now, title: "封面", category: "封面", content: "", issueText: "NO.01", dateText: "JAN " + new Date().getFullYear(), order: 0 },
+            { id: now + 1, title: "封底", category: "封底", content: "", order: 99999 }
           ];
           await db.clearAndBulkSaveArticles(fresh);
+          if (aborted()) return;
           setArticles(fresh);
           setCurrentId(fresh[0].id);
         } else {
-          const ordered = enforceOrder(data);
+          const ordered = sortArticlesByPriority(data);
+          if (aborted()) return;
           setArticles(ordered);
           if (ordered.length > 0) setCurrentId(ordered[0].id);
         }
       } catch (e) {
         console.error('Failed to load articles', e);
+        if (mountedRef.current) {
+          setError('数据加载失败，请刷新页面重试');
+          alert('数据加载失败：' + (e instanceof Error ? e.message : '未知错误'));
+        }
       } finally {
-        setLoading(false);
+        if (mountedRef.current) setLoading(false);
       }
     }
     load();
-  }, [sanitizeArticles, enforceOrder]);
+    return () => {
+      mountedRef.current = false;
+      abortController.abort();
+    };
+  }, [sanitizeArticles]);
 
   const debouncedSaveArticle = useRef(
     debounce(async (article: Article) => {
@@ -103,6 +81,7 @@ export function useJournal() {
         await db.saveArticle(article);
       } catch (e) {
         console.error('Save failed', e);
+        alert('文章保存失败，请刷新页面重试');
       }
     }, 1000)
   ).current;
@@ -121,12 +100,12 @@ export function useJournal() {
         const oldCategory = prev[idx].category;
         if (updates.category === '封面' || updates.category === '封底' ||
             oldCategory === '封面' || oldCategory === '封底') {
-          return enforceOrder(next);
+          return sortArticlesByPriority(next);
         }
       }
       return next;
     });
-  }, [debouncedSaveArticle, enforceOrder]);
+  }, [debouncedSaveArticle]);
 
   const articlesRef = useRef(articles);
   articlesRef.current = articles;
@@ -150,13 +129,14 @@ export function useJournal() {
     };
     try {
       await db.saveArticle(newArt);
-      setArticles(prev => enforceOrder([...prev, newArt]));
+      setArticles(prev => sortArticlesByPriority([...prev, newArt]));
       setCurrentId(newArt.id);
       return newArt;
     } catch (e) {
       console.error('Create failed', e);
+      alert('文章创建失败，请重试');
     }
-  }, [enforceOrder]);
+  }, []);
 
   const deleteArticle = useCallback(async (id: number) => {
     const art = articlesRef.current.find(a => String(a.id) === String(id));
@@ -169,12 +149,15 @@ export function useJournal() {
 
       setArticles(prev => {
         const next = prev.filter(a => String(a.id) !== String(id));
-        return enforceOrder(next);
+        return sortArticlesByPriority(next);
       });
 
       setCurrentId(prev => prev === id ? null : prev);
-    } catch (e) { console.error('Delete failed', e); }
-  }, [enforceOrder]);
+    } catch (e) {
+      console.error('Delete failed', e);
+      alert('文章删除失败，请重试');
+    }
+  }, []);
 
   const reorderArticles = useCallback((newArticles: Article[]) => {
     // 核心修复：根据拖拽后的新顺序，重新分配 order 权重 (0, 1000, 2000...)
@@ -184,29 +167,34 @@ export function useJournal() {
     }));
 
     // 此时 enforceOrder 将按照新分配的 order 进行稳定排序
-    const ordered = enforceOrder(withUpdatedOrder);
+    const ordered = sortArticlesByPriority(withUpdatedOrder);
     setArticles(ordered);
 
     // 同步到数据库
-    db.clearAndBulkSaveArticles(ordered).catch(console.error);
-  }, [enforceOrder]);
+    db.clearAndBulkSaveArticles(ordered).catch((e) => {
+      console.error('Reorder save failed', e);
+      alert('排序保存失败，请重试');
+    });
+  }, []);
 
   const setArticlesAction = useCallback(async (newArticles: Article[]) => {
     const sanitized = sanitizeArticles(newArticles); // 先清洗类型
-    const ordered = enforceOrder(sanitized);
+    const ordered = sortArticlesByPriority(sanitized);
     try {
       await db.clearAndBulkSaveArticles(ordered);
       setArticles(ordered);
       if (ordered.length > 0) setCurrentId(ordered[0].id);
     } catch (e) {
       console.error("Bulk save failed", e);
+      alert('批量保存失败，请重试');
     }
-  }, [sanitizeArticles, enforceOrder]);
+  }, [sanitizeArticles]);
 
   return {
     articles,
     currentId,
     loading,
+    error,
     setCurrentId,
     updateArticle,
     createArticle,

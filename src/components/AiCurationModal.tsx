@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { batchEvaluateArticles, AiEvaluationResult, translateAndFormatAcademic } from '../../services/aiService';
-import { UniversalArticleMeta, SourceType } from '../types/intelligence';
+import { batchEvaluateArticles, translateAndFormatAcademic } from '../../services/aiService';
+import type { UniversalArticleMeta } from '../types';
+type SourceType = 'wechat' | 'rss' | 'patent' | 'aip';
 import { fetchRssFeed, RSS_PRESETS } from '../services/fetchers/rssFetcher';
 import { fetchPatents, PATENT_KEYWORDS } from '../services/fetchers/patentFetcher';
 

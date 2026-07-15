@@ -128,8 +128,9 @@ async function main() {
                 import * as pdfjsLib from 'data:text/javascript;base64,${pdfLibB64}';
                 window.pdfjsLib = pdfjsLib;
                 
-                // Configure Worker
-                const workerBlob = new Blob([atob("${pdfWorkerB64}")], { type: 'text/javascript' });
+                // Configure Worker (use Uint8Array to avoid UTF-8 encoding corruption)
+                const workerBinary = Uint8Array.from(atob("${pdfWorkerB64}"), function(c) { return c.charCodeAt(0); });
+                const workerBlob = new Blob([workerBinary], { type: 'text/javascript' });
                 const workerUrl = URL.createObjectURL(workerBlob);
                 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
                 
@@ -142,7 +143,23 @@ async function main() {
         console.warn("⚠️ PDF.js files not found in public/, skipping inline.");
     }
 
-    // 4. Generate Single File Content (Reader Template)
+    // 4. Inline D3.js for knowledge graph iframes
+    const d3Path = resolve(__dirname, '../public/d3.min.js');
+    if (fs.existsSync(d3Path)) {
+        console.log("📊 Inlining D3.js for knowledge graph iframes...");
+        const d3Code = fs.readFileSync(d3Path, 'utf-8');
+        // Replace the external D3 script tag with inline version preserving CDN fallback
+        const d3InlineScript = '<script>' + d3Code + '<\\/script><script onerror="var s=document.createElement(\'script\');s.src=\'https://d3js.org/d3.v7.min.js\';document.head.appendChild(s);"><\\/script>';
+        htmlContent = htmlContent.replace(
+            /<script src="\.\/d3\.min\.js" onerror="[^"]*"><\/script>/g,
+            d3InlineScript
+        );
+        console.log("   ✅ D3.js inlined into iframes");
+    } else {
+        console.warn("⚠️ d3.min.js not found in public/, skipping D3 inline.");
+    }
+
+    // 5. Generate Single File Content (Reader Template)
     const singleFileContent = htmlContent;
 
     // Save the single file reader for debugging/verification

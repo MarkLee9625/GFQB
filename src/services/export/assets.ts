@@ -1,19 +1,11 @@
 import { CONSTANTS } from '../../constants';
 
 export const UNIFIED_STYLES = CONSTANTS.UNIFIED_STYLES;
-export const COMPANY_INFO = CONSTANTS.COMPANY_INFO;
 
 // SVG 路径常量
 export const SVG_ICONS = {
     MENU: "M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-5h18v-2H3v2zm0-5h18v-2H3v2zm0-5v2h18V6H3z",
-    FULLSCREEN: "M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z",
-    SEARCH: "M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
-    EXTERNAL_LINK: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3",
-    CAMERA: "M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z",
-    ARROW_RIGHT: "M14 5l7 7m0 0l-7 7m7-7H3",
-    EXPAND: "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5",
-    CHEVRON_LEFT: "❮",
-    CHEVRON_RIGHT: "❯"
+    FULLSCREEN: "M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
 } as const;
 
 // 共有内联样式
@@ -368,14 +360,6 @@ export const PRINT_STYLES = `
         line-height: 1.4 !important;
         font-weight: bold !important;
     }
-    .article-header h1::after {
-        content: "";
-        display: block;
-        width: 60px;
-        height: 2px;
-        background: #005596;
-        margin: 10pt auto 0;
-    }
     .sws-prose h2 {
         font-size: 14pt !important;
         font-weight: bold !important;
@@ -546,10 +530,16 @@ export const PRINT_STYLES = `
         font-size: 9pt !important;
         color: #999 !important;
         margin-top: 30pt !important;
+        break-inside: avoid !important;
     }
     .article-footer-knowledge-base {
         margin-top: 30pt !important;
         padding-top: 12pt !important;
+        font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: 2px !important;
+        font-size: 12px !important;
+        break-inside: avoid !important;
     }
 
     .sws-prose blockquote {
@@ -574,7 +564,7 @@ export const PRINT_STYLES = `
 export const MISC_STYLES = `
 /* Navigation & Footer */
 .bottom-nav { width: 100%; max-width: 850px; margin: 50px auto 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 0 20px; box-sizing: border-box; }
-.article-footer-knowledge-base { margin-top: 50px; border-top: 1px solid #f3f4f6; text-align: center; opacity: 0.4; font-family: sans-serif; padding-top: 20px; display: flex; align-items: center; justify-content: center; }
+.article-footer-knowledge-base { margin-top: 50px; border-top: 1px solid #f3f4f6; text-align: center; opacity: 0.4; font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif; font-weight: 700; letter-spacing: 2px; font-size: 12px; padding-top: 20px; display: flex; align-items: center; justify-content: center; }
 .footer-logo { height: 40px; opacity: 0.5; display: inline-block; vertical-align: middle; }
 .article-end-mark { text-align: center; margin: 40px auto 0; font-size: 10px; color: #e5e7eb; letter-spacing: 2px; }
 .nav-card { padding: 20px; border-radius: 16px; background: white; border: 1px solid #f3f4f6; display: flex; flex-direction: column; cursor: pointer; transition: all 0.3s; text-decoration: none; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
@@ -588,6 +578,14 @@ export const MISC_STYLES = `
 .article-meta { color: #9ca3af; font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 15px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; align-items: center; margin-top: 4px; }
 .tag-cloud { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tag-item { padding: 1px 8px; background: #f3f4f6; color: #111; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid rgba(209, 213, 219, 0.5); white-space: nowrap; line-height: 1.5; display: inline-block; }
+/* Ghost line killer: hide empty paragraphs that cause blank lines */
+.sws-prose p:empty,
+.sws-prose p:has(> br:only-child) {
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
 /* Main Article Content (Inherited from Editor's UNIFIED_STYLES) */
 ${UNIFIED_STYLES}
 

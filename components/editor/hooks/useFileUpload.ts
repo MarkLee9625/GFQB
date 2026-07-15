@@ -1,16 +1,16 @@
 import { useCallback, useRef, useEffect } from 'react';
+import type { Article } from '../../../src/types';
 import { fileToDataURL, compressImage } from '../../../src/utils/fileHelpers';
 import { cleanPastedHtml } from '../../../src/utils/pasteCleaner';
 import { createImageHtml } from '../../../src/utils/encoding';
-import { extractAbstractFromPdf, convertPdfToImages } from '../../../src/services/pdf';
-import { useBlobManager } from '../../../hooks/useBlobManager';
+import { extractAbstractFromPdf } from '../../../src/services/pdf';
 import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
 
 interface UseFileUploadOptions {
   contentRef: React.RefObject<HTMLDivElement | null>;
   formData: { category?: string; title?: string | null; abstract?: string | null; tags?: string[] };
   title: string;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
+  setFormData: React.Dispatch<React.SetStateAction<Partial<Article>>>;
   setIsProcessing: (v: boolean) => void;
   insertHtml: (htmlOrNode: string | Node) => void;
   handleAutoIndent: () => void;
@@ -37,20 +37,12 @@ export function useFileUpload({
   saveSelection,
   restoreSelection,
 }: UseFileUploadOptions) {
-  const blobManager = useBlobManager();
-  const blobToDataMapRef = useRef(new Map<string, string>());
   const formDataFieldsRef = useRef({ category: '', title: '', abstract: '' });
   formDataFieldsRef.current = {
     category: formData.category || '',
     title: title,
     abstract: formData.abstract || '',
   };
-
-  useEffect(() => {
-    return () => {
-      blobToDataMapRef.current.clear();
-    };
-  }, []);
 
   const getImageDimensions = (base64: string): Promise<{ width: number; height: number }> => {
     return new Promise((resolve, reject) => {
@@ -149,6 +141,7 @@ export function useFileUpload({
         } else if (type === 'pdf') {
           const base64 = await fileToDataURL(file);
 
+          // 尝试自动提取元数据（标题/摘要/关键词），提取失败不影响附件挂载
           try {
             const extractResult = await extractAbstractFromPdf(base64);
             const { title, abstract } = formDataFieldsRef.current;
@@ -170,56 +163,8 @@ export function useFileUpload({
             console.error('PDF extraction failed:', err);
           }
 
-          const insertAsContent = window.confirm(
-            "您希望如何处理此 PDF？\n\n【确定】转为图片插入正文（推荐，可直接打印，所见即所得）\n【取消】作为附件挂载（仅提供下载链接）"
-          );
-
-          if (insertAsContent) {
-            try {
-              const images = await convertPdfToImages(file);
-              console.log(`[Editor] PDF 转换完成，准备分页插入 (${images.length} 页)...`);
-
-              for (let i = 0; i < images.length; i++) {
-                const dataUrl = images[i];
-                const blobUrl = blobManager.getBlobUrl(dataUrl);
-                if (blobUrl) {
-                  blobToDataMapRef.current.set(blobUrl, dataUrl);
-
-                  const container = document.createElement('div');
-                  container.className = 'media-container pdf-page-container overflow-hidden';
-                  container.contentEditable = 'false';
-container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box; text-align: center; margin: 3rem auto; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; display: block;';
-
-                  const img = document.createElement('img');
-                  img.src = blobUrl;
-                  img.className = 'pdf-page-image max-w-full h-auto object-contain';
-                  img.style.cssText = 'width: 100% !important; max-width: 100% !important; height: auto !important; display: block; margin: 0; padding: 0;';
-                  img.alt = `PDF Page ${i + 1}`;
-
-                  container.appendChild(img);
-                  insertHtml(container);
-
-                  console.log(`[Editor] 第 ${i + 1} 页已安全挂载`);
-                }
-              }
-
-              console.log('[Editor] PDF 所有页面已成功流式插入');
-
-              const emptyParagraph = document.createElement('p');
-              emptyParagraph.innerHTML = '<br>';
-              insertHtml(emptyParagraph);
-
-              const editorElement = contentRef.current;
-              if (editorElement) {
-                setFormData(prev => ({ ...prev, content: editorElement.innerHTML }));
-              }
-            } catch (err) {
-              console.error('[Editor] PDF 转换流程异常:', err);
-              alert(`PDF 转换失败: ${err instanceof Error ? err.message : '未知错误'}\n\n请尝试刷新页面重试。`);
-            }
-          } else {
-            setTempPdf({ name: file.name, data: base64 });
-          }
+          // 默认作为附件挂载（不再提供转图片选项）
+          setTempPdf({ name: file.name, data: base64 });
         } else {
           const src = await fileToDataURL(file);
 
@@ -235,11 +180,10 @@ container.style.cssText = 'width: 100%; max-width: 100%; box-sizing: border-box;
         setIsProcessing(false);
         e.target.value = '';
       }
-  }, [imgCompressMaxWidth, imgCompressQuality, imgCompressFormat, insertHtml, blobManager, contentRef, setFormData, setIsProcessing, setTempPdf]);
+  }, [imgCompressMaxWidth, imgCompressQuality, imgCompressFormat, contentRef, setFormData, setIsProcessing, setTempPdf]);
 
   return {
     handlePaste,
     handleFile,
-    blobToDataMapRef,
   };
 }

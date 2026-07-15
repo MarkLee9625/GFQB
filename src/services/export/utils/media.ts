@@ -111,62 +111,6 @@ export async function inlineOnlineImages(
 
 
 
-/**
- * 从视频URL提取第一帧作为base64图片
- */
-export async function extractVideoFirstFrame(videoUrl: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const video = document.createElement('video');
-        video.crossOrigin = 'anonymous';
-        video.preload = 'metadata';
-
-        video.onloadeddata = () => {
-            video.currentTime = 0.1;
-        };
-
-        video.onseeked = () => {
-            try {
-                const MAX_DIM = 1200;
-                let w = video.videoWidth;
-                let h = video.videoHeight;
-                if (w > MAX_DIM) { h = Math.floor(h * MAX_DIM / w); w = MAX_DIM; }
-                if (h > MAX_DIM) { w = Math.floor(w * MAX_DIM / h); h = MAX_DIM; }
-
-                const canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
-
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    reject(new Error('无法获取Canvas上下文'));
-                    return;
-                }
-
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const rawBase64 = canvas.toDataURL('image/jpeg', 0.85);
-                compressImage(rawBase64, 1200, 0.8).then(resolve).catch(() => resolve(rawBase64));
-            } catch (error) {
-                console.error('提取视频首帧失败:', error);
-                reject(error);
-            } finally {
-                video.src = '';
-                video.load();
-            }
-        };
-
-        video.onerror = () => {
-            reject(new Error('视频加载失败'));
-        };
-
-        const timeoutId = setTimeout(() => {
-            video.src = '';
-            video.load();
-            reject(new Error('视频首帧提取超时'));
-        }, 5000);
-
-        video.src = videoUrl;
-    });
-}
 
 /**
  * 从GIF URL提取第一帧作为base64图片

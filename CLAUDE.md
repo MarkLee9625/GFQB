@@ -1,222 +1,208 @@
-# SWS 工法情报编辑器
-**Language**: Always respond in Chinese (Simplified). 无论处理什么任务，请始终使用简体中文回复。
+# CLAUDE.md
 
-船舶与海洋工程工法情报收集、编辑与发布系统。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+**语言**: 始终使用简体中文回复。
 
 ## 技术栈
 
-- **框架**: React 19 + TypeScript 5.8
-- **构建**: Vite 6 + TailwindCSS v4
-- **测试**: Vitest + jsdom + @testing-library/react
-- **后端**: Express (BFF 代理服务器)
-- **存储**: IndexedDB (浏览器端)
-- **AI**: DeepSeek API (通过 BFF 代理)
+React 19 + TypeScript 5.8 · Vite 6 · TailwindCSS v4 · Vitest + jsdom · Express (BFF) · IndexedDB · DeepSeek API
 
-## 项目结构
-
-```
-/
-├── App.tsx                          # 主应用组件，全局状态编排
-├── index.tsx                        # 入口文件
-├── components/                      # 顶层UI组件
-│   ├── Editor.tsx                   # 富文本编辑器(懒加载)
-│   ├── PaperView.tsx                # 纸张预览组件(封面/封底/文章渲染)
-│   ├── Sidebar.tsx                  # 侧边栏(文章列表)
-│   ├── Toolbar.tsx                  # 顶部工具栏
-│   ├── NavigationCapsule.tsx        # 上下篇导航胶囊
-│   ├── CategoryManagerModal.tsx     # 分类管理弹窗(懒加载)
-│   ├── ExportOptionsModal.tsx       # 导出选项弹窗(懒加载)
-│   ├── KeyboardShortcutsHelpModal.tsx # 快捷键帮助弹窗(懒加载)
-│   ├── ErrorBoundary.tsx            # 错误边界
-│   ├── Icons.tsx                    # SVG图标集
-│   ├── LoadingOverlay.tsx           # 加载遮罩
-│   ├── editor/                      # 编辑器子组件
-│   │   ├── EditorFooter.tsx
-│   │   ├── EditorRightPanel.tsx
-│   │   ├── FormattingToolbar.tsx
-│   │   ├── ImageToolbar.tsx
-│   │   └── hooks/                   # 编辑器Hooks
-│   │       ├── useEditorState.ts
-│   │       ├── useEditorCommands.ts
-│   │       ├── useEditorKeyboard.ts
-│   │       ├── useFileUpload.ts
-│   │       ├── useImageToolbar.ts
-│   │       └── useSelectionManager.ts
-│   └── renderers/                   # 文章渲染器
-│       ├── ArticleRenderer.tsx      # 统一渲染入口
-│       ├── CoverRenderer.tsx        # 封面渲染
-│       ├── BackRenderer.tsx         # 封底渲染
-│       ├── ContentRenderer.tsx      # 文章内容渲染
-│       └── SharedComponents.tsx
-├── hooks/                           # 业务逻辑Hooks
-│   ├── useJournal.ts                # 文章CRUD + IndexedDB持久化
-│   ├── useAppInitialization.ts      # 应用初始化(读模式/编辑模式)
-│   ├── useAiFeatures.ts             # AI: 卷首语生成 + 知识图谱
-│   ├── useExportManager.ts          # 导出管理(reader/printable/PDF)
-│   ├── useImportManager.ts          # 导入管理
-│   ├── useArticleNavigation.ts      # 文章导航(搜索/切换)
-│   ├── useKeyboardShortcuts.ts      # 全局快捷键
-│   ├── useBlobManager.ts            # Blob URL管理
-│   ├── useMemoryMonitor.ts          # 内存监控
-│   ├── usePanZoom.ts                # 平移缩放
-│   └── useInView.ts                 # 可见性检测
-├── services/                        # 服务层
-│   ├── db.ts                        # IndexedDB封装(连接/CRUD/批量)
-│   ├── aiService.ts                 # AI服务(元数据/图谱/评审/编译)
-│   └── graphCache.ts                # 知识图谱IndexedDB缓存
-├── src/
-│   ├── types/                       # 类型定义
-│   │   ├── index.ts                 # 统一导出
-│   │   ├── models.ts                # Article核心模型
-│   │   ├── blocks.ts                # ContentBlock 14种块类型
-│   │   └── ui.ts                    # UI相关类型
-│   ├── constants.ts                 # 全局常量 + 排版样式
-│   ├── index.css                    # 全局CSS + Tailwind + 打印样式
-│   ├── components/
-│   │   ├── AiCurationModal.tsx      # AI智能选题弹窗
-│   │   └── Layout/MainLayout.tsx    # 主布局(侧栏+工具栏+内容+弹窗)
-│   ├── services/
-│   │   ├── export/                  # 导出引擎
-│   │   │   ├── index.ts            # 门面统一导出
-│   │   │   ├── reader.ts           # 阅读器导出
-│   │   │   ├── reader.worker.ts    # Web Worker
-│   │   │   ├── print.ts            # 打印版导出
-│   │   │   ├── templates.ts        # HTML模板
-│   │   │   ├── pdfEngine.ts        # PDF导出引擎
-│   │   │   ├── pdfComponents.tsx    # PDF组件
-│   │   │   ├── pdf/                # PDF子模块
-│   │   │   └── utils/              # 导出工具
-│   │   ├── pdf/                    # PDF处理服务
-│   │   │   ├── index.ts            # PDF转图片
-│   │   │   └── strategies/         # 抽字策略
-│   │   └── fetchers/               # 数据抓取
-│   │       ├── rssFetcher.ts       # RSS资讯拉取
-│   │       └── patentFetcher.ts    # 专利检索
-│   └── utils/                      # 工具函数
-│       ├── fileHelpers.ts           # 文件/图片工具
-│       ├── pasteCleaner.ts          # 粘贴HTML清洗
-│       ├── blockParser.ts           # HTML→ContentBlock解析
-│       ├── graphRenderer.ts         # 知识图谱渲染器(Canvas+SVG)
-│       ├── encoding.ts              # Base64编解码
-│       └── imageMath.ts             # 图片计算
-├── server.js                        # Express BFF代理服务器
-├── scripts/
-│   ├── copy-worker.js               # Worker复制脚本
-│   └── post-build.js                # 构建后处理
-└── public/                          # 静态资源(CMap/PDF.js/字体)
-```
-
-## 核心数据流
-
-```
-用户操作 → App.tsx (状态管理) → Hooks (业务逻辑) → Services (数据处理)
-                                                        ↓
-                                              IndexedDB (持久化)
-                                                        ↓
-                                              App.tsx → 组件渲染
-```
-
-### 文章生命周期
-1. **创建**: useJournal.createArticle() → 分配ID → db.saveArticle() → 更新state
-2. **编辑**: Editor组件 → useEditorState管理表单 → 保存时触发useJournal.updateArticle()
-3. **删除**: useJournal.deleteArticle() → 封禁封面封底删除 → db.deleteArticle()
-4. **排序**: 侧栏拖拽 → reorderArticles() → 重新分配order权重 → db.clearAndBulkSaveArticles()
-
-### 导出流程
-```
-exportToPdf()  → 生成PDF Blob → 下载
-exportReaderHTML() → 生成独立阅读器HTML → 打开新窗口
-generatePrintableHTML() → 生成打印版HTML → 预览窗口
-```
-
-### AI流程
-```
-生成卷首语:
-  useAiFeatures.handleGenerateForeword()
-  → aiService.generateForeword() → buildForewordContext()
-  → callDeepSeekAPI() → 解析HTML → createArticle()
-
-提取知识图谱:
-  useAiFeatures.handleGenerateGraph()
-  → buildSuperContextForGraph() (含PDF抽字)
-  → graphCache检查 (避免重复调用)
-  → aiService.extractGlobalKnowledgeGraph()
-  → generateGraphHtml() → 创建iframe沙盒渲染 → createArticle()
-
-AI选题评审:
-  AiCurationModal → 多源导入(RSS/专利/MD) → batchEvaluateArticles()
-  → 双栏沙盘展示 → 采纳时触发onAdopt() → createArticle()
-```
-
-## 数据模型
-
-### Article (核心模型)
-```typescript
-interface Article {
-  id: number;           // 唯一ID (Date.now()生成)
-  title: string;        // 标题
-  category: string;     // 分类 (封面/封底/自定义)
-  content: string;      // HTML正文内容
-  blocks?: ContentBlock[]; // 结构化块数组(可选)
-  date?: string;
-  issueText?: string;   // 期号
-  dateText?: string;    // 日期文本
-  coverImage?: string;  // 封面图(base64)
-  backImage?: string;   // 封底图(base64)
-  scale/posX/posY?: number; // 图片定位
-  pdfData?: string;     // PDF附件(base64)
-  abstract?: string;    // 摘要
-  tags?: string[];      // 标签
-  isPublished?: boolean;
-  order?: number;       // 排序权重
-  fontSize/lineHeight?: number;
-}
-```
-
-### ContentBlock (14种块类型)
-paragraph | heading(1-6) | image | video | audio | pdf | blockquote | list(ordered/unordered) | table | code | hr | figure | rawHtml
-
-## 开发命令
+## 关键命令
 
 ```bash
-# 启动开发服务器 (BFF代理在前端代理后端)
-npm run dev        # 前端:3000 + BFF:3001
-
-# 构建生产版本
-npm run build      # 输出到dist/
-
-# 生产启动 (同时托管前端静态+API代理)
-npm start          # node server.js (端口3001)
-
-# 测试
-npm test           # vitest run
-npm run test:watch # 监听模式
-npm run test:coverage # 覆盖率报告
-
-# 后端开发
-npm run server     # 仅启动BFF代理
-npm run server:dev # nodemon热重载
+npm run dev              # Vite 开发服务器 :4512
+npm run dev:all          # 并行启动 Vite :4512 + BFF :4513
+npm run build            # 生产构建 → dist/（sync worker → vite build → post-build 内联资源）
+npm start                # 生产模式 (NODE_ENV=production node server.js)
+npm run server           # 仅启动 BFF 代理 :4513
+npm run test             # vitest run（测试文件在 src/**/*.{test,spec}.*）
+npm run test:watch       # vitest 监听模式
+npm run test:file <path> # bash scripts/test-file.sh <path>（单文件测试）
+npm run typecheck        # tsc --noEmit
+npm run test:coverage    # 仅 fileHelpers.ts + pasteCleaner.ts
 ```
+
+**开发环境需要 BFF**: `npm run dev:all` 或分两个终端跑 `npm run dev` + `npm run server`。Vite 的 `/api` 代理转发到 BFF :4513。
 
 ## 环境变量 (.env.local)
 
 ```env
-DEEPSEEK_API_KEY=sk-xxx           # DeepSeek API密钥
-PROXY_SECRET=sws-gongfa-proxy-xxx # BFF代理认证密钥
+DEEPSEEK_API_KEY=sk-xxx           # BFF 后端专用，绝不能加 VITE_ 前缀
+PROXY_SECRET=sws-gongfa-proxy-xxx # BFF 鉴权密钥
 ```
 
-## 设计模式
+## 架构核心
 
-1. **门面模式**: `src/services/export/index.ts` 统一导出所有导出功能
-2. **组合模式**: `ArticleRenderer` 根据类别分发到 Cover/Back/Content 渲染器
-3. **策略模式**: `src/services/pdf/strategies/` 多种PDF抽字策略
-4. **双重引擎**: RSS抓取对应两种爬取引擎(rss2json + AllOrigins代理)
-5. **内容-显示分离**: content(HTML) + blocks(结构化) 双存储，按需使用
+### 数据流
+
+```
+用户操作 → App.tsx（状态中枢，唯一 state 集中地）→ Hooks（业务逻辑）→ Services（数据处理）
+                                                                        ↓
+                                                                IndexedDB（db.ts 单例）
+                                                                        ↓
+                                                                App.tsx → 组件渲染
+```
+
+**App.tsx 是唯一状态中枢**: 所有顶层 state 和 useCallback 在此定义，通过 props 下传。无 Redux，纯 React Hooks。
+
+**useJournal** (`hooks/useJournal.ts`) 是业务数据核心入口，掌管 articles 数组的 CRUD + IndexedDB 持久化。
+
+### 懒加载策略
+
+Editor、KeyboardShortcutsHelpModal、CategoryManagerModal、ExportOptionsModal、AiCurationModal 均用 `React.lazy()` + `Suspense` 包裹。`loading` 状态结束后自动触发预加载（`App.tsx:149-158`）。
+
+### 编辑器架构
+
+`components/Editor.tsx` 是核心富文本编辑器，其逻辑拆分为 6 个专用 hook（`components/editor/hooks/`）:
+- **useEditorState** — content HTML、blocks、脏标记
+- **useEditorCommands** — 命令执行、格式化、撤销重做
+- **useEditorKeyboard** — 快捷键
+- **useFileUpload** — 文件上传与 WebP 压缩
+- **useImageToolbar** — 图片选中工具栏
+- **useSelectionManager** — 光标/选区管理
+
+### 渲染器
+
+`ArticleRenderer`（`components/renderers/ArticleRenderer.tsx`）按 `article.category` 分发：
+- `CoverRenderer` — category='封面'
+- `BackRenderer` — category='封底'
+- `ContentRenderer` — 其他 category
+
+### BFF 代理安全
+
+`server.js`（Express）:
+- `POST /api/deepseek/generate` 接收前端请求 → `x-sws-proxy-secret` 头鉴权 → 转发 DeepSeek API
+- API Key 不暴露到前端
+- 生产模式同时托管 `dist/` 静态资源
+- 300s 上游超时，SIGTERM/SIGINT 优雅关闭
+- 请求体限制 5MB
+
+### 构建后内联
+
+`scripts/post-build.js` 在 `vite build` 后执行，将所有外部依赖（JS/CSS/字体/图片，包括 10MB+ PDF.js Worker）转为 Base64 内联到单个 HTML。导出的离线阅读器因此可真正单文件离线使用。
+
+### 其他脚本
+
+`scripts/` 目录：
+- `copy-worker.js` — 构建前复制 PDF.js worker（`npm run sync:worker`）
+- `start-all.sh` — 并行启动 Vite + BFF（`npm run dev:all`）
+- `test-file.sh` — 单文件测试（`npm run test:file <path>`）
+- `check-env.sh` — 环境变量检查
+- `post-build.js` — 构建后内联资源
+- `create-pptx.mjs` — 导出 PPTX
+
+### 导出引擎（三引擎架构）
+
+`src/services/export/`:
+- **reader** — 生成单 HTML 离线阅读器（含 Base64 内联资源 + 全文检索）
+- **print** — 生成打印优化版 HTML（A4 分页、隐藏 UI 元素）
+- **pdf** — 通过 `@react-pdf/renderer` + `pdf-lib` 生成 PDF，含封面/封底/目录/页眉页脚
+
+`index.ts` 作为门面统一导出三个引擎。
+
+### PDF 解析
+
+`src/services/pdf/` — 多策略模式（`strategies/` 目录）:
+- **abstract** — 提取摘要
+- **keywords** — 提取关键词
+- **title** — 提取标题
+- **wrapper.ts** — PDF.js 封装
+
+### 数据源抓取
+
+`src/services/fetchers/`:
+- `rssFetcher.ts` — RSS 源抓取
+- `patentFetcher.ts` — 专利数据抓取
+
+### 知识图谱
+
+`src/utils/graph/` 包含:
+- **QuadTree** — 空间索引加速
+- **ForceEngine** — 力导向布局
+- **Canvas 渲染** — 交互式图谱
+- **graphRenderer.ts** — 知识图谱 HTML 组装（~54KB）
+
+**⚠️ 特殊架构：代码生成注入模式**
+`graphEngine.ts` 和 `Renderer.ts` 不是标准 TS 模块，它们导出 `generateGraphEngineCode()` / `generateRendererCode()` 函数，返回 **JS 源码字符串**。实际 D3/Canvas 代码嵌入在模板字面量内部，通过 `graphRenderer.ts` 组装后注入 iframe 的 `srcdoc` 中运行。编辑时必须注意：
+- 模板字面量内严禁出现反引号 `` ` `` 和 `${}` 语法（会导致外层模板提前闭合）
+- 字符串拼接一律使用 `+`
+- 生成的代码是 ES5 风格（`var`、`function`、`''` 字符串）
+
+`services/graphCache.ts` 提供 IndexedDB LRU 缓存。
+
+## 数据模型
+
+### Article（核心实体，`src/types/models.ts`）
+
+```typescript
+interface Article {
+  id: number;              // Date.now() * 1000 + 自增计数器
+  title: string;
+  category: ArticleCategory; // '封面' | '封底' | string
+  content: string;         // HTML 正文
+  blocks?: ContentBlock[]; // 结构化块，双存储互补
+  date?: string;
+  issueText?: string;      // 期号
+  dateText?: string;       // 日期文本
+  coverImage?: string | null;  // base64
+  backImage?: string | null;
+  scale?: number; posX?: number; posY?: number; // 封面/封底图片平移缩放
+  pdfData?: string | null;
+  abstract?: string | null;
+  tags?: string[];
+  isPublished?: boolean;
+  order?: number;          // 排序权重，封面=0，封底=99999
+  fontSize?: number;
+  lineHeight?: number;
+}
+```
+
+### ContentBlock（13 种联合类型，`src/types/blocks.ts`）
+
+`paragraph | heading(1-6) | image | video | audio | pdf | blockquote | list(ordered/unordered) | table | code | hr | figure | rawHtml`。每种都有 `id: string` + `type`。
+
+### UniversalArticleMeta（AI 选题，`src/types/intelligence.ts`）
+
+```typescript
+{ id, sourceType: 'wechat'|'rss'|'patent'|'aip', sourceName, title, content, url?, publishDate?, aiSummary?, reason?, tags?, decision: 'pending'|'recommend'|'reject' }
+```
 
 ## 关键约定
 
-- **封面/封底**: id任意但category固定为'封面'/'封底'，order强制置顶/置底
-- **图片压缩**: 统一转为WebP格式，默认maxWidth=1200, quality=0.8
-- **文章ID**: 使用 `Date.now() * 1000 + 计数器` 生成，不依赖数据库自增
-- **排序**: 普通文章按 order 升序，封面 order=0, 封底 order=99999
-- **数据存储**: 文章以 `article-{id}` 为key存IndexedDB，配置以`config-{key}`存储
+- **ID**: `Date.now() * 1000 + 自增计数器`
+- **封面/封底**: category 固定不变，order 强制 0/99999，禁止删除（`isSpecialCategory` 判断）
+- **排序**: 普通文章按 `order` 升序
+- **图片**: 统一 WebP，maxWidth=1200（封面/封底 2400px + quality=0.92）。`src/utils/fileHelpers.ts`
+- **IndexedDB**: 库名 `SWS_DATABASE_REACT`，单表 `journal_store`，key 格式 `article-{id}` 或 `config-{key}`
+- **存储**: content（HTML）为主，blocks 按需结构化解析，双存储互补
+- **Vite**: `base: './'`（相对路径）、`target: 'esnext'`、chunkSizeWarningLimit=1000KB
+- **路径别名**: `@/` → 项目根目录
+- **样式**: 全局 CSS 常量 `CONSTANTS.UNIFIED_STYLES` 在 `src/constants.ts`，含强制中文排版规则（首行缩进 2 字符、图片居中、标题无缩进等）
+
+## 类型配置要点
+
+`strict: true`，但放宽了 `noImplicitAny`、`noUnusedLocals`、`noUnusedParameters` 等。`noEmit: true`。
+
+## 测试
+
+- 环境: jsdom + globals（`src/__tests__/testSetup.ts` mock IntersectionObserver, FileReader, Image）
+- 覆盖率范围: 仅 `src/utils/fileHelpers.ts` + `src/utils/pasteCleaner.ts`
+- 运行单文件: `npm run test:file src/utils/someFile.test.ts`
+
+## 设计模式
+
+- **门面**: `src/services/export/index.ts` 统一导出三个导出引擎
+- **组合**: `ArticleRenderer` 按 category 分发到 Cover/Back/Content
+- **策略**: PDF 抽字多策略（`src/services/pdf/strategies/`）
+- **内容-显示分离**: content(HTML) + blocks(结构化) 双存储
+- **单例**: `services/db.ts` DBService 单例
+- **LRU 缓存**: `services/graphCache.ts`
+
+## Wiki 项目卡片规则
+
+每次完成编码任务后，如果本次改动涉及**架构决策、技术选型变更、踩坑解决、或新增功能模块**，请同时更新 wiki 项目卡片。
+
+- **卡片路径**：`../wiki/项目/工法情报编辑器.md`
+- **内容规则**：只写决策理由、踩坑记录、架构变化，不写代码实现细节
+- **何时跳过**：纯 bugfix、重构不改设计、文档拼写修正、依赖升级

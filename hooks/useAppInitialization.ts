@@ -62,7 +62,7 @@ export function useAppInitialization({
         }
 
         if (db.getConnectionState() !== 'connected') await db.init();
-        const storedData = await db.load(CONSTANTS.KEY);
+        const storedData = await db.load<Record<string, any>>(CONSTANTS.KEY);
         if (storedData) {
           setLogo(storedData.logo || '');
           setSidebarMeta(storedData.sidebarMetaText || '[部门/内容]');

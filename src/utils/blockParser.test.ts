@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { htmlToBlocks } from './blockParser';
-import type { ContentBlock, HeadingBlock, TextBlock, ImageBlock, BlockquoteBlock, ListBlock, HrBlock, CodeBlock, FigureBlock, TableBlock, VideoBlock, AudioBlock } from '../types/blocks';
+import type { ContentBlock, HeadingBlock, TextBlock, ImageBlock, BlockquoteBlock, ListBlock, HrBlock, CodeBlock, FigureBlock, TableBlock, VideoBlock, AudioBlock } from '../types';
 
 describe('htmlToBlocks', () => {
   describe('A. 纯净文本解析', () => {

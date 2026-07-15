@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useDeferredValue, useCallback, useRef } from 'react';
-import { Article } from '../../../src/types/models';
+import type { Article } from '../../../src/types';
 
 interface UseEditorStateOptions {
   isOpen: boolean;
@@ -43,15 +43,9 @@ export function useEditorState({ isOpen, article, categories }: UseEditorStateOp
 
   useEffect(() => {
     localStorage.setItem('SWS_IMG_COMPRESS_QUALITY', String(imgCompressQuality));
-  }, [imgCompressQuality]);
-
-  useEffect(() => {
     localStorage.setItem('SWS_IMG_COMPRESS_MAX_WIDTH', String(imgCompressMaxWidth));
-  }, [imgCompressMaxWidth]);
-
-  useEffect(() => {
     localStorage.setItem('SWS_IMG_COMPRESS_FORMAT', imgCompressFormat);
-  }, [imgCompressFormat]);
+  }, [imgCompressQuality, imgCompressMaxWidth, imgCompressFormat]);
 
   const articleRef = useRef(article);
   articleRef.current = article;

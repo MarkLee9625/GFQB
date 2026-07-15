@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工法情报编辑器 — 船舶与海洋工程知识平台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0a1628;
+    --navy-light: #132240;
+    --steel: #1e3a5f;
+    --ocean: #1a6b8a;
+    --wave: #2a9d8f;
+    --amber: #e9a820;
+    --amber-glow: rgba(233,168,32,0.15);
+    --gold: #f0b429;
+    --slate: #64748b;
+    --slate-light: #94a3b8;
+    --frost: #e2e8f0;
+    --white: #f8fafc;
+    --grain: rgba(255,255,255,0.03);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: var(--navy);
+    color: var(--frost);
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  /* ===== Noise Grain Overlay ===== */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 9999;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+  }
+
+  /* ===== Canvas Background ===== */
+  #heroCanvas {
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  /* ===== Navigation ===== */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 100;
+    padding: 1.2rem 3rem;
+    display: flex; justify-content: space-between; align-items: center;
+    transition: all 0.4s cubic-bezier(0.4,0,0.2,1);
+  }
+  nav.scrolled {
+    background: rgba(10,22,40,0.85);
+    backdrop-filter: blur(20px) saturate(1.3);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 0.8rem 3rem;
+  }
+  .nav-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem;
+    letter-spacing: 0.08em;
+    color: var(--white);
+    text-decoration: none;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .nav-logo span { color: var(--amber); }
+  .nav-links { display: flex; gap: 2.5rem; align-items: center; }
+  .nav-links a {
+    color: var(--slate-light);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    transition: color 0.3s;
+    position: relative;
+  }
+  .nav-links a::after {
+    content: '';
+    position: absolute; left: 0; bottom: -4px;
+    width: 0; height: 2px;
+    background: var(--amber);
+    transition: width 0.3s cubic-bezier(0.4,0,0.2,1);
+  }
+  .nav-links a:hover { color: var(--white); }
+  .nav-links a:hover::after { width: 100%; }
+
+  /* ===== Hero Section ===== */
+  .hero {
+    position: relative; z-index: 1;
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    justify-content: center;
+    padding: 0 6rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center;
+    gap: 0.5rem;
+    background: rgba(233,168,32,0.1);
+    border: 1px solid rgba(233,168,32,0.2);
+    padding: 0.4rem 1rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--amber);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+    width: fit-content;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.3s forwards;
+  }
+  .hero-badge .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .hero h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(4rem, 10vw, 8rem);
+    line-height: 0.92;
+    letter-spacing: 0.03em;
+    color: var(--white);
+    max-width: 900px;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.5s forwards;
+  }
+  .hero h1 .highlight {
+    background: linear-gradient(135deg, var(--amber), var(--gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero h1 .outline {
+    -webkit-text-stroke: 1.5px var(--white);
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  .hero-sub {
+    font-size: 1.15rem;
+    font-weight: 300;
+    color: var(--slate-light);
+    max-width: 560px;
+    margin-top: 1.5rem;
+    line-height: 1.8;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.7s forwards;
+  }
+
+  .hero-actions {
+    display: flex; gap: 1rem;
+    margin-top: 2.5rem;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.9s forwards;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.6rem;
+    padding: 0.85rem 2rem;
+    border-radius: 8px;
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+    cursor: pointer; border: none;
+    position: relative; overflow: hidden;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--amber), var(--gold));
+    color: var(--navy);
+    box-shadow: 0 4px 20px var(--amber-glow);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px var(--amber-glow);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--white);
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .btn-secondary:hover {
+    border-color: var(--amber);
+    color: var(--amber);
+    transform: translateY(-2px);
+  }
+
+  /* ===== Stats Bar ===== */
+  .stats-bar {
+    position: relative; z-index: 1;
+    display: flex;
+    gap: 0;
+    padding: 0 6rem;
+    max-width: 1400px;
+    margin: -2rem auto 0;
+    opacity: 0;
+    animation: fadeUp 0.8s 1.1s forwards;
+  }
+  .stat-item {
+    flex: 1;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    padding: 2rem 1.5rem;
+    display: flex; flex-direction: column;
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-number {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.8rem;
+    line-height: 1;
+    color: var(--amber);
+  }
+  .stat-label {
+    font-size: 0.8rem;
+    color: var(--slate-light);
+    margin-top: 0.3rem;
+    font-weight: 300;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== Section Common ===== */
+  section {
+    position: relative; z-index: 1;
+    padding: 8rem 6rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .section-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--amber);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+  .section-title {
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 1rem;
+    line-height: 1.2;
+  }
+  .section-desc {
+    font-size: 1.05rem;
+    font-weight: 300;
+    color: var(--slate-light);
+    max-width: 600px;
+    line-height: 1.8;
+    margin-bottom: 3rem;
+  }
+
+  /* ===== Features ===== */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+  .feature-card {
+    background: linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    transition: all 0.4s cubic-bezier(0.4,0,0.2,1);
+    position: relative;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  .feature-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .feature-card:hover {
+    border-color: rgba(233,168,32,0.2);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .feature-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--amber), transparent);
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+  .feature-card:hover::before { opacity: 1; }
+
+  .feature-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 1.5rem;
+    background: rgba(233,168,32,0.08);
+    border: 1px solid rgba(233,168,32,0.12);
+  }
+  .feature-card h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 0.6rem;
+  }
+  .feature-card p {
+    font-size: 0.88rem;
+    font-weight: 300;
+    color: var(--slate-light);
+    line-height: 1.7;
+  }
+  .feature-card .tag {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: rgba(42,157,143,0.12);
+    color: var(--wave);
+    border: 1px solid rgba(42,157,143,0.15);
+  }
+
+  /* ===== Architecture ===== */
+  .arch-section { background: rgba(255,255,255,0.02); border-radius: 24px; padding: 4rem; margin-top: -2rem; }
+
+  .arch-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin: 2rem 0;
+  }
+  .arch-node {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 1.2rem 1.8rem;
+    text-align: center;
+    min-width: 120px;
+    transition: all 0.3s;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  .arch-node.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .arch-node:hover {
+    border-color: var(--amber);
+    background: rgba(233,168,32,0.05);
+  }
+  .arch-node .icon { font-size: 1.5rem; margin-bottom: 0.4rem; }
+  .arch-node .name { font-size: 0.8rem; font-weight: 600; color: var(--frost); }
+  .arch-node .desc { font-size: 0.7rem; color: var(--slate-light); margin-top: 0.2rem; }
+  .arch-arrow {
+    font-size: 1.2rem;
+    color: var(--amber);
+    opacity: 0.4;
+    flex-shrink: 0;
+  }
+
+  /* ===== Tech Stack ===== */
+  .tech-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    justify-content: center;
+    margin-top: 2rem;
+  }
+  .tech-item {
+    padding: 0.6rem 1.2rem;
+    border-radius: 100px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: var(--slate-light);
+    transition: all 0.3s;
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  .tech-item.visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .tech-item:hover {
+    border-color: var(--amber);
+    color: var(--amber);
+    background: rgba(233,168,32,0.06);
+  }
+  .tech-item.featured {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+
+  /* ===== Divider ===== */
+  .divider {
+    position: relative; z-index: 1;
+    height: 1px;
+    max-width: 1200px;
+    margin: 0 auto;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  }
+
+  /* ===== Footer ===== */
+  footer {
+    position: relative; z-index: 1;
+    text-align: center;
+    padding: 4rem 2rem;
+    font-size: 0.8rem;
+    color: var(--slate);
+  }
+  footer .footer-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem;
+    letter-spacing: 0.08em;
+    color: var(--white);
+    margin-bottom: 0.5rem;
+  }
+  footer .footer-logo span { color: var(--amber); }
+
+  /* ===== Animations ===== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ===== Scrollbar ===== */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--navy); }
+  ::-webkit-scrollbar-thumb { background: var(--steel); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--slate); }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 900px) {
+    .hero { padding: 0 2rem; }
+    .hero h1 { font-size: clamp(2.8rem, 12vw, 4.5rem); }
+    .features-grid { grid-template-columns: 1fr; }
+    .stats-bar { flex-direction: column; padding: 0 2rem; }
+    .stat-item { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); padding: 1.2rem 0; }
+    section { padding: 4rem 2rem; }
+    .nav-links { display: none; }
+    nav { padding: 1rem 2rem; }
+    nav.scrolled { padding: 0.8rem 2rem; }
+    .arch-flow { flex-direction: column; }
+    .arch-arrow { transform: rotate(90deg); }
+    .arch-section { padding: 2rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Canvas Background -->
+<canvas id="heroCanvas"></canvas>
+
+<!-- Navigation -->
+<nav id="navbar">
+  <a href="#" class="nav-logo">SWS <span>✦</span> 工法情报</a>
+  <div class="nav-links">
+    <a href="#features">核心功能</a>
+    <a href="#architecture">系统架构</a>
+    <a href="#tech">技术栈</a>
+    <a href="#" class="btn-primary" style="padding:0.5rem 1.2rem; font-size:0.8rem;">启动应用</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    v2.0 — 船舶与海洋工程知识平台
+  </div>
+  <h1>
+    <span class="outline">工法情报</span><br>
+    <span class="highlight">编辑器</span>
+  </h1>
+  <p class="hero-sub">
+    集富文本编辑、知识图谱、AI 选题于一体的工法情报工作台。<br>
+    从技术文献中提取知识，以图谱编织洞见。
+  </p>
+  <div class="hero-actions">
+    <a href="#" class="btn btn-primary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      立即使用
+    </a>
+    <a href="#features" class="btn btn-secondary">
+      了解更多
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- Stats -->
+<div class="stats-bar">
+  <div class="stat-item">
+    <span class="stat-number">14</span>
+    <span class="stat-label">内容块类型</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-number">5</span>
+    <span class="stat-label">节点分类维度</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-number">3</span>
+    <span class="stat-label">AI 提取阶段</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-number">∞</span>
+    <span class="stat-label">知识图谱深度</span>
+  </div>
+</div>
+
+<!-- Features -->
+<section id="features">
+  <div class="section-label">Core Features</div>
+  <h2 class="section-title">不止于编辑，<br>重新定义工法情报管理</h2>
+  <p class="section-desc">
+    从内容创作到知识萃取，覆盖工法情报全生命周期。
+  </p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">📝</div>
+      <h3>富文本编辑器</h3>
+      <p>支持 14 种内容块类型：段落、标题、图片、视频、表格、代码、PDF 嵌入等。所见即所得，排版自由。</p>
+      <span class="tag">Content</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🕸️</div>
+      <h3>知识图谱可视化</h3>
+      <p>AI 自动从全刊内容提取技术节点与关系，Canvas 动态沙盘渲染，支持缩放、拖拽、下钻与溯源检索。</p>
+      <span class="tag">Knowledge Graph</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🤖</div>
+      <h3>AI 智能选题</h3>
+      <p>多源导入（RSS / 专利 / Markdown），AI 批量评审选题价值，双栏沙盘推演，高效决策。</p>
+      <span class="tag">AI Curation</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📄</div>
+      <h3>PDF 导入 · 导出</h3>
+      <p>PDF 转图片嵌入、文字抽离多策略引擎。支持导出为阅读器 HTML、打印版、标准 PDF 文档。</p>
+      <span class="tag">Export</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📡</div>
+      <h3>RSS 资讯抓取</h3>
+      <p>双引擎容灾架构（rss2json + AllOrigins 代理），自动拉取行业资讯，关键词过滤与批量入库。</p>
+      <span class="tag">Fetcher</span>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>离线 · 高性能</h3>
+      <p>IndexedDB 本地持久化，LRU 图谱缓存，Web Worker 导出引擎，BFF 代理架构保障安全。</p>
+      <span class="tag">Architecture</span>
+    </div>
+  </div>
+</section>
+
+<!-- Divider -->
+<div class="divider"></div>
+
+<!-- Architecture -->
+<section id="architecture">
+  <div class="section-label">System Architecture</div>
+  <h2 class="section-title">数据流转 · 一目了然</h2>
+  <p class="section-desc">
+    用户操作经由 React 状态管理层分发，业务逻辑与数据持久化清晰分离。
+  </p>
+
+  <div class="arch-section">
+    <div class="arch-flow">
+      <div class="arch-node"><div class="icon">👤</div><div class="name">用户操作</div><div class="desc">编辑 / 导航 / 导出</div></div>
+      <div class="arch-arrow">▶</div>
+      <div class="arch-node"><div class="icon">⚛️</div><div class="name">App.tsx</div><div class="desc">全局状态编排</div></div>
+      <div class="arch-arrow">▶</div>
+      <div class="arch-node"><div class="icon">🪝</div><div class="name">业务 Hooks</div><div class="desc">CRUD / AI / 导出</div></div>
+      <div class="arch-arrow">▶</div>
+      <div class="arch-node"><div class="icon">⚙️</div><div class="name">Services</div><div class="desc">IndexedDB / AI / 缓存</div></div>
+    </div>
+
+    <div style="margin-top:3rem;">
+      <div class="section-label" style="text-align:center;">AI 知识图谱提取流水线</div>
+      <div class="arch-flow" style="margin-top:1rem;">
+        <div class="arch-node"><div class="icon">📖</div><div class="name">全文构建</div><div class="desc">文章 + PDF 合并</div></div>
+        <div class="arch-arrow">▶</div>
+        <div class="arch-node"><div class="icon">🔍</div><div class="name">Phase 1</div><div class="desc">节点提取 50-80 个</div></div>
+        <div class="arch-arrow">▶</div>
+        <div class="arch-node"><div class="icon">🔗</div><div class="name">Phase 2</div><div class="desc">关系挖掘 3-5×</div></div>
+        <div class="arch-arrow">▶</div>
+        <div class="arch-node"><div class="icon">🧹</div><div class="name">Phase 3</div><div class="desc">孤立节点补充</div></div>
+        <div class="arch-arrow">▶</div>
+        <div class="arch-node"><div class="icon">🖼️</div><div class="name">渲染</div><div class="desc">Canvas 沙盘</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Divider -->
+<div class="divider"></div>
+
+<!-- Tech Stack -->
+<section id="tech">
+  <div class="section-label">Technology</div>
+  <h2 class="section-title">现代技术栈 · 稳固可靠</h2>
+  <p class="section-desc">
+    React 19 + TypeScript 驱动，Vite 构建，Express BFF 代理，全面拥抱现代 Web 标准。
+  </p>
+  <div class="tech-cloud">
+    <span class="tech-item featured">React 19</span>
+    <span class="tech-item featured">TypeScript</span>
+    <span class="tech-item">Vite 6</span>
+    <span class="tech-item">TailwindCSS v4</span>
+    <span class="tech-item">Canvas 2D</span>
+    <span class="tech-item">IndexedDB</span>
+    <span class="tech-item">DeepSeek API</span>
+    <span class="tech-item">Express BFF</span>
+    <span class="tech-item">Vitest</span>
+    <span class="tech-item">QuadTree</span>
+    <span class="tech-item">Barnes-Hut</span>
+    <span class="tech-item">Web Worker</span>
+    <span class="tech-item">ResizeObserver</span>
+    <span class="tech-item">PDF.js</span>
+  </div>
+</section>
+
+<!-- Divider -->
+<div class="divider"></div>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-logo">SWS <span>✦</span> 工法情报</div>
+  <p>船舶与海洋工程工法情报收集 · 编辑 · 发布系统</p>
+  <p style="margin-top:0.5rem;">&copy; 2026 — Built with React + TypeScript</p>
+</footer>
+
+<script>
+  // ===== Canvas: Nautical Particle System =====
+  const canvas = document.getElementById('heroCanvas');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  let mouseX = 0, mouseY = 0;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  class Particle {
+    constructor() { this.reset(); }
+    reset() {
+      this.x = Math.random() * canvas.width;
+      this.y = Math.random() * canvas.height;
+      this.size = Math.random() * 2 + 0.5;
+      this.speedX = (Math.random() - 0.5) * 0.3;
+      this.speedY = (Math.random() - 0.5) * 0.3;
+      this.opacity = Math.random() * 0.5 + 0.1;
+      this.pulse = Math.random() * Math.PI * 2;
+      this.pulseSpeed = 0.005 + Math.random() * 0.01;
+    }
+    update() {
+      this.pulse += this.pulseSpeed;
+      this.x += this.speedX + Math.sin(this.pulse * 0.5) * 0.1;
+      this.y += this.speedY + Math.cos(this.pulse * 0.3) * 0.1;
+      const dx = this.x - mouseX;
+      const dy = this.y - mouseY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 150) {
+        this.x += (dx / dist) * 0.3;
+        this.y += (dy / dist) * 0.3;
+      }
+      if (this.x < 0 || this.x > canvas.width) this.reset();
+      if (this.y < 0 || this.y > canvas.height) this.reset();
+    }
+    draw() {
+      const alpha = this.opacity * (0.7 + 0.3 * Math.sin(this.pulse));
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(233, 168, 32, ${alpha})`;
+      ctx.fill();
+    }
+  }
+
+  const count = Math.min(120, Math.floor(canvas.width * canvas.height / 8000));
+  for (let i = 0; i < count; i++) particles.push(new Particle());
+
+  // Connection lines
+  function drawConnections() {
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 160) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(233, 168, 32, ${0.06 * (1 - dist / 160)})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => { p.update(); p.draw(); });
+    drawConnections();
+    requestAnimationFrame(animate);
+  }
+
+  document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+  animate();
+
+  // ===== Scroll Reveal =====
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        // If it's the features grid, stagger children
+        if (entry.target.classList.contains('features-grid')) {
+          const cards = entry.target.querySelectorAll('.feature-card');
+          cards.forEach((card, i) => {
+            setTimeout(() => card.classList.add('visible'), i * 100);
+          });
+        }
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+  // Observe feature cards individually
+  document.querySelectorAll('.feature-card').forEach(el => observer.observe(el));
+  // Observe arch nodes
+  document.querySelectorAll('.arch-node').forEach(el => observer.observe(el));
+  // Observe tech items with stagger
+  document.querySelectorAll('.tech-item').forEach((el, i) => {
+    observer.observe(el);
+  });
+
+  // ===== Navbar scroll effect =====
+  window.addEventListener('scroll', () => {
+    const nav = document.getElementById('navbar');
+    if (window.scrollY > 60) nav.classList.add('scrolled');
+    else nav.classList.remove('scrolled');
+  });
+
+  // ===== Smooth anchor scroll =====
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+</script>
+</body>
+</html>

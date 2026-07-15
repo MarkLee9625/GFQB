@@ -1,4 +1,4 @@
-import { Article } from '../src/types/models';
+import type { Article } from '../src/types';
 import { CONSTANTS } from '../src/constants';
 
 // 数据库连接状态
@@ -17,7 +17,7 @@ interface DBPerformanceMetrics {
   operationsCount: number;
 }
 
-class DBService {
+export class DBService {
   private db: IDBDatabase | null = null;
   private connectionState: DBConnectionState = DBConnectionState.DISCONNECTED;
   private performanceMetrics: DBPerformanceMetrics = {
@@ -114,7 +114,7 @@ class DBService {
   }
 
   // 保存数据（带性能监控）
-  save(key: string, value: any): Promise<boolean> {
+  save<T>(key: string, value: T): Promise<boolean> {
     const startTime = performance.now();
 
     return new Promise((resolve, reject) => {
@@ -154,7 +154,7 @@ class DBService {
   }
 
   // 加载数据（带性能监控）
-  load(key: string): Promise<any> {
+  load<T>(key: string): Promise<T | null> {
     const startTime = performance.now();
 
     return new Promise((resolve) => {
@@ -185,36 +185,6 @@ class DBService {
         resolve(null);
       }
     });
-  }
-
-  // 批量保存（优化性能）
-  async saveBatch(items: Array<{ key: string, value: any }>): Promise<boolean[]> {
-    if (!this.db) {
-      throw new Error("数据库未初始化");
-    }
-
-    const results: boolean[] = [];
-    const tx = this.db.transaction(CONSTANTS.DB_STORE, "readwrite");
-    const store = tx.objectStore(CONSTANTS.DB_STORE);
-
-    const promises = items.map((item, index) => {
-      return new Promise<boolean>((resolve) => {
-        const request = store.put(item.value, item.key);
-
-        request.onsuccess = () => {
-          results[index] = true;
-          resolve(true);
-        };
-
-        request.onerror = () => {
-          results[index] = false;
-          resolve(false);
-        };
-      });
-    });
-
-    await Promise.all(promises);
-    return results;
   }
 
   // 清除所有数据
@@ -279,16 +249,6 @@ class DBService {
     });
   }
 
-  // 获取配置
-  async getConfig(key: string): Promise<any> {
-    return this.load(`config-${key}`);
-  }
-
-  // 保存配置
-  async saveConfig(key: string, value: any): Promise<void> {
-    await this.save(`config-${key}`, value);
-  }
-
   // 原子化：清空并批量保存文章
   async clearAndBulkSaveArticles(articles: Article[]): Promise<void> {
     if (!this.db) await this.init();
@@ -319,24 +279,7 @@ class DBService {
     });
   }
 
-  // 关闭数据库连接
-  close(): void {
-    if (this.db) {
-      this.db.close();
-      this.db = null;
-      this.connectionState = DBConnectionState.DISCONNECTED;
-    }
-  }
-
-  // 重新连接数据库
-  async reconnect(): Promise<IDBDatabase> {
-    this.close();
-    return this.init();
-  }
 }
 
 export const db = new DBService();
-
-// 移除已移动到 utils/fileHelpers.ts 的通用函数: compressImage, fileToDataURL, base64ToBlob
-// 移除已移动到 src/services/pdf/index.ts 的 convertPdfToImages 
 

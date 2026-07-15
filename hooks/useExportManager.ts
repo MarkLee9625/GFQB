@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from 'react';
-import { Article } from '../src/types/models';
+import type { Article } from '../src/types';
 import { generateReaderHTML, generatePrintableHTML, exportToPdf, exportReaderHTML, PdfExportOptions } from '../src/services/export';
 
 interface UseExportManagerOptions {
@@ -77,10 +77,22 @@ export function useExportManager({
         await exportReaderHTML(articles, options, { logo, sidebarMeta }, onProgress);
       } else {
         onProgress?.(0, '开始生成打印版...');
+        // 在 await 之前立即打开空白窗口，保留用户手势，防止弹窗拦截
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+          alert('弹窗被浏览器拦截，请允许此站点弹出窗口后重试。');
+          return;
+        }
+        printWindow.document.title = '正在生成打印版...';
+        const pEl = printWindow.document.createElement('p');
+        pEl.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#999;font-size:14px;';
+        pEl.textContent = '正在为您准备打印版，请稍候...';
+        printWindow.document.body.appendChild(pEl);
+
         const htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
         onProgress?.(90, '正在打开预览...');
         const url = createExportBlob(htmlContent);
-        window.open(url, '_blank');
+        printWindow.location.href = url;
         onProgress?.(100, '打印版生成完成');
       }
     } catch (error) {
@@ -90,14 +102,14 @@ export function useExportManager({
     }
   }, [articles, logo, sidebarMeta, createExportBlob]);
 
-  const handleExport = useCallback((isReader: boolean, categories: string[]) => {
+  const handleExport = useCallback((isReader: boolean, categories?: string[]) => {
     if (isReader) {
       openExportOptionsModal();
       return;
     }
 
     const safeArticles = JSON.stringify(articles).replace(/-->/g, '--\\u003e');
-    const safeCategories = JSON.stringify(categories).replace(/-->/g, '--\\u003e');
+    const safeCategories = JSON.stringify(categories || []).replace(/-->/g, '--\\u003e');
     const content = `<!-- DATA START ${safeArticles} DATA END -->` +
       `<!-- LOGO START ${logo} LOGO END -->` +
       `<!-- CAT START ${safeCategories} CAT END -->` +

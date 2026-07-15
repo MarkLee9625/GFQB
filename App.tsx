@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
-import { Article } from './src/types/models';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useReducer, Suspense } from 'react';
+import type { Article } from './src/types';
 import { CONSTANTS, isSpecialCategory } from './src/constants';
 import { db } from './services/db';
 import { compressImage, fileToDataURL } from './src/utils/fileHelpers';
@@ -62,23 +62,19 @@ const NavigationCapsuleMemo = React.memo(({
   onNavigate: (dir: 'prev' | 'next') => void;
   onShowShortcutsHelp: () => void;
 }) => {
-  const navInfo = useMemo(() => {
-    const idx = sortedArticles.findIndex(a => a.id === currentId);
-    return {
-      prev: idx > 0 ? sortedArticles[idx - 1] : null,
-      next: idx > -1 && idx < sortedArticles.length - 1 ? sortedArticles[idx + 1] : null,
-      isSpecial: isSpecialCategory(currentArticle?.category),
-    };
-  }, [sortedArticles, currentId, currentArticle?.category]);
+  const idx = sortedArticles.findIndex(a => a.id === currentId);
+  const prev = idx > 0 ? sortedArticles[idx - 1] : null;
+  const next = idx > -1 && idx < sortedArticles.length - 1 ? sortedArticles[idx + 1] : null;
+  const isSpecial = isSpecialCategory(currentArticle?.category);
 
   return (
     <NavigationCapsule
       onPrev={() => onNavigate('prev')}
       onNext={() => onNavigate('next')}
       onShowShortcutsHelp={onShowShortcutsHelp}
-      prevTitle={navInfo.prev?.title}
-      nextTitle={navInfo.next?.title}
-      isSpecialPage={navInfo.isSpecial}
+      prevTitle={prev?.title}
+      nextTitle={next?.title}
+      isSpecialPage={isSpecial}
     />
   );
 });
@@ -101,22 +97,69 @@ const AppContent: React.FC = () => {
   const [sidebarMeta, setSidebarMeta] = useState('[部门/内容]');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [isEditMode, setIsEditMode] = useState(true);
-  const [isSidebarHidden, setIsSidebarHidden] = useState(false);
-  const [isImmersive, setIsImmersive] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [isCatManagerOpen, setIsCatManagerOpen] = useState(false);
-  const [useAlternateDesign, setUseAlternateDesign] = useState(false);
   const [importProgress, setImportProgress] = useState<{ stage: string, details: string } | null>(null);
-  const [isAiCurationModalOpen, setIsAiCurationModalOpen] = useState(false);
-
-  const [isExportOptionsModalOpen, setIsExportOptionsModalOpen] = useState(false);
   const [exportOptions, setExportOptions] = useState({
     useAlternateDesign: false,
     includeImages: true,
     optimizeForPrint: false,
   });
+
+  // 合并布尔 UI 状态 — useReducer 优化，减少闭包创建
+  type UIState = {
+    isEditMode: boolean;
+    isSidebarHidden: boolean;
+    isImmersive: boolean;
+    isFullscreen: boolean;
+    isEditorOpen: boolean;
+    isCatManagerOpen: boolean;
+    useAlternateDesign: boolean;
+    isAiCurationModalOpen: boolean;
+    isExportOptionsModalOpen: boolean;
+    showShortcutsHelp: boolean;
+  };
+
+  type UIAction =
+    | { key: keyof UIState; value: boolean }
+    | { key: keyof UIState; updater: (prev: boolean) => boolean };
+
+  function uiReducer(state: UIState, action: UIAction): UIState {
+    const val = 'value' in action ? action.value : action.updater(state[action.key]);
+    if (state[action.key] === val) return state;
+    return { ...state, [action.key]: val };
+  }
+
+  const initialUIState: UIState = {
+    isEditMode: true,
+    isSidebarHidden: false,
+    isImmersive: false,
+    isFullscreen: false,
+    isEditorOpen: false,
+    isCatManagerOpen: false,
+    useAlternateDesign: false,
+    isAiCurationModalOpen: false,
+    isExportOptionsModalOpen: false,
+    showShortcutsHelp: false,
+  };
+
+  const [uiState, dispatchUI] = useReducer(uiReducer, initialUIState);
+
+  const { isEditMode, isSidebarHidden, isImmersive, isFullscreen, isEditorOpen, isCatManagerOpen, useAlternateDesign, isAiCurationModalOpen, isExportOptionsModalOpen, showShortcutsHelp } = uiState;
+
+  const makeSetter = (key: keyof UIState) => useCallback((v: boolean | ((p: boolean) => boolean)) => {
+    if (typeof v === 'function') dispatchUI({ key, updater: v as (prev: boolean) => boolean });
+    else dispatchUI({ key, value: v });
+  }, []);
+
+  const setIsEditMode = makeSetter('isEditMode');
+  const setIsSidebarHidden = makeSetter('isSidebarHidden');
+  const setIsImmersive = makeSetter('isImmersive');
+  const setIsFullscreen = makeSetter('isFullscreen');
+  const setIsEditorOpen = makeSetter('isEditorOpen');
+  const setIsCatManagerOpen = makeSetter('isCatManagerOpen');
+  const setUseAlternateDesign = makeSetter('useAlternateDesign');
+  const setIsAiCurationModalOpen = makeSetter('isAiCurationModalOpen');
+  const setIsExportOptionsModalOpen = makeSetter('isExportOptionsModalOpen');
+  const setShowShortcutsHelp = makeSetter('showShortcutsHelp');
 
   const openExportOptionsModal = useCallback(() => {
     setExportOptions(prev => ({
@@ -132,8 +175,6 @@ const AppContent: React.FC = () => {
   const uploadTypeRef = useRef<'cover' | 'back'>('cover');
   const contentScrollRef = useRef<HTMLDivElement>(null);
 
-  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
-
   useAppInitialization({
     setLogo,
     setSidebarMeta,
@@ -145,18 +186,6 @@ const AppContent: React.FC = () => {
     setUseAlternateDesign,
     loading,
   });
-
-  useEffect(() => {
-    if (!loading) {
-      Promise.all([
-        import('./components/Editor'),
-        import('./components/KeyboardShortcutsHelpModal'),
-        import('./components/CategoryManagerModal'),
-        import('./components/ExportOptionsModal'),
-        import('./src/components/AiCurationModal'),
-      ]).catch(() => {});
-    }
-  }, [loading]);
 
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -178,20 +207,7 @@ const AppContent: React.FC = () => {
         }
       }
 
-      if (event.data && event.data.type === 'GRAPH_REQUEST_DATA' && event.data.uid) {
-        const uid = event.data.uid;
-        const dataEl = document.getElementById('data-' + uid);
-        if (dataEl) {
-          const iframe = document.getElementById('iframe-' + uid) as HTMLIFrameElement;
-          if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({
-              type: 'GRAPH_DATA_RESPONSE',
-              uid: uid,
-              dataB64: dataEl.textContent
-            }, window.location.origin);
-          }
-        }
-      }
+      // GRAPH_REQUEST_DATA handler removed: data is now embedded directly in srcdoc
     };
 
     window.addEventListener('message', handleGraphMessage);
@@ -200,7 +216,10 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (!loading) {
-      db.save(CONSTANTS.KEY, { logo, sidebarMetaText: sidebarMeta }).catch(console.error);
+      db.save(CONSTANTS.KEY, { logo, sidebarMetaText: sidebarMeta }).catch((e: unknown) => {
+        console.error('配置保存失败', e);
+        alert('配置保存失败，请刷新页面重试');
+      });
     }
   }, [logo, sidebarMeta, loading]);
 
@@ -264,7 +283,7 @@ const AppContent: React.FC = () => {
     try {
       const base64 = await fileToDataURL(file);
       const isCoverUpload = uploadTypeRef.current === 'cover' || uploadTypeRef.current === 'back';
-      const compressedBase64 = await compressImage(base64, isCoverUpload ? 2400 : 1200, isCoverUpload ? 0.92 : 0.8);
+      const compressedBase64 = await compressImage(base64, isCoverUpload ? 2400 : 1200, isCoverUpload ? 0.92 : 0.8, isCoverUpload ? 'original' : 'webp');
       if (uploadTypeRef.current === 'cover') {
         updateArticle(currentId, { coverImage: compressedBase64 });
       } else {
@@ -322,7 +341,7 @@ const AppContent: React.FC = () => {
     importProgress,
   });
 
-  const handleExportRef = useRef<((isReader: boolean) => void) | null>(null);
+  const handleExportRef = useRef<((isReader: boolean, categories?: string[]) => void) | null>(null);
   const toggleReadingModeRef = useRef<(() => void) | null>(null);
   const handleDeleteRef = useRef<(() => void) | null>(null);
   const handleNavigateRef = useRef<((direction: 'prev' | 'next') => void) | null>(null);
@@ -350,7 +369,7 @@ const AppContent: React.FC = () => {
   useMemoryMonitor(150);
 
   const handleNextArticle = useCallback(() => {
-    handleNavigateRef.current('next');
+    handleNavigateRef.current?.('next');
   }, []);
 
   const handleFloatMenuClick = useCallback(() => setIsSidebarHidden(false), []);
@@ -385,6 +404,7 @@ const AppContent: React.FC = () => {
       sidebar={
         <Sidebar
           articles={articles}
+          displayArticles={sortedArticles}
           currentId={currentId}
           logo={logo}
           sidebarMeta={sidebarMeta}
@@ -452,7 +472,7 @@ const AppContent: React.FC = () => {
       }
       modals={
         <ErrorBoundary fallbackRender={(error, reset) => <LazyFallback error={error.message} onReset={reset} />}>
-          <Suspense fallback={null}>
+          <Suspense fallback={<LazyFallback />}>
             <KeyboardShortcutsHelpModal
               isOpen={showShortcutsHelp}
               onClose={handleCloseShortcutsHelp}
@@ -491,7 +511,7 @@ const AppContent: React.FC = () => {
           <input type="file" ref={importInputRef} className="hidden" accept=".html,.json" onChange={handleImport} />
           <input type="file" ref={logoInputRef} className="hidden" accept="image/*" onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) fileToDataURL(f).then((b64) => compressImage(b64 as string, 400, 0.8)).then((compressed) => setLogo(compressed));
+            if (f) fileToDataURL(f).then((b64) => compressImage(b64 as string, 400, 0.8)).then((compressed) => setLogo(compressed)).catch(err => { console.error("Logo 上传失败", err); });
           }} />
           <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
         </>

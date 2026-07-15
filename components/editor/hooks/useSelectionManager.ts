@@ -1,17 +1,5 @@
 import { useCallback, useRef } from 'react';
-
-function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  return ((...args: Parameters<T>) => {
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-    }
-    timeoutId = setTimeout(() => {
-      timeoutId = null;
-      fn(...args);
-    }, delay);
-  }) as T;
-}
+import { debounce } from '../../../src/utils/debounce';
 
 export function useSelectionManager() {
   const lastRangeRef = useRef<Range | null>(null);
@@ -40,9 +28,15 @@ export function useSelectionManager() {
     }
   }, []);
 
+  /** 同步保存选区——用于 blur 等需要立即保存的场景，无防抖延迟 */
+  const saveSelectionSync = useCallback(() => {
+    saveSelectionFn();
+  }, [saveSelectionFn]);
+
   return {
     lastRangeRef,
     saveSelection,
+    saveSelectionSync,
     restoreSelection,
   };
 }

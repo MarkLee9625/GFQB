@@ -1,4 +1,5 @@
-import { UniversalArticleMeta } from '../../types/intelligence';
+import type { UniversalArticleMeta } from '../../types';
+import { fetchWithTimeout } from './utils';
 
 export const PATENT_KEYWORDS = [
   { label: 'Shipbuilding', value: 'shipbuilding' },
@@ -14,7 +15,7 @@ export async function fetchPatents(keyword: string): Promise<UniversalArticleMet
   try {
     const patentSearchUrl = `https://patents.google.com/query?q=${encodeURIComponent(keyword)}&oq=${encodeURIComponent(keyword)}&start=0`;
 
-    const response = await fetch(patentSearchUrl);
+    const response = await fetchWithTimeout(patentSearchUrl);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
