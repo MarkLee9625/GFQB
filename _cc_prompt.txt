@@ -1,0 +1,44 @@
+⚠️ 只修改以下白名单文件，其余文件不许碰：
+- services/aiService.ts
+
+任务：移除图谱提取 API 调用的 max_tokens 硬限
+
+当前问题：
+- extractGlobalKnowledgeGraph 函数中 Phase 1 调用 callDeepSeekAPI 时传了 max_tokens: GRAPH_MAX_TOKENS (32768)
+- V4 Flash + thinking + max effort 的 Thinking trace 大量消耗 token 配额，32768 限额下 JSON 输出被截断
+- 截断导致 JSON 解析失败 → 重试 → 耗时翻倍
+
+修改内容：
+在 services/aiService.ts 的 extractGlobalKnowledgeGraph 函数内（约第 446 行），
+删除 callDeepSeekAPI 参数中的 max_tokens: GRAPH_MAX_TOKENS 这一行。
+
+修改前：
+```typescript
+nodeRawText = await callDeepSeekAPI({
+    model: REASONER_MODEL,
+    messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+    ],
+    max_tokens: GRAPH_MAX_TOKENS,  // ← 删除这行
+    timeoutMs: GRAPH_TIMEOUT_SINGLE,
+});
+```
+
+修改后：
+```typescript
+nodeRawText = await callDeepSeekAPI({
+    model: REASONER_MODEL,
+    messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+    ],
+    timeoutMs: GRAPH_TIMEOUT_SINGLE,
+});
+```
+
+不需要修改其他任何地方。callDeepSeekAPI 内部实现中，当 max_tokens 为 undefined 时不会传给 Body（第 76 行有条件判断）。
+
+⚠️ 注意：不要改 GRAPH_SUPPLEMENT_MAX_TOKENS（那是补充阶段用的，不走 Phase 1 主路径）。
+
+完成后不要跑测试，不要跑 lint，只写代码。

@@ -443,7 +443,6 @@ export async function extractGlobalKnowledgeGraph(
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt },
                 ],
-                max_tokens: GRAPH_MAX_TOKENS,
                 timeoutMs: GRAPH_TIMEOUT_SINGLE,
             });
 

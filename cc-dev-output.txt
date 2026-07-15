@@ -1,0 +1,3 @@
+已完成。从 `extractGlobalKnowledgeGraph` 的 Phase 1 `callDeepSeekAPI` 调用中删除了 `max_tokens: GRAPH_MAX_TOKENS`。
+
+修改后，该参数为 `undefined`，`callDeepSeekAPI` 内部（第 76 行）不会将其传给请求 Body，从而允许 V4 Flash + thinking 模式自由输出完整的 JSON，不再因 32768 截断导致解析失败和重试。`GRAPH_SUPPLEMENT_MAX_TOKENS`（补充阶段）未受影响。
