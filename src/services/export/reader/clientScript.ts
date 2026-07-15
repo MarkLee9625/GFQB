@@ -651,7 +651,7 @@ export function getClientScript() {
                 document.body.appendChild(container);
                 container.classList.add('expanded');
                 container._placeholder = placeholder;
-                btn.textContent = 'Exit Fullscreen';
+                btn.textContent = '退出全屏';
                 document.body.style.overflow = 'hidden';
             } else {
                 var placeholder = container._placeholder;
@@ -660,7 +660,7 @@ export function getClientScript() {
                    placeholder.parentNode.insertBefore(container, placeholder);
                    placeholder.parentNode.removeChild(placeholder);
                 }
-                btn.textContent = 'Fullscreen';
+                btn.textContent = '⛶全屏阅读';
                 document.body.style.overflow = '';
                 delete container._placeholder;
             }

@@ -119,9 +119,8 @@ export function getReaderTemplates() {
             <div class="sws-prose article-body" data-field="content"></div>
         <div data-field="pdf-viewer" style="display: none;">
                 <div class="pdf-viewer-container" data-id="pdf-container">
-                    <div class="pdf-toolbar"><div class="pdf-toolbar-title">PDF PREVIEW</div><button class="pdf-expand-btn" onclick="app.togglePdfExpand(this)">⛶全屏阅读</button></div>
-                    <div style="flex:1; width:100%; position:relative; background: #f3f4f6;"><iframe data-field="pdf-iframe" style="width: 100%; height: 100%; border: none;"></iframe>
-<button data-field="pdf-download-btn" style="position: absolute; bottom: 15px; right: 25px; z-index: 9999; background: white; padding: 6px 12px; font-size: 12px; border: 1px solid #d1d5db; border-radius: 4px; color: #005596; text-decoration: none; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">下载完整 PDF</button></div>
+                    <div class="pdf-toolbar"><div class="pdf-toolbar-title">PDF PREVIEW</div><div style="display:flex;align-items:center;gap:8px;"><button data-field="pdf-download-btn" style="background:rgba(0,85,150,0.1);border:1px solid rgba(0,85,150,0.2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:bold;color:#005596;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s;white-space:nowrap;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>下载完整 PDF</button><button class="pdf-expand-btn" onclick="app.togglePdfExpand(this)">⛶全屏阅读</button></div></div>
+                    <div style="flex:1; width:100%; position:relative; background: #f3f4f6;"><iframe data-field="pdf-iframe" style="width: 100%; height: 100%; border: none;"></iframe></div>
                 </div>
             </div>
             

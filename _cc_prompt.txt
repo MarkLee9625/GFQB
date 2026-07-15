@@ -1,0 +1,66 @@
+⚠️ 只修改以下白名单文件，其余文件不许碰：
+- src/services/export/reader/readerTemplates.ts
+- src/services/export/reader/clientScript.ts
+
+任务：修复导出阅读版 HTML 的 PDF 工具栏
+
+### 问题描述
+导出阅读版 HTML 中，PDF 下载按钮浮在 iframe 右下角（旧样式），工具栏只有全屏按钮且折叠后变英文。
+
+### 修改1：readerTemplates.ts — 下载按钮移到 PDF 工具栏
+
+定位到 readerTemplates.ts 中约第 120-126 行的 pdf-viewer 模板。
+
+当前代码：
+```html
+<div data-field="pdf-viewer" style="display: none;">
+    <div class="pdf-viewer-container" data-id="pdf-container">
+        <div class="pdf-toolbar"><div class="pdf-toolbar-title">PDF PREVIEW</div><button class="pdf-expand-btn" onclick="app.togglePdfExpand(this)">⛶全屏阅读</button></div>
+        <div style="flex:1; width:100%; position:relative; background: #f3f4f6;"><iframe data-field="pdf-iframe" style="width: 100%; height: 100%; border: none;"></iframe>
+<button data-field="pdf-download-btn" style="position: absolute; bottom: 15px; right: 25px; z-index: 9999; background: white; padding: 6px 12px; font-size: 12px; border: 1px solid #d1d5db; border-radius: 4px; color: #005596; text-decoration: none; font-weight: bold; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">下载完整 PDF</button></div>
+        </div>
+    </div>
+```
+
+修改为：
+```html
+<div data-field="pdf-viewer" style="display: none;">
+    <div class="pdf-viewer-container" data-id="pdf-container">
+        <div class="pdf-toolbar"><div class="pdf-toolbar-title">PDF PREVIEW</div><div style="display:flex;align-items:center;gap:8px;"><button data-field="pdf-download-btn" style="background:rgba(0,85,150,0.1);border:1px solid rgba(0,85,150,0.2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:bold;color:#005596;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s;white-space:nowrap;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>下载完整 PDF</button><button class="pdf-expand-btn" onclick="app.togglePdfExpand(this)">⛶全屏阅读</button></div></div>
+        <div style="flex:1; width:100%; position:relative; background: #f3f4f6;"><iframe data-field="pdf-iframe" style="width: 100%; height: 100%; border: none;"></iframe></div>
+        </div>
+    </div>
+```
+
+关键变更：
+- 下载按钮从 iframe 下方移到 `.pdf-toolbar` 中
+- 下载按钮样式改为与全屏按钮一致（同色系 bg/border/rounded）
+- 内联了下载 svg 图标
+- 去掉了 iframe 下方多余的 `position:absolute` 包裹层
+- 删除原来 floating 的 download button
+
+### 修改2：clientScript.ts — 全屏按钮文字国际化修复
+
+定位到 togglePdfExpand 函数中约两处 btn.textContent：
+
+第 654 行附近（展开时）：
+```
+btn.textContent = 'Exit Fullscreen';
+```
+改为：
+```
+btn.textContent = '退出全屏';
+```
+
+第 663 行附近（折叠时）：
+```
+btn.textContent = 'Fullscreen';
+```
+改为：
+```
+btn.textContent = '⛶全屏阅读';
+```
+
+注意：`⛶` 是 Unicode 字符，在模板字符串中可以直接使用。
+
+完成后不要跑测试，不要跑 lint，只写代码。
