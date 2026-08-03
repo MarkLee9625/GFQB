@@ -22,11 +22,11 @@ export function useAiFeatures({
 }: UseAiFeaturesOptions) {
   const handleGenerateForeword = useCallback(async () => {
     if (importProgress) return;
+    // 用内容判定有效性（默认标题是'无标题'，比对占位标题字符串不可靠）
     const validArticles = articles.filter(a =>
       a.category !== '封面' &&
       a.category !== '封底' &&
-      a.title &&
-      a.title !== '未命名文章'
+      (a.content || a.pdfData)
     );
 
     if (validArticles.length === 0) {
@@ -58,7 +58,7 @@ export function useAiFeatures({
     }
   }, [articles, createArticle, setCurrentId, setImportProgress, importProgress]);
 
-  const handleGenerateGraph = useCallback(async () => {
+  const handleGenerateGraph = useCallback(async (skipCache = false) => {
     if (importProgress) return;
     const validArticles = articles.filter(a =>
       a.category !== '封面' &&
@@ -80,9 +80,9 @@ export function useAiFeatures({
       const articleIds = validArticles.map(a => a.id).join(',');
       const contentHashValue = await contentHash(articleIds + ':' + finalContext);
 
-      // 【缓存检查】按内容 hash 查找，避免重复调用 AI
-      const cached = await getGraphCache(contentHashValue);
-      
+      // 【缓存检查】按内容 hash 查找，避免重复调用 AI（skipCache=true 时强制跳过，重新调用 AI）
+      const cached = skipCache ? null : await getGraphCache(contentHashValue);
+
       let graphData: KnowledgeGraphData;
       let fromCache = false;
 
@@ -157,8 +157,8 @@ export function useAiFeatures({
       return alert("当前无有效内容或 PDF 附件，无法提取图谱！");
     }
 
-    // 重新生成成功后由 handleGenerateGraph 自动更新缓存，无需提前删除
-    await handleGenerateGraph();
+    // skipCache=true 强制跳过缓存读取，直接调用 AI；生成成功后自动覆盖缓存
+    await handleGenerateGraph(true);
   }, [articles, handleGenerateGraph, importProgress]);
 
   const handleAdoptArticle = useCallback(async (article: UniversalArticleMeta) => {

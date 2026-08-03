@@ -5,6 +5,14 @@ import { CONSTANTS } from '../constants';
  * @param file 
  * @returns 
  */
+// 各类型文件大小上限（唯一常量来源，上传前的自检与 fileToDataURL 实际校验共用）
+export const FILE_SIZE_LIMITS: Record<'image' | 'video' | 'audio' | 'pdf', number> = {
+  image: 10 * 1024 * 1024, // 10MB
+  video: 50 * 1024 * 1024, // 50MB
+  audio: 20 * 1024 * 1024, // 20MB
+  pdf: 30 * 1024 * 1024,   // 30MB
+};
+
 export const fileToDataURL = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
         if (!file) {
@@ -12,20 +20,13 @@ export const fileToDataURL = (file: File): Promise<string> => {
         }
 
         // 根据文件类型设置不同的文件大小限制
-        let MAX_FILE_SIZE;
         const fileType = file.type.split('/')[0]; // 'image', 'video', 'audio', 'application'
-
-        if (fileType === 'video') {
-            MAX_FILE_SIZE = 50 * 1024 * 1024; // 视频文件：50MB
-        } else if (fileType === 'audio') {
-            MAX_FILE_SIZE = 20 * 1024 * 1024; // 音频文件：20MB
-        } else if (fileType === 'image') {
-            MAX_FILE_SIZE = 10 * 1024 * 1024; // 图片文件：10MB
-        } else if (file.type === 'application/pdf') {
-            MAX_FILE_SIZE = 30 * 1024 * 1024; // PDF文件：30MB
-        } else {
-            MAX_FILE_SIZE = 10 * 1024 * 1024; // 其他文件：10MB
-        }
+        const MAX_FILE_SIZE =
+          fileType === 'video' ? FILE_SIZE_LIMITS.video :
+          fileType === 'audio' ? FILE_SIZE_LIMITS.audio :
+          fileType === 'image' ? FILE_SIZE_LIMITS.image :
+          file.type === 'application/pdf' ? FILE_SIZE_LIMITS.pdf :
+          FILE_SIZE_LIMITS.image;
 
         if (file.size > MAX_FILE_SIZE) {
             const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
@@ -168,30 +169,6 @@ export const compressImage = async (
 };
 
 /**
- * 图片文件压缩（兼容旧版本）- 接收File对象，统一调用compressImage函数
- * @param file 
- * @returns 压缩后的Base64字符串（WebP格式）
- */
-export const compressImageFile = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        if (!file.type.startsWith('image/')) {
-            return reject(new Error('文件不是图片类型'));
-        }
-
-        const SKIP_THRESHOLD = 200 * 1024;
-        if (file.size <= SKIP_THRESHOLD && file.type === 'image/webp') {
-            fileToDataURL(file).then(resolve).catch(reject);
-            return;
-        }
-
-        fileToDataURL(file)
-            .then(base64 => compressImage(base64))
-            .then(resolve)
-            .catch(reject);
-    });
-};
-
-/**
  * Base64转换为Blob（带错误处理和内存优化）
  * @param dataURI 
  * @returns 
@@ -256,17 +233,6 @@ export function base64ToUint8Array(base64: string): Uint8Array {
     bytes[i] = binaryString.charCodeAt(i);
   }
   return bytes;
-}
-
-/**
- * Uint8Array 转换为 Base64 字符串
- */
-export function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binaryString = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binaryString += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binaryString);
 }
 
 /**

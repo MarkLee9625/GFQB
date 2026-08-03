@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fileToDataURL, compressImage, compressImageFile, base64ToBlob, parseMarkdownToHtml } from './fileHelpers';
+import { fileToDataURL, compressImage, base64ToBlob, parseMarkdownToHtml } from './fileHelpers';
 
 describe('fileHelpers', () => {
   beforeEach(() => {
@@ -226,78 +226,6 @@ describe('fileHelpers', () => {
       const result = await compressImage('data:image/png;base64,test', 1200, 0.8, 'webp');
       expect(result).toContain('data:image/jpeg');
     }, 10000);
-  });
-
-  describe('compressImageFile', () => {
-    it('压缩图片文件', async () => {
-      const mockFile = new File(['test'], 'test.png', { type: 'image/png' });
-      
-      vi.stubGlobal('FileReader', class {
-        result = 'data:image/png;base64,test';
-        onload: any = null;
-        readAsDataURL() {
-          setTimeout(() => {
-            this.onload({ target: { result: this.result } });
-          }, 0);
-        }
-      });
-
-      vi.stubGlobal('Image', class {
-        width = 800;
-        height = 600;
-        crossOrigin = '';
-        private _src = '';
-        onload: any = null;
-        onerror: any = null;
-        
-        set src(value: string) {
-          this._src = value;
-          setTimeout(() => this.onload?.(), 10);
-        }
-        get src() {
-          return this._src;
-        }
-      });
-
-      const mockCanvas = {
-        width: 0,
-        height: 0,
-        getContext: vi.fn(() => ({
-          imageSmoothingEnabled: true,
-          imageSmoothingQuality: 'high',
-          drawImage: vi.fn()
-        })),
-        toDataURL: vi.fn(() => 'data:image/webp;base64,compressed'),
-        parentNode: null
-      };
-
-      vi.spyOn(document, 'createElement').mockReturnValue(mockCanvas as any);
-
-      const result = await compressImageFile(mockFile);
-      expect(result).toContain('data:image/webp');
-    }, 15000);
-
-    it('非图片文件抛出错误', async () => {
-      const mockFile = new File(['test'], 'test.txt', { type: 'text/plain' });
-      await expect(compressImageFile(mockFile)).rejects.toThrow('不是图片类型');
-    });
-
-    it('小尺寸 WebP 图片跳过压缩', async () => {
-      const smallWebpFile = new File([new ArrayBuffer(100)], 'small.webp', { type: 'image/webp' });
-      
-      vi.stubGlobal('FileReader', class {
-        result = 'data:image/webp;base64,small';
-        onload: any = null;
-        readAsDataURL() {
-          setTimeout(() => {
-            this.onload({ target: { result: this.result } });
-          }, 0);
-        }
-      });
-
-      const result = await compressImageFile(smallWebpFile);
-      expect(result).toBe('data:image/webp;base64,small');
-    });
   });
 
   describe('base64ToBlob', () => {

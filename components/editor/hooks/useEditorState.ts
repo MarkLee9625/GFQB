@@ -29,7 +29,8 @@ export function useEditorState({ isOpen, article, categories }: UseEditorStateOp
   });
   const [imgCompressFormat, setImgCompressFormat] = useState<'webp' | 'jpeg' | 'original'>(() => {
     const saved = localStorage.getItem('SWS_IMG_COMPRESS_FORMAT');
-    return (saved as 'webp' | 'jpeg' | 'original') || 'webp';
+    // 白名单校验：localStorage 旧值可能非法（如 "png"），避免类型撒谎
+    return saved === 'webp' || saved === 'jpeg' || saved === 'original' ? saved : 'webp';
   });
 
   const deferredFontSize = useDeferredValue(formData.fontSize || 18);

@@ -2,6 +2,8 @@ import pptxgen from "pptxgenjs";
 import React from "react";
 import ReactDOMServer from "react-dom/server";
 import sharp from "sharp";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import {
   FaEdit, FaRobot, FaFileExport, FaDatabase, FaShieldAlt,
   FaProjectDiagram, FaReact, FaCogs, FaLightbulb,
@@ -1008,6 +1010,8 @@ console.log("Icons rendered.");
 }
 
 // ── Write file ──
-const outPath = "C:\\Users\\MA\\OneDrive - stu.just.edu.cn\\前端项目\\工法情报收集系统\\工法情报编辑器\\工法情报编辑器-产品介绍.pptx";
+// 相对脚本所在目录输出（原硬编码个人机器绝对路径，换机器/CI 必失败）
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const outPath = resolve(__dirname, '工法情报编辑器-产品介绍.pptx');
 await pres.writeFile({ fileName: outPath });
 console.log("PPTX created: " + outPath);

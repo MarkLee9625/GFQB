@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Article } from '../../src/types';
 import { Icon } from '../Icons';
-import { ArticleRendererBaseProps } from './types';
+import type { ArticleRendererBaseProps } from './types';
 import { CoverImageEditor } from './CoverImageEditor';
 import { useImageEditor } from './hooks/useImageEditor';
 import { COVER_THEMES, UploadSection } from './CoverBackShared';

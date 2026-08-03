@@ -39,12 +39,6 @@ describe('useJournal', () => {
       expect(result.current.articles.length).toBeGreaterThanOrEqual(2);
       expect(result.current.currentId).toBeTruthy();
     });
-
-    it('初始化成功时 error 为 null', async () => {
-      const { result } = renderHook(() => useJournal());
-      await waitFor(() => expect(result.current.loading).toBe(false));
-      expect(result.current.error).toBeNull();
-    });
   });
 
   describe('enforceOrder — 排序逻辑', () => {

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { decodeB64Utf8 } from '../src/utils/encoding';
+import { parseEmbeddedData } from '../src/utils/embeddedData';
 
 interface UseImportManagerOptions {
   setArticlesAction: (articles: any[]) => void;
@@ -18,7 +18,7 @@ export function useImportManager({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const text = ev.target?.result as string;
       try {
         try {
@@ -32,14 +32,18 @@ export function useImportManager({
         const b64ArticlesMatch = text.match(/window\.__SWS_DATA_ARTICLES_B64__\s*=\s*"([\s\S]*?)";/);
         if (b64ArticlesMatch && b64ArticlesMatch[1]) {
           try {
-            const decoded = decodeB64Utf8(b64ArticlesMatch[1]);
-            setArticlesAction(JSON.parse(decoded));
+            const methodMatch = text.match(/window\.__SWS_COMPRESSION_METHOD__\s*=\s*"([^"]*)"/);
+            const method = methodMatch ? methodMatch[1] : 'none';
+            const decodedArticles = await parseEmbeddedData(b64ArticlesMatch[1], method);
+            if (Array.isArray(decodedArticles)) setArticlesAction(decodedArticles);
 
             const configMatch = text.match(/window\.__SWS_DATA_CONFIG_B64__\s*=\s*"([\s\S]*?)";/);
             if (configMatch && configMatch[1]) {
-              const cfg = JSON.parse(decodeB64Utf8(configMatch[1]));
-              if (cfg.logo) setLogo(cfg.logo);
-              if (cfg.sidebarMeta) setSidebarMeta(cfg.sidebarMeta);
+              const cfg = await parseEmbeddedData<{ logo?: string; sidebarMeta?: string }>(configMatch[1], method);
+              if (cfg) {
+                if (cfg.logo) setLogo(cfg.logo);
+                if (cfg.sidebarMeta) setSidebarMeta(cfg.sidebarMeta);
+              }
             }
             return;
           } catch (e) { console.error("Base64 Decode Error:", e); }

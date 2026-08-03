@@ -13,8 +13,8 @@ const EditorFooter = React.memo(({ hasId, isPublished, onClose, onSave, contentR
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [wordCount, setWordCount] = useState({ chars: 0, words: 0 });
   const [saveStatus, setSaveStatus] = useState<'saved' | 'editing' | 'saving'>('saved');
-  const prevContentRef = useRef<string>('');
   const saveTimerRef = useRef<number | null>(null);
+  const countPendingRef = useRef(false);
 
   useEffect(() => {
     if (!contentRef?.current) return;
@@ -28,15 +28,20 @@ const EditorFooter = React.memo(({ hasId, isPublished, onClose, onSave, contentR
     };
 
     const observer = new MutationObserver(() => {
-      updateCount();
-      const currentContent = contentRef.current?.innerHTML || '';
-      if (currentContent !== prevContentRef.current) {
-        prevContentRef.current = currentContent;
-        setSaveStatus('editing');
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = window.setTimeout(() => {
-          setSaveStatus('saved');
-        }, 3000);
+      // 不在此处序列化 innerHTML 比较（正文含 MB 级 base64 图片时每次按键都是全量开销）
+      setSaveStatus('editing');
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => {
+        setSaveStatus('saved');
+      }, 3000);
+
+      // 字数统计低频更新：rAF 节流
+      if (!countPendingRef.current) {
+        countPendingRef.current = true;
+        window.requestAnimationFrame(() => {
+          countPendingRef.current = false;
+          updateCount();
+        });
       }
     });
 

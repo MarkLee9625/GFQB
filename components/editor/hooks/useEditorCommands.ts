@@ -41,7 +41,7 @@ export function useEditorCommands({
     const children = Array.from(body.childNodes);
     let currentWrapper: HTMLParagraphElement | null = null;
 
-    children.forEach((node: any) => {
+    children.forEach((node: ChildNode) => {
       const isBlock = node.nodeType === Node.ELEMENT_NODE &&
         /^(P|DIV|H[1-6]|UL|OL|LI|BLOCKQUOTE|SECTION|ARTICLE|PRE|HR|TABLE)$/i.test((node as HTMLElement).tagName);
 

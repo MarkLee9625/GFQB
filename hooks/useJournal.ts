@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Article } from '../src/types';
 import { db } from '../services/db';
-import { debounce } from '../src/utils/debounce';
 import { sortArticlesByPriority } from '../src/utils/articleSort';
+import { parseEmbeddedData } from '../src/utils/embeddedData';
 
 export function useJournal() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const idCounterRef = useRef(0);
   const mountedRef = useRef(true);
 
@@ -34,6 +33,34 @@ export function useJournal() {
     mountedRef.current = true;
     async function load() {
       const aborted = () => !mountedRef.current || abortController.signal.aborted;
+
+      // Reader 模式优先：嵌入数据存在时直接使用，跳过 IndexedDB 加载，
+      // 避免与 useAppInitialization 的写入竞争导致旧库数据覆盖嵌入数据。
+      // 导出端数据为 gzip 压缩（compression.ts），必须按 __SWS_COMPRESSION_METHOD__
+      // 在 Worker 中解压后再 JSON.parse，直接 decodeB64Utf8 会解析失败。
+      const embedded = (window as any).__SWS_DATA_ARTICLES_B64__;
+      if (embedded) {
+        try {
+          const method = (window as any).__SWS_COMPRESSION_METHOD__;
+          const jsonData = await parseEmbeddedData<Article[]>(embedded, method);
+          if (aborted()) return;
+          if (!Array.isArray(jsonData)) {
+            throw new Error('嵌入式文章数据格式不正确');
+          }
+          const data = sanitizeArticles(jsonData);
+          setArticles(sortArticlesByPriority(data));
+          if (data.length > 0) setCurrentId(data[0].id);
+        } catch (e) {
+          console.error('Reader embedded data parse failed', e);
+          if (mountedRef.current) {
+            alert('阅读版数据加载失败：' + (e instanceof Error ? e.message : '未知错误'));
+          }
+        } finally {
+          if (mountedRef.current) setLoading(false);
+        }
+        return;
+      }
+
       try {
         await db.init();
         if (aborted()) return;
@@ -61,7 +88,6 @@ export function useJournal() {
       } catch (e) {
         console.error('Failed to load articles', e);
         if (mountedRef.current) {
-          setError('数据加载失败，请刷新页面重试');
           alert('数据加载失败：' + (e instanceof Error ? e.message : '未知错误'));
         }
       } finally {
@@ -75,16 +101,26 @@ export function useJournal() {
     };
   }, [sanitizeArticles]);
 
-  const debouncedSaveArticle = useRef(
-    debounce(async (article: Article) => {
+  // 按文章 id 分桶防抖：不同文章的保存互不取消（单一 debounce 实例会清掉前一篇的保存导致丢失）
+  const saveTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  const debouncedSaveArticle = useCallback((article: Article) => {
+    const id = Number(article.id);
+    const timers = saveTimersRef.current;
+
+    const existing = timers.get(id);
+    if (existing) clearTimeout(existing);
+
+    timers.set(id, setTimeout(async () => {
+      timers.delete(id);
       try {
         await db.saveArticle(article);
       } catch (e) {
         console.error('Save failed', e);
         alert('文章保存失败，请刷新页面重试');
       }
-    }, 1000)
-  ).current;
+    }, 1000));
+  }, []);
 
   const updateArticle = useCallback((id: number, updates: Partial<Article>) => {
     const numId = Number(id);
@@ -194,7 +230,6 @@ export function useJournal() {
     articles,
     currentId,
     loading,
-    error,
     setCurrentId,
     updateArticle,
     createArticle,

@@ -1,6 +1,15 @@
 import type { UniversalArticleMeta } from '../../types';
 import { fetchWithTimeout } from './utils';
 
+/** rss2json 接口返回的条目结构（替代 any） */
+interface Rss2JsonItem {
+  title?: string;
+  content?: string;
+  description?: string;
+  link?: string;
+  pubDate?: string;
+}
+
 // 经过架构师筛选的全球海事造船顶级 RSS 源（去除了死链，增加了高可用源）
 export const RSS_PRESETS = [
   { name: 'MarineLog (全球海事)', url: 'https://www.marinelog.com/feed/' },
@@ -25,7 +34,7 @@ export async function fetchRssFeed(url: string, sourceName: string): Promise<Uni
 
     if (data.status === 'ok' && data.items && data.items.length > 0) {
       console.log(`[rssFetcher] 引擎1成功拉取 ${data.items.length} 篇文章`);
-      return data.items.map((item: any) => ({
+      return data.items.map((item: Rss2JsonItem) => ({
         id: Math.random().toString(36).substring(2, 11),
         sourceType: 'rss',
         sourceName: sourceName,

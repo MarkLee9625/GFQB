@@ -1,4 +1,4 @@
-export type { Article, ArticleCategory, SpecialCategory, MediaType } from './models';
+export type { Article, ArticleCategory, SpecialCategory } from './models';
 export type {
   BlockType,
   HeadingLevel,

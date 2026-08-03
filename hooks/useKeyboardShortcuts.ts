@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react';
 interface UseKeyboardShortcutsOptions {
   currentId: number | null;
   isEditorOpen: boolean;
-  isCatManagerOpen: boolean;
   showShortcutsHelp: boolean;
   setIsEditorOpen: (v: boolean) => void;
   setCurrentId: (id: number | null) => void;
@@ -18,7 +17,6 @@ interface UseKeyboardShortcutsOptions {
 export function useKeyboardShortcuts({
   currentId,
   isEditorOpen,
-  isCatManagerOpen,
   showShortcutsHelp,
   setIsEditorOpen,
   setCurrentId,
@@ -32,7 +30,6 @@ export function useKeyboardShortcuts({
   const stateRef = useRef({
     currentId,
     isEditorOpen,
-    isCatManagerOpen,
     showShortcutsHelp,
     setIsEditorOpen,
     setCurrentId,
@@ -42,7 +39,6 @@ export function useKeyboardShortcuts({
   stateRef.current = {
     currentId,
     isEditorOpen,
-    isCatManagerOpen,
     showShortcutsHelp,
     setIsEditorOpen,
     setCurrentId,

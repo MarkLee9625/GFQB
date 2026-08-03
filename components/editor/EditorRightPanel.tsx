@@ -13,7 +13,7 @@ interface ImageCompressSettings {
 
 interface EditorRightPanelProps {
   formData: Partial<Article>;
-  onFieldChange: (field: string, value: any) => void;
+  onFieldChange: (field: string, value: string | number | boolean | string[] | null) => void;
   categories: string[];
   onManageCats: () => void;
   isGeneratingAi: boolean;

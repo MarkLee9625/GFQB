@@ -55,7 +55,13 @@ async function main() {
 
         try {
             if (!fs.existsSync(sourcePath)) {
-                console.error(`   ⚠️ 源路径不存在，跳过: ${sourcePath}`);
+                // PDF.js 核心资源缺失会让离线 PDF 解析静默失效，必须失败退出而非产出残缺构建
+                const isPdfCore = ['pdf.min.mjs', 'pdf.worker.min.mjs', 'cmaps'].includes(resource.dest);
+                console.error(`   ⚠️ 源路径不存在: ${sourcePath}`);
+                if (isPdfCore) {
+                    console.error(`   ❌ PDF.js 核心资源 ${resource.dest} 缺失，终止构建（先执行 npm install）`);
+                    process.exit(1);
+                }
                 continue;
             }
 

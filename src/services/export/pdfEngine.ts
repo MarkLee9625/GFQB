@@ -68,23 +68,24 @@ export interface PdfExportOptions {
 }
 
 /**
- * 检查是否为有效的 Base64 PDF 数据
+ * 校验并解码 Base64 PDF 数据（一次性解码，避免校验与加载各解码一遍）
+ * @returns 解码后的字节（校验通过），无效数据返回 null
  */
-function isValidPdfData(data: string): boolean {
-    if (!data) return false;
+function isValidPdfData(data: string): Uint8Array | null {
+    if (!data) return null;
     let rawBase64 = data;
     if (data.includes('base64,')) {
         rawBase64 = data.split('base64,')[1];
     }
     const base64Pattern = /^[A-Za-z0-9+/]+={0,2}$/;
-    if (!base64Pattern.test(rawBase64)) return false;
+    if (!base64Pattern.test(rawBase64)) return null;
     try {
         const bytes = base64ToUint8Array(rawBase64);
         const header = bytes.slice(0, 4);
         const headerStr = String.fromCharCode(...header);
-        return headerStr === '%PDF';
+        return headerStr === '%PDF' ? bytes : null;
     } catch {
-        return false;
+        return null;
     }
 }
 
@@ -116,21 +117,11 @@ async function renderDocumentBuffer(articles: Article[], options: PdfExportOptio
 }
 
 /**
- * 加载并验证 PDF 附件
+ * 加载 PDF 附件（接收已解码字节，避免二次解码）
  */
-async function loadPdfAttachment(pdfData: string): Promise<PDFDocument> {
+async function loadPdfAttachment(pdfBytes: Uint8Array): Promise<PDFDocument> {
   try {
-    // 验证 PDF 数据
-    if (!isValidPdfData(pdfData)) {
-      throw new Error('无效的PDF数据格式');
-    }
-
-    let rawBase64 = pdfData;
-    if (pdfData.includes('base64,')) {
-        rawBase64 = pdfData.split('base64,')[1];
-    }
-    const buffer = base64ToUint8Array(rawBase64).buffer;
-    const pdfDoc = await PDFDocument.load(buffer);
+    const pdfDoc = await PDFDocument.load(pdfBytes.buffer);
     
     // 验证 PDF 文档是否有效
     const pageCount = pdfDoc.getPageCount();
@@ -152,9 +143,11 @@ async function mergeDocuments(mainDoc: PDFDocument, articles: Article[]): Promis
   try {
     // 遍历所有文章，查找并合并 PDF 附件
     for (const article of articles) {
-      if (article.pdfData && isValidPdfData(article.pdfData)) {
+      if (article.pdfData) {
+        const pdfBytes = isValidPdfData(article.pdfData);
+        if (!pdfBytes) continue;
         try {
-          const attachmentDoc = await loadPdfAttachment(article.pdfData);
+          const attachmentDoc = await loadPdfAttachment(pdfBytes);
           const pageCount = attachmentDoc.getPageCount();
           
           // 复制附件页面到主文档

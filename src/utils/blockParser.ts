@@ -1,4 +1,5 @@
 import { cleanPastedHtml } from './pasteCleaner';
+import { createLruCache } from './memoize';
 import type {
   ContentBlock,
   BlockType,
@@ -17,6 +18,15 @@ import type {
   HeadingLevel,
   ListType,
 } from '../types';
+
+/**
+ * 解析结果 LRU 缓存
+ *
+ * 同一篇文章的内容在本会话内可能被多次打开/重渲染，
+ * 按 content 字符串缓存 blocks，避免每次 DOMParser + cleanPastedHtml 全量解析。
+ * 保存文章时 blocks 已持久化，此缓存主要兜底旧文章与导入文章。
+ */
+const htmlToBlocksCache = createLruCache<ContentBlock[]>(30);
 
 const INLINE_TAGS = new Set([
   'b', 'i', 'a', 'strong', 'em', 'u', 's', 'code', 'br',
@@ -381,6 +391,9 @@ function parseNode(node: Node, results: ContentBlock[], indexCounter: { value: n
 export function htmlToBlocks(html: string): ContentBlock[] {
   if (!html || !html.trim()) return [];
 
+  const cached = htmlToBlocksCache.get(html);
+  if (cached) return cached;
+
   const hasRawHtmlContainers = RAW_HTML_CONTAINER_CLASSES.some(cls => html.includes(cls));
 
   let cleaned: string;
@@ -429,10 +442,12 @@ export function htmlToBlocks(html: string): ContentBlock[] {
     parseNode(child, results, indexCounter);
   }
 
-  return results.filter(block => {
+  const result = results.filter(block => {
     if (block.type === 'paragraph') {
       return !isEmptyContent((block as TextBlock).content);
     }
     return true;
   });
+  htmlToBlocksCache.set(html, result);
+  return result;
 }

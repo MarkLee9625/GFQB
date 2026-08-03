@@ -121,7 +121,11 @@ const DATA_ATTR_WHITELIST = new Set(['data-caption']);
   const attrsToRemove: string[] = [];
   for (let i = 0; i < el.attributes.length; i++) {
     const attr = el.attributes[i];
-    if ((attr.name.startsWith('data-') && !DATA_ATTR_WHITELIST.has(attr.name)) || attr.name === 'id' || attr.name === 'class') {
+    const attrNameLower = attr.name.toLowerCase();
+    // 移除事件属性（onerror/onload 等）与 data-*/id/class，防止存储型 XSS
+    if (attrNameLower.startsWith('on') ||
+        (attr.name.startsWith('data-') && !DATA_ATTR_WHITELIST.has(attr.name)) ||
+        attr.name === 'id' || attr.name === 'class') {
       attrsToRemove.push(attr.name);
     }
   }
@@ -135,7 +139,18 @@ const DATA_ATTR_WHITELIST = new Set(['data-caption']);
     if (src.startsWith('//')) {
       el.setAttribute('src', 'https:' + src);
     }
+    if (src.toLowerCase().startsWith('javascript:')) {
+      el.removeAttribute('src');
+    }
     return;
+  }
+
+  if (tag === 'video' || tag === 'audio' || tag === 'source') {
+    const src = el.getAttribute('src') || '';
+    if (src.toLowerCase().startsWith('javascript:')) {
+      el.removeAttribute('src');
+    }
+    // 不 return：video/audio 内部可能还有 <source> 子节点需递归处理
   }
 
   if (tag === 'a') {

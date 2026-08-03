@@ -100,7 +100,10 @@ export function useImageToolbar() {
     caption.contentEditable = 'true';
     caption.innerHTML = '请输入图片说明...';
     caption.style.cssText = 'text-align: center; font-size: 14px; color: #6b7280; font-style: italic; text-indent: 0; margin: 4px 0 16px 0; line-height: 1.6;';
-    container.parentElement!.insertBefore(caption, container.nextSibling);
+    const parent = container.parentElement;
+    if (parent) {
+      parent.insertBefore(caption, container.nextSibling);
+    }
     const range = document.createRange();
     range.selectNodeContents(caption);
     const sel = window.getSelection();

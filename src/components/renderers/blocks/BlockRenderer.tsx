@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import DOMPurify from 'dompurify';
 import type {
   ContentBlock,
   TextBlock,
@@ -16,6 +15,8 @@ import type {
 } from '../../../types';
 import { useInView } from '../../../../hooks/useInView';
 import { useBlobManager } from '../../../../hooks/useBlobManager';
+import { sanitizeHtml } from '../../../utils/sanitizeHtml';
+import { isSelfGeneratedHtmlCached } from '../../../utils/htmlTrust';
 
 interface BlockRendererProps {
   block: ContentBlock;
@@ -23,33 +24,51 @@ interface BlockRendererProps {
 }
 
 const ParagraphBlock = React.memo<{ block: TextBlock }>(({ block }) => (
-  <p dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.content) }} />
+  <p dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }} />
 ));
 
 const HeadingBlockComponent = React.memo<{ block: HeadingBlock }>(({ block }) => {
   const Tag = `h${block.level}` as keyof React.JSX.IntrinsicElements;
-  return <Tag dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.content) }} />;
+  return <Tag dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }} />;
 });
 
 const ImageBlockComponent = React.memo<{ block: ImageBlock; mode: string }>(({ block, mode }) => {
   const [loaded, setLoaded] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const blobManager = useBlobManager();
-  const { ref, inView } = useInView({ rootMargin: '50px', threshold: 0.01 });
+  const { ref, inView } = useInView();
+  // 打印模式不过视口懒加载，直接解码渲染
+  const bypassLazy = mode === 'print';
 
   useEffect(() => {
-    if (!inView || !block.src) {
+    const src = block.src;
+    if (!src) {
       setBlobUrl(null);
       return;
     }
+    if (!bypassLazy && !inView) {
+      setBlobUrl(null);
+      return;
+    }
+    let cancelled = false;
+    // 延后一帧发起，避免滚动过程中同时触发大量解码
     const timer = setTimeout(() => {
-      const url = blobManager.getBlobUrl(block.src);
-      setBlobUrl(url);
+      blobManager.getBlobUrlAsync(src).then((url) => {
+        if (!cancelled) setBlobUrl(url);
+      });
     }, 0);
-    return () => clearTimeout(timer);
-  }, [inView, block.src, blobManager]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [inView, block.src, blobManager, bypassLazy]);
 
-  const imageSrc = inView ? (blobUrl || block.src) : undefined;
+  // data URL 在解码完成前不直接当 src 用，避免浏览器在主线程再次解码整张 base64；
+  // 外部 URL 则等 getBlobUrlAsync 原样返回后立即显示
+  const isDataUrl = !!block.src && block.src.startsWith('data:');
+  const imageSrc = bypassLazy || inView
+    ? (isDataUrl ? (blobUrl ?? undefined) : (blobUrl || block.src))
+    : undefined;
 
   return (
     <img
@@ -57,6 +76,7 @@ const ImageBlockComponent = React.memo<{ block: ImageBlock; mode: string }>(({ b
       src={imageSrc}
       alt={block.alt || ''}
       referrerPolicy="no-referrer"
+      decoding="async"
       className={`sws-block-image ${loaded ? 'loaded' : ''}`}
       style={{ opacity: loaded ? 1 : 0.8, transition: 'opacity 0.2s ease-out' }}
       onLoad={() => setLoaded(true)}
@@ -77,7 +97,7 @@ const AudioBlockComponent = React.memo<{ block: AudioBlock }>(({ block }) => (
 ));
 
 const BlockquoteBlockComponent = React.memo<{ block: BlockquoteBlock }>(({ block }) => (
-  <blockquote dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.content) }} />
+  <blockquote dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }} />
 ));
 
 const ListBlockComponent = React.memo<{ block: ListBlock }>(({ block }) => {
@@ -85,7 +105,7 @@ const ListBlockComponent = React.memo<{ block: ListBlock }>(({ block }) => {
   return (
     <Tag>
       {block.items.map((item, i) => (
-        <li key={i} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item) }} />
+        <li key={i} dangerouslySetInnerHTML={{ __html: sanitizeHtml(item) }} />
       ))}
     </Tag>
   );
@@ -97,7 +117,7 @@ const TableBlockComponent = React.memo<{ block: TableBlock }>(({ block }) => (
       {block.rows.map((row, i) => (
         <tr key={i}>
           {row.map((cell, j) => (
-            <td key={j} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cell) }} />
+            <td key={j} dangerouslySetInnerHTML={{ __html: sanitizeHtml(cell) }} />
           ))}
         </tr>
       ))}
@@ -120,49 +140,11 @@ const FigureBlockComponent = React.memo<{ block: FigureBlock; mode: string }>(({
   </figure>
 ));
 
-/**
- * 检查 HTML 是否是由系统生成的受信任知识图谱容器
- *
- * 系统生成的 graph HTML（graphRenderer.ts）具有以下不可伪造的结构特征：
- *   - 根元素是 knowledge-graph-container 并含 contenteditable="false"
- *   - 内部包含 <script type="text/plain"> 数据容器（DOMPurify 默认移除）
- *   - 内部包含 <iframe>（DOMPurify 默认移除）
- *
- * 通过验证这组结构特征而非单一 class name，防止攻击者注入伪装容器绕过净化。
- */
-function isSelfGeneratedHtml(html: string): boolean {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const root = doc.body.firstElementChild;
-    if (!root) return false;
-
-    // ① 根元素必须是 knowledge-graph-container（系统唯一注册的容器类）
-    if (!root.classList.contains('knowledge-graph-container')) return false;
-
-    // ② 必须有关闭编辑的属性（graphRenderer 生成时固定设置）
-    if (root.getAttribute('contenteditable') !== 'false') return false;
-
-    // ③ 必须包含系统内置的数据脚本容器（script[type=text/plain] by graphRenderer）
-    const dataScript = root.querySelector('script[type="text/plain"]');
-    if (!dataScript) return false;
-    const scriptId = dataScript.getAttribute('id');
-    if (!scriptId || !/^data-[\w-]+$/.test(scriptId)) return false;
-
-    // ④ 必须包含 iframe 图谱渲染区域
-    if (!root.querySelector('iframe')) return false;
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 const RawHtmlBlockComponent = React.memo<{ block: RawHtmlBlock }>(({ block }) => {
   // 系统自生成的 HTML（知识图谱等）跳过净化，否则 iframe/script 会被剥离
-  const sanitized = isSelfGeneratedHtml(block.html)
+  const sanitized = isSelfGeneratedHtmlCached(block.html)
     ? block.html
-    : DOMPurify.sanitize(block.html);
+    : sanitizeHtml(block.html);
   return <div dangerouslySetInnerHTML={{ __html: sanitized }} />;
 });
 
@@ -191,7 +173,12 @@ export const BlockRenderer = React.memo<BlockRendererProps>(({ block, mode }) =>
     case 'figure':
       return <FigureBlockComponent block={block} mode={mode} />;
     case 'pdf':
-      return null;
+      // 顶层无 pdfData 时给出占位提示，避免 PDF 块静默消失
+      return (
+        <div style={{ margin: '1rem 0', padding: '12px 16px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', color: '#64748b', fontSize: '13px' }}>
+          📄 PDF 附件（详见文章页尾附件区）
+        </div>
+      );
     case 'rawHtml':
       return <RawHtmlBlockComponent block={block} />;
     default:

@@ -100,6 +100,22 @@ describe('pasteCleaner', () => {
       expect(result).toContain('<img');
       expect(result).toContain('x.jpg');
     });
+
+    it('移除 on* 事件属性（onerror/onload 等）', () => {
+      const html = '<img src="x.jpg" onerror="alert(1)" onload="alert(2)">';
+      const result = cleanPastedHtml(html);
+      expect(result).not.toContain('onerror');
+      expect(result).not.toContain('onload');
+      expect(result).toContain('<img');
+    });
+
+    it('移除任意标签上的事件属性', () => {
+      const html = '<p onclick="alert(1)" onmouseover="alert(2)">内容</p>';
+      const result = cleanPastedHtml(html);
+      expect(result).not.toContain('onclick');
+      expect(result).not.toContain('onmouseover');
+      expect(result).toContain('内容');
+    });
   });
 
   describe('图片处理', () => {
@@ -120,6 +136,19 @@ describe('pasteCleaner', () => {
       const result = cleanPastedHtml(html);
       expect(result).toContain('referrerpolicy="no-referrer"');
       expect(result).not.toContain('rich_pages');
+    });
+
+    it('移除 javascript: 伪协议的图片 src', () => {
+      const html = '<img src="javascript:alert(1)">';
+      const result = cleanPastedHtml(html);
+      expect(result).not.toContain('javascript:');
+    });
+
+    it('移除 javascript: 伪协议的媒体 src', () => {
+      const html = '<video src="javascript:alert(1)"></video>';
+      const result = cleanPastedHtml(html);
+      expect(result).not.toContain('javascript:');
+      expect(result).toContain('<video');
     });
   });
 

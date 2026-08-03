@@ -28,6 +28,7 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportMessage, setExportMessage] = useState('');
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedDesign(currentUseAlternateDesign ? 'magazine' : 'original');
@@ -39,6 +40,7 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
       setIsExporting(false);
       setExportProgress(0);
       setExportMessage('');
+      setExportError(null);
     }
   }, [isOpen]);
 
@@ -69,10 +71,10 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
       // 导出成功，关闭弹窗
       onClose();
     } catch (error) {
-      // 导出失败，重置状态
+      // 导出失败，重置状态并展示错误（否则弹窗直接回到选项页，用户无任何失败反馈）
       setIsExporting(false);
       setExportProgress(0);
-      setExportMessage('导出失败，请重试');
+      setExportError('导出失败: ' + (error instanceof Error ? error.message : '请重试'));
     }
   };
 
@@ -143,6 +145,11 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
           ) : (
             // 正常选项界面
             <div className="space-y-6">
+              {exportError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm font-medium px-4 py-3 rounded-lg">
+                  {exportError}
+                </div>
+              )}
               {/* 导出版本类型选择 */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-3">导出版本</h3>

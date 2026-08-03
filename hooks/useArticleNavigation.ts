@@ -25,7 +25,7 @@ export function useArticleNavigation({
   const articlesRef = useRef(articles);
   articlesRef.current = articles;
 
-  const handleSelectArticle = useCallback((id: any) => {
+  const handleSelectArticle = useCallback((id: number | string) => {
     const numId = Number(id);
     setCurrentId(numId);
     const art = articlesRef.current.find(a => a.id === numId);

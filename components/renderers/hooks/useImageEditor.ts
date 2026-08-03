@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import type { Article } from '../../../src/types';
 import { usePanZoom } from '../../../hooks/usePanZoom';
 import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
+import { fileToDataURL, compressImage } from '../../../src/utils/fileHelpers';
 
 const noop = () => {};
 
@@ -106,16 +107,20 @@ export function useImageEditor({
     onImageDelete?.();
   }, [article.id, imageField, onUpdate, onImageDelete]);
 
-  const handleImgReplace = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImgReplace = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const src = evt.target?.result as string;
+    try {
+      const base64 = await fileToDataURL(file);
+      // 封面/封底固定 2400px + quality 0.92 + WebP（与 CLAUDE.md 约定及 App.tsx 上传路径一致），
+      // 避免十几 MB 原图直接写入 IndexedDB
+      const src = await compressImage(base64, 2400, 0.92, 'webp');
       onUpdate?.(article.id, { [imageField]: src });
+    } catch (err) {
+      alert('图片替换失败: ' + (err instanceof Error ? err.message : '请检查图片格式'));
+    } finally {
       if (replaceInputRef.current) replaceInputRef.current.value = '';
-    };
-    reader.readAsDataURL(file);
+    }
   }, [article.id, imageField, onUpdate]);
 
   const handleImgCaption = noop;

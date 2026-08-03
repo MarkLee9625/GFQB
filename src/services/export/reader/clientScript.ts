@@ -1,5 +1,3 @@
-import { SHARED_STYLES, MAGAZINE_STYLES, PRINT_STYLES, MISC_STYLES, SEASONAL_STYLES, SVG_ICONS } from '../assets';
-
 export function getClientScript() {
     return `
     function forEach(list, callback) {

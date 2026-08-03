@@ -1,4 +1,5 @@
 import React from 'react';
+import { CONSTANTS } from '../src/constants';
 
 interface Props {
   children: React.ReactNode;
@@ -102,7 +103,8 @@ export class DBErrorBoundary extends React.Component<DBErrorBoundaryProps, DBErr
                 onClick={() => {
                   if (window.confirm('确定要清除所有本地数据吗？此操作不可恢复。')) {
                     localStorage.clear();
-                    indexedDB.deleteDatabase('sws-react-db');
+                    // 库名必须与 services/db.ts 的 CONSTANTS.DB_NAME 一致，否则清库静默失败
+                    indexedDB.deleteDatabase(CONSTANTS.DB_NAME);
                     window.location.reload();
                   }
                 }}

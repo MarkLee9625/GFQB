@@ -108,16 +108,8 @@ export const ArticleRenderer = React.memo<ArticleRendererProps>((props) => {
       {renderContent()}
     </div>
   );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.article.id === nextProps.article.id &&
-    prevProps.article.content === nextProps.article.content &&
-    prevProps.article.coverImage === nextProps.article.coverImage &&
-    prevProps.article.backImage === nextProps.article.backImage &&
-    prevProps.useAlternateDesign === nextProps.useAlternateDesign &&
-    prevProps.mode === nextProps.mode &&
-    prevProps.logo === nextProps.logo
-  );
+  // 使用默认浅比较：自定义比较器曾漏掉 title/abstract/tags/pdfData/blocks
+  // 及封面 scale/posX/posY 等字段，导致编辑保存后渲染不刷新
 });
 
 export { CoverRenderer } from './CoverRenderer';

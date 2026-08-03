@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, act } from '@testing-library/react';
 import { BlockRenderer } from './BlockRenderer';
 import type {
   ContentBlock,
@@ -59,6 +59,7 @@ describe('BlockRenderer', () => {
     expect(img).toBeTruthy();
     expect(img?.getAttribute('alt')).toBe('图');
     expect(img?.getAttribute('referrerpolicy')).toBe('no-referrer');
+    expect(img?.getAttribute('decoding')).toBe('async');
   });
 
   it('6: 渲染 blockquote 为 blockquote 标签', () => {
@@ -142,5 +143,26 @@ describe('BlockRenderer', () => {
     const { container } = render(<BlockRenderer block={block} mode="print" />);
     const img = container.querySelector('img');
     expect(img).toBeTruthy();
+  });
+
+  it('15: data URL 图片解码完成前不直接使用 base64 作为 src', async () => {
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:mock-image') as unknown as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
+    try {
+      const dataUrl = 'data:image/png;base64,' + btoa('iVBORw0KGgo=');
+      const block = makeBlock({ type: 'image', src: dataUrl, alt: '图' }) as ImageBlock;
+      const { container } = render(<BlockRenderer block={block} mode="print" />);
+      const img = container.querySelector('img');
+      expect(img?.getAttribute('src')).toBeNull();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(img?.getAttribute('src')).toBe('blob:mock-image');
+    } finally {
+      URL.createObjectURL = originalCreate as typeof URL.createObjectURL;
+      URL.revokeObjectURL = originalRevoke as typeof URL.revokeObjectURL;
+    }
   });
 });

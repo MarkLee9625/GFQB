@@ -2,14 +2,26 @@ import { KnowledgeGraphData } from '../../services/aiService';
 import { generateGraphEngineCode, generateGraphStyles } from './graph/graphEngine';
 
 export function generateGraphHtml(data: KnowledgeGraphData): string {
-  // 数据清洗：规范化节点和连线 ID
-  data.nodes.forEach(n => {
-    n.id = String(n.id).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-  });
-  data.links.forEach(l => {
-    l.source = String(l.source).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-    l.target = String(l.target).replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-  });
+  // 数据清洗：规范化节点和连线 ID。
+  // 先拷贝再清洗（不原地改写缓存数据）；空 id 与清洗塌缩为空的 id 生成唯一值，
+  // 避免多个节点并入同一 "undefined" 节点或清洗后互相合并
+  data = {
+    nodes: data.nodes.map(n => ({ ...n })),
+    links: data.links.map(l => ({ ...l })),
+  };
+
+  const usedNodeIds = new Set<string>();
+  for (const n of data.nodes) {
+    let cleanId = String(n.id ?? '').replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    if (!cleanId) cleanId = 'node_' + Math.random().toString(36).substring(2, 9);
+    if (usedNodeIds.has(cleanId)) cleanId = cleanId + '_' + Math.random().toString(36).substring(2, 9);
+    usedNodeIds.add(cleanId);
+    n.id = cleanId;
+  }
+  for (const l of data.links) {
+    l.source = String(l.source ?? '').replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    l.target = String(l.target ?? '').replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  }
 
   const validNodeIds = new Set(data.nodes.map(n => n.id));
   const originalLinkCount = data.links.length;
@@ -260,8 +272,25 @@ export function generateGraphHtml(data: KnowledgeGraphData): string {
         }
       }
 
-      // 直接通过 CDN 加载 d3，避免 ./d3.min.js 在 srcdoc iframe 中的路径失效
+      // 优先加载离线内联的 D3（post-build.js 把 d3.min.js 注入父页面全局，单文件阅读器可完全离线）
+      // 父页面无注入时回退 CDN
       function loadD3() {
+        var inlineSrc = null;
+        try {
+          if (window.parent && window.parent.__SWS_D3_SRC__) {
+            inlineSrc = window.parent.__SWS_D3_SRC__;
+          }
+        } catch (e) { /* 跨域环境忽略，走 CDN 兜底 */ }
+
+        if (inlineSrc) {
+          var inlineScript = document.createElement('script');
+          inlineScript.textContent = inlineSrc;
+          document.head.appendChild(inlineScript);
+          console.log('[Graph] D3 loaded from offline inline source, starting bootstrap...');
+          bootstrap();
+          return;
+        }
+
         var script = document.createElement('script');
         script.src = 'https://d3js.org/d3.v7.min.js';
         script.onload = function() {

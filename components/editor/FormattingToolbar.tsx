@@ -33,19 +33,28 @@ const FormattingToolbar = React.memo(({ onExecCmd, onAutoIndent, onScaleText, is
   }, [updateActiveStates]);
 
   const handleInsertLink = useCallback(() => {
-    if (linkUrl.trim()) {
+    const url = linkUrl.trim();
+    if (url) {
+      // 协议白名单：仅允许 http/https/mailto/tel 及相对路径/锚点，
+      // 拒绝 javascript:/data:/vbscript: 等可执行协议（与 pasteCleaner 粘贴链路行为一致）
+      const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(url);
+      const isAllowedScheme = /^(https?|mailto|tel):/i.test(url);
+      if (hasScheme && !isAllowedScheme) {
+        alert('链接地址不安全，仅支持 http/https/mailto/tel 协议');
+        return;
+      }
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         if (range.collapsed) {
           const a = document.createElement('a');
-          a.href = linkUrl.trim();
-          a.textContent = linkUrl.trim();
+          a.href = url;
+          a.textContent = url;
           a.target = '_blank';
           range.insertNode(a);
           range.collapse(false);
         } else {
-          onExecCmd('createLink', linkUrl.trim());
+          onExecCmd('createLink', url);
         }
       }
       setLinkUrl('');
@@ -86,7 +95,7 @@ const FormattingToolbar = React.memo(({ onExecCmd, onAutoIndent, onScaleText, is
             className={fmtBtnClass(!!activeStates[cmd])}
             title={title}
           >
-            <Icon name={icon as any} className="w-4 h-4" />
+            <Icon name={icon} className="w-4 h-4" />
           </button>
         ))}
       </div>

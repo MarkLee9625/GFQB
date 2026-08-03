@@ -39,6 +39,9 @@ export default defineConfig(({ mode }) => {
       minify: true,
       sourcemap: false,
       rollupOptions: {
+        input: {
+          main: path.resolve(process.cwd(), 'index.html'),
+        },
         output: {
           // 文件名优化
           entryFileNames: 'assets/[name]-[hash].js',

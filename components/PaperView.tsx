@@ -68,12 +68,6 @@ const PaperViewComponent: React.FC<PaperViewProps> = ({
   );
 };
 
-export const PaperView = React.memo(PaperViewComponent, (prevProps, nextProps) => {
-  return (
-    prevProps.article?.id === nextProps.article?.id &&
-    prevProps.article?.content === nextProps.article?.content &&
-    prevProps.useAlternateDesign === nextProps.useAlternateDesign &&
-    prevProps.isEditMode === nextProps.isEditMode &&
-    prevProps.logo === nextProps.logo
-  );
-});
+// 使用默认浅比较：自定义比较器曾漏掉 coverImage/title/scale 等字段，
+// 导致封面图上传、标题修改后主视图不刷新
+export const PaperView = React.memo(PaperViewComponent);

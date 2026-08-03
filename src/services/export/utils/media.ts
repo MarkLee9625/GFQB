@@ -2,6 +2,12 @@ import { CONSTANTS } from '../../../constants';
 import { compressImage } from '../../../utils/fileHelpers';
 
 /**
+ * 公共 CORS 代理会把企业/船厂图片数据经第三方中转（存在外泄与不可用风险），
+ * 默认关闭；确需绕过严格 CORS 图床时改为 true 启用
+ */
+const ALLOW_THIRD_PARTY_PROXY = false;
+
+/**
  * 将在线图片URL转换为Base64 Data URI（带超时与跨域容错）
  * 【架构升级】针对微信等开启了严格 CORS 和防盗链的图床进行特化绕过
  */
@@ -29,6 +35,7 @@ async function fetchImageAsBase64(url: string, timeoutMs = 8000): Promise<string
                 try {
                     blob = await fetchBlob(url);
                 } catch (directErr) {
+                    if (!ALLOW_THIRD_PARTY_PROXY) throw directErr;
                     console.warn(`[Export] 直接拉取图片失败，正尝试免 CORS 代理: ${url}`);
                     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                     blob = await fetchBlob(proxyUrl);
@@ -77,7 +84,7 @@ export async function inlineOnlineImages(
 
     console.log(`[Export] 检测到 ${matches.length} 张在线图片，开始批量内联...`);
 
-    let processedContent = content;
+    const resultMap = new Map<string, { before: string; after: string; base64: string }>();
     let done = 0;
     const CONCURRENCY = 4;
 
@@ -91,22 +98,28 @@ export async function inlineOnlineImages(
             })
         );
 
-        for (const result of results) {
+        for (let j = 0; j < results.length; j++) {
+            const result = results[j];
             done++;
             if (result.status === 'fulfilled') {
                 const { match, base64 } = result.value;
-                const newTag = `<img${match.before}src="${base64}"${match.after}>`;
-                processedContent = processedContent.replace(match.full, newTag);
+                resultMap.set(match.full, { before: match.before, after: match.after, base64 });
                 console.log(`[Export] ✅ 图片已内联并压缩 (${done}/${matches.length}): ${match.url.substring(0, 60)}...`);
             } else {
-                console.warn(`[Export] ⚠️ 图片内联失败，保留原链接: ${batch[results.indexOf(result)]?.url}`, result.reason);
+                console.warn(`[Export] ⚠️ 图片内联失败，保留原链接: ${batch[j]?.url}`, result.reason);
             }
             if (onProgress) onProgress(done, matches.length);
         }
     }
 
+    // 单次正则回调替换（原实现逐图 replace 整串为 O(n²)，多图时重复扫描）
+    const inlinedContent = content.replace(urlRegex, (full, before, url, after) => {
+        const r = resultMap.get(full);
+        return r ? `<img${r.before}src="${r.base64}"${r.after}>` : full;
+    });
+
     console.log(`[Export] 图片内联完成: 成功 ${done}/${matches.length}`);
-    return processedContent;
+    return inlinedContent;
 }
 
 

@@ -38,6 +38,9 @@ const Toolbar = React.memo<ToolbarProps>(({
   onForceGenerateGraph,
   onOpenAiCuration,
 }) => {
+  // ⚠️ Hooks 必须在早期 return 之前声明，否则全屏切换时 hook 数量变化导致 React 崩溃
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
   if (isFullscreen) {
     return (
       <div className="no-print fixed top-4 right-4 bg-white/90 backdrop-blur rounded-xl flex items-center gap-1 px-3 py-2 shadow-xl shadow-black/5 z-[50] border border-gray-100">
@@ -53,8 +56,6 @@ const Toolbar = React.memo<ToolbarProps>(({
       </div>
     );
   }
-
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   return (
     <div className="no-print absolute top-5 right-5 bg-white/90 backdrop-blur rounded-xl flex items-center justify-end px-4 py-2 gap-2 shadow-xl shadow-black/5 z-[50] border border-gray-100">

@@ -4,6 +4,10 @@
  */
 
 import { extractAbstractFromPdf } from '../src/services/pdf/index';
+import type { Article } from '../src/types';
+
+/** AI 上下文组装所需的文章字段子集（替代 any[]，字段拼写错误在编译期暴露） */
+export type ArticleContextInput = Pick<Article, 'id' | 'title' | 'content' | 'abstract' | 'tags' | 'pdfData'>;
 
 const REASONER_MODEL = 'deepseek-v4-flash';
 const CHAT_MODEL = 'deepseek-v4-flash';
@@ -12,12 +16,7 @@ const API_URL = `/api/deepseek/generate`;
 const API_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 2000;
-const GRAPH_TIMEOUT_MS = 900_000;
-// 单次调用同时生成节点+关系。输出 JSON 约 5K tokens，留足 thinking trace 余量
-const GRAPH_MAX_TOKENS = 32768;
 const GRAPH_TIMEOUT_SINGLE = 600_000;
-const GRAPH_SUPPLEMENT_TIMEOUT = 300_000;
-const GRAPH_SUPPLEMENT_MAX_TOKENS = 16384;
 
 export type ProgressCallback = (stage: string, detail: string) => void;
 
@@ -33,6 +32,8 @@ interface CallOptions {
     temperature?: number;
     timeoutMs?: number;
     retries?: number;
+    /** 推理强度分级：简单任务（标题/扩写/翻译）传 'low' 控制推理 token 成本 */
+    reasoningEffort?: 'low' | 'medium' | 'max';
 }
 
 async function callDeepSeekAPI(options: CallOptions): Promise<string> {
@@ -43,6 +44,7 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
         temperature,
         timeoutMs = API_TIMEOUT_MS,
         retries = MAX_RETRIES,
+        reasoningEffort = 'max',
     } = options;
 
     let lastError: Error | null = null;
@@ -52,7 +54,10 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
 
     for (let attempt = 1; attempt <= retries; attempt++) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(new Error(`请求超时 (${timeoutMs / 1000}s)`)), timeoutMs);
+        // 无参 abort：带 reason 的 abort 会让 fetch 以该 Error 拒绝（name 为 'Error'），
+        // 导致下方 isAbort 恒为 false，超时重试逻辑永远不触发
+        let timedOut = false;
+        const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
 
         if (attempt > 1 && isEmptyContent) {
             effectiveMaxTokens = Math.min(Math.round((effectiveMaxTokens || 16384) * 1.5), 131072);
@@ -75,14 +80,15 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
             const body: Record<string, unknown> = { model, messages: effectiveMessages };
             if (effectiveMaxTokens !== undefined) body.max_tokens = effectiveMaxTokens;
             if (temperature !== undefined) body.temperature = temperature;
-            body.reasoning_effort = 'max';
+            body.reasoning_effort = reasoningEffort;
             body.extra_body = { thinking: { type: 'enabled' } };
 
+            // 不发送 x-sws-proxy-secret：secret 仅由 Vite 开发代理/BFF 同源校验注入，
+            // 客户端携带会把密钥打进 bundle（VITE_ 前缀变量会被 Vite 暴露）
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-sws-proxy-secret': import.meta.env.VITE_PROXY_SECRET || '',
                 },
                 body: JSON.stringify(body),
                 signal: controller.signal,
@@ -132,6 +138,9 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
 
             if (!isRetryable || attempt >= retries) {
                 console.error(`[aiService] API 调用最终失败 (${attempt}/${retries}):`, error.message);
+                if (isAbort && timedOut) {
+                    lastError = new Error(`AI 请求超时 (${timeoutMs / 1000}s)`);
+                }
                 break;
             }
 
@@ -244,13 +253,15 @@ export interface AIResult {
 }
 
 export async function generateArticleMeta(content: string): Promise<AIResult> {
-    const plainText = content.replace(/<[^>]+>/g, '\n').replace(/\s+/g, ' ').trim().slice(0, 100000);
+    // 标题/摘要/关键词的信息量集中在前部，截断至 3 万字控制输入成本（原 10 万字符按量计费过高）
+    const plainText = content.replace(/<[^>]+>/g, '\n').replace(/\s+/g, ' ').trim().slice(0, 30000);
 
     const systemPrompt = `你是一名资深的船舶工程与智能制造领域的**技术主编**。请严格遵循以下规则处理用户提供的文章：
 ### 1. 【标题生成要求】
 * 风格：拒绝生硬、拒绝学术化。要干练、有力、具有工程实战感。
 * 结构：核心技术名词 + 动词/应用场景/成效。
 * 字数：12 - 25 字。
+* 必须重新提炼，禁止直接复制原文标题。
 * 优秀示例：大型邮轮薄板激光复合焊变形控制工艺
 ### 2. 【摘要生成要求】
 * 核心逻辑：Why (痛点/背景) -> How (技术手段) -> Benefits (具体收益/数据)。
@@ -260,10 +271,8 @@ export async function generateArticleMeta(content: string): Promise<AIResult> {
 * 必须包含：文章涉及的具体工艺环节或工种（如：涂装、焊接、总装等）。
 * 绝对禁止：禁止生成"提质增效"、"智能化"等无实际技术细节的虚词。
 ### 输出格式：
-你必须在思考过程结束后，**仅**输出以下合法的 JSON 结构，不要附带任何解释性前缀或后缀文字：
-\`\`\`json
-{"title": "生成的专业标题", "abstract": "生成的摘要内容", "keywords": ["标签1", "标签2"]}
-\`\`\``;
+你必须在思考过程结束后，**仅**输出以下合法的 JSON 结构，不要附带任何解释性前缀或后缀文字，不要使用 Markdown 代码块：
+{"title": "生成的专业标题", "abstract": "生成的摘要内容", "keywords": ["标签1", "标签2"]}`;
 
     const userPrompt = `请阅读并分析以下文章内容：\n\n${plainText}`;
 
@@ -274,8 +283,21 @@ export async function generateArticleMeta(content: string): Promise<AIResult> {
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt },
             ],
+            reasoningEffort: 'low',
         });
-        return robustJsonParse<AIResult>(rawText);
+        const result = robustJsonParse<AIResult>(rawText);
+        const title = String(result.title ?? '').trim();
+        const abstract = String(result.abstract ?? '').trim();
+        const keywords = Array.isArray(result.keywords)
+            ? [...new Set(result.keywords.map(k => String(k).trim()).filter(Boolean))].slice(0, 5)
+            : [];
+        if (!title || !abstract) {
+            throw new Error('AI 元数据生成结果缺少 title 或 abstract 字段');
+        }
+        if (keywords.length === 0) {
+            throw new Error('AI 元数据生成结果缺少 keywords 字段');
+        }
+        return { title, abstract, keywords };
     } catch (error) {
         console.error('Generate meta failed:', error);
         throw error;
@@ -283,11 +305,16 @@ export async function generateArticleMeta(content: string): Promise<AIResult> {
 }
 
 export async function scaleText(text: string, mode: 'expand' | 'shrink'): Promise<string> {
-    const systemPrompt = mode === 'expand'
-        ? `你是一名资深的船舶工程编辑，擅长扩写技术文档。请对用户提供的文本进行专业扩写。`
-        : `你是一名资深的船舶工程编辑，擅长精简技术文档。请对用户提供的文本进行专业精简。`;
+    const action = mode === 'expand' ? '扩写' : '精简';
+    const systemPrompt = `你是一名资深的船舶工程编辑，擅长${action}技术文档。
 
-    const userPrompt = `请对以下文本进行 ${mode === 'expand' ? '扩写' : '精简'}：\n\n${text}`;
+要求：
+1. 只输出${action}后的正文本身，禁止输出任何解释、说明、寒暄或前后缀文字。
+2. ${mode === 'expand' ? '扩写至原文的 1.5 倍左右' : '精简至原文的 50%-70%'}，不得丢失核心技术信息。
+3. 保留专业术语、型号、数据与引用，不得虚构或篡改事实。
+4. 保留原文的段落结构及 Markdown/HTML 格式（原文为纯文本时保持纯文本输出）。`;
+
+    const userPrompt = `请${action}以下文本（只输出${action}后的正文）：\n\n${text}`;
 
     try {
         const rawText = await callDeepSeekAPI({
@@ -296,6 +323,7 @@ export async function scaleText(text: string, mode: 'expand' | 'shrink'): Promis
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt },
             ],
+            reasoningEffort: 'low',
         });
         return cleanPlainTextResponse(rawText);
     } catch (error) {
@@ -418,12 +446,13 @@ export async function extractGlobalKnowledgeGraph(
   - equipment(设备): 如"爬壁机器人"
   - concept(概念): 如"模块化设计"
   weight: 1-10 (9-10=核心主题, 7-8=关键支撑, 5-6=常规, 3-4=辅助, 1-2=边缘)
-  ID: 纯英文小写+下划线，≤30字符
+  ID: 纯英文小写+下划线，≤30字符，**必须全局唯一**（重复 id 会导致节点被丢弃）
 
 【关系 ★必须包含，且数量不少于节点数×2.5】
   遵循 concept/material→process→technology/equipment 传递链。
   每个节点至少 2 条连线，孤立节点不可接受。
-  动词: 驱动/决定/影响/制约/应用于/服务于/实现/配套于/包含/属于/组成/依赖/基于/协同
+  links 的 source/target 必须引用 nodes 中已存在的 id，禁止使用未定义的 id。
+  动词: 驱动/支撑/决定/控制/主导/影响/制约/应用于/服务于/实现/配套于/包含/属于/组成/依赖/基于/协同
   strength: 1-5 (5=强因果/直接依赖, 1=弱关联)
 
 【输出格式】严格 JSON，无 markdown 包裹，一次性输出 nodes 和 links：
@@ -454,7 +483,7 @@ export async function extractGlobalKnowledgeGraph(
             break; // 成功则跳出重试循环
         } catch (err: any) {
             if (attempt < NODE_MAX_RETRIES) {
-                console.warn(`[aiService] Phase 1 解析失败 (尝试 ${attempt}/${NODE_MAX_RETRIES})，max_tokens 提升至 ${GRAPH_MAX_TOKENS} 后重试:`, err.message);
+                console.warn(`[aiService] Phase 1 解析失败 (尝试 ${attempt}/${NODE_MAX_RETRIES})，准备重试:`, err.message);
                 continue;
             }
             throw err; // 最后一次失败则向外抛出
@@ -615,96 +644,8 @@ function generateFallbackLinks(currentData: KnowledgeGraphData): KnowledgeLink[]
     return fallbackLinks;
 }
 
-async function supplementOrphanLinks(
-    currentData: KnowledgeGraphData,
-    articlesText: string
-): Promise<{ links: KnowledgeLink[] }> {
-    const linkedNodeIds = new Set<string>();
-    for (const link of currentData.links) {
-        linkedNodeIds.add(link.source);
-        linkedNodeIds.add(link.target);
-    }
-
-    const orphanNodes = currentData.nodes.filter(n => !linkedNodeIds.has(n.id));
-    if (orphanNodes.length === 0) return { links: [] };
-
-    const orphanInfo = orphanNodes.map(n => `${n.id}(${n.name}, ${n.type})`).join(', ');
-
-    const orphanContextSnippets = orphanNodes.slice(0, 12).map(n => {
-        const idx = articlesText.indexOf(n.name);
-        if (idx === -1) return '';
-        const start = Math.max(0, idx - 200);
-        const end = Math.min(articlesText.length, idx + 400);
-        return `【${n.name}】...${articlesText.substring(start, end)}...`;
-    }).filter(Boolean).join('\n\n');
-
-    const systemPrompt = `为孤立节点建立与已有节点的逻辑连线。每个孤立节点至少 1 条连线。关系动词: 驱动/支撑/优化/应用于/转化为/依赖于/配套于。格式: {"links":[{"source":"id","target":"id","relationship":"动词","strength":1-5}]}`;
-
-    const userPrompt = `
-【原文背景】
-${articlesText.substring(0, 200000)}
-
-${orphanContextSnippets ? `【孤立节点上下文片段】\n${orphanContextSnippets}\n\n` : ''}【孤立节点】
-${orphanInfo}
-
-【所有可用节点 ID】
-${currentData.nodes.map(n => n.id).join(', ')}
-
-请为孤立节点建立逻辑连线：`;
-
-    try {
-        const rawText = await callDeepSeekAPI({
-            model: REASONER_MODEL,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt },
-            ],
-            max_tokens: GRAPH_SUPPLEMENT_MAX_TOKENS,
-            timeoutMs: GRAPH_SUPPLEMENT_TIMEOUT,
-            retries: 2,
-        });
-
-        return robustJsonParse<{ links: KnowledgeLink[] }>(rawText);
-    } catch (error) {
-        console.warn('[aiService] 补充关系挖掘失败，启用基于类型的规则 fallback');
-        // Fallback: 基于 type 匹配规则自动连线
-        const fallbackLinks: KnowledgeLink[] = [];
-        const processNodes = currentData.nodes.filter(n => n.type === 'process');
-        const techNodes = currentData.nodes.filter(n => n.type === 'technology');
-        const materialNodes = currentData.nodes.filter(n => n.type === 'material');
-        const conceptNodes = currentData.nodes.filter(n => n.type === 'concept');
-
-        for (const orphan of orphanNodes) {
-            let target: typeof orphan | undefined;
-            let relationship = '应用于';
-
-            if (orphan.type === 'concept' || orphan.type === 'material') {
-                target = processNodes.find(p => !fallbackLinks.some(l => l.source === orphan.id && l.target === p.id));
-                relationship = orphan.type === 'material' ? '用于' : '指导';
-            } else if (orphan.type === 'process') {
-                target = techNodes.find(t => !fallbackLinks.some(l => l.source === t.id && l.target === orphan.id));
-                relationship = '实现';
-                if (target) {
-                    fallbackLinks.push({ source: target.id, target: orphan.id, relationship, strength: 3 });
-                    continue;
-                }
-            } else if (orphan.type === 'equipment') {
-                target = processNodes.find(p => !fallbackLinks.some(l => l.source === orphan.id && l.target === p.id));
-                relationship = '服务于';
-            }
-
-            if (target) {
-                fallbackLinks.push({ source: orphan.id, target: target.id, relationship, strength: 2 });
-            }
-        }
-
-        return { links: fallbackLinks };
-    }
-}
-
-
 export async function generateTitleOnly(content: string): Promise<string> {
-    const plainText = content.replace(/<[^>]+>/g, '\n').slice(0, 50000);
+    const plainText = content.replace(/<[^>]+>/g, '\n').replace(/\s+/g, ' ').trim().slice(0, 50000);
     const systemPrompt = `你是一个专业的船舶工程编辑助手。请为用户提供的文章拟定一个简短有力的标题。
 要求：
 - 字数：12 - 25 字
@@ -720,8 +661,13 @@ export async function generateTitleOnly(content: string): Promise<string> {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
         ],
+        reasoningEffort: 'low',
     });
-    return cleanPlainTextResponse(rawText).trim().replace(/^["']|["']$/g, '');
+    const title = cleanPlainTextResponse(rawText).trim().replace(/^["']|["']$/g, '');
+    if (!title) {
+        throw new Error('AI 标题生成结果为空');
+    }
+    return title;
 }
 
 export interface AiEvaluationResult {
@@ -752,6 +698,7 @@ export async function batchEvaluateArticles(
 领导视察、会议纪要、党建活动、人事任命、公司获奖通报、行业宏观政策泛泛而谈等。
 
 【输出要求】
+请对输入数组中的**每一篇**文章逐篇评审，返回与输入**相同数量**的 JSON 对象，不要遗漏任何一篇，也不要合并多篇。
 请严格输出一个 JSON 数组。数组中的每个对象必须包含：
 - "id": 对应输入文章的 id
 - "aiSummary": 你提炼该文章核心技术摘要（50字左右，必须客观精炼）
@@ -768,7 +715,7 @@ export async function batchEvaluateArticles(
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: `请评审以下文章：\n${inputData}` },
             ],
-            temperature: 0.1,
+            reasoningEffort: 'low',
         });
 
         let content = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
@@ -787,7 +734,31 @@ export async function batchEvaluateArticles(
 
         content = content.replace(/,\s*([}\]])/g, '$1');
 
-        const results: AiEvaluationResult[] = JSON.parse(content);
+        const parsed: AiEvaluationResult[] = JSON.parse(content);
+
+        // 解析后轻量校验：decision 枚举归一、按 id 去重、非法条目剔除；缺篇仅告警不阻塞
+        const VALID_DECISIONS: ReadonlySet<string> = new Set(['recommend', 'reject']);
+        const seenIds = new Set<string>();
+        const results: AiEvaluationResult[] = [];
+        for (const item of parsed) {
+            if (!item || !item.id) continue;
+            if (seenIds.has(item.id)) continue;
+            seenIds.add(item.id);
+            results.push({
+                id: item.id,
+                aiSummary: String(item.aiSummary ?? '').trim(),
+                decision: VALID_DECISIONS.has(item.decision) ? item.decision : 'reject',
+                reason: String(item.reason ?? '').trim(),
+                tags: Array.isArray(item.tags)
+                    ? [...new Set(item.tags.map(t => String(t).trim()).filter(Boolean))].slice(0, 5)
+                    : [],
+            });
+        }
+
+        const missingIds = articlesToEvaluate.map(a => a.id).filter(id => !seenIds.has(id));
+        if (missingIds.length > 0) {
+            console.warn(`[aiService] AI 评审缺篇 ${missingIds.length} 篇，未返回结果:`, missingIds);
+        }
         console.log('[aiService] AI 批量评审成功，结果数:', results.length);
         return results;
     } catch (error) {
@@ -806,16 +777,20 @@ export async function translateAndFormatAcademic(article: { title: string, conte
    - 🏆 **文献来源** (提取传入文本中的期刊、作者、引用量等硬核信息)
    - 💡 **核心工法解析** (将英文摘要翻译为通顺、专业的中文工程描述，切忌机翻味)
    - 🚀 **应用前景分析** (作为总编，用1段话专业点评该技术在实际造船厂中的潜在应用价值)
-3. 语言风格：硬核、专业、干练。绝不要输出多余的寒暄语。`;
+3. 语言风格：硬核、专业、干练。绝不要输出多余的寒暄语。
+4. 输出约束：直接输出编译后的正文本身，禁止输出任何解释性前言或后记；正文长度控制在 800-1500 字。`;
+
+    // 思考模式下 temperature 不生效，故不传该参数；输入截断至 3 万字控制成本
+    const contentText = article.content.replace(/<[^>]+>/g, '\n').replace(/\s+/g, ' ').trim().slice(0, 30000);
 
     try {
         const rawText = await callDeepSeekAPI({
             model: REASONER_MODEL,
             messages: [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: `【论文标题】\n${article.title}\n\n【原始信息】\n${article.content}` },
+                { role: 'user', content: `【论文标题】\n${article.title}\n\n【原始信息】\n${contentText}` },
             ],
-            temperature: 0.3,
+            reasoningEffort: 'low',
         });
 
         const cleanedText = cleanPlainTextResponse(rawText);
@@ -827,7 +802,7 @@ export async function translateAndFormatAcademic(article: { title: string, conte
     }
 }
 
-export async function generateForeword(articles: any[]): Promise<string> {
+export async function generateForeword(articles: ArticleContextInput[]): Promise<string> {
     console.log(`[aiService] 开始为 ${articles.length} 篇文章组装导读上下文...`);
     const articlesContext = await buildForewordContext(articles);
     console.log('[aiService] 导读上下文组装完成，总长度:', articlesContext.length);
@@ -844,6 +819,7 @@ export async function generateForeword(articles: any[]): Promise<string> {
 4. **语言风格**：专业但不晦涩，权威但不高冷。采用技术主编的口吻，既要有学术深度，又要有行业温度。
 5. **字数控制**：600-800 字。
 6. **输出格式**：必须输出完整的 HTML 片段，使用标准的 HTML 标签（如 <p>, <h3>, <strong> 等），确保可直接嵌入网页显示。
+7. **输出方式**：直接输出 HTML 片段本身，禁止使用 Markdown 代码块（如 \`\`\`html）包裹，禁止输出任何解释性前后缀文字。
 
 ### 【输出格式示例】
 <p>本期《海洋工程智能建造》聚焦于船舶制造领域的关键技术创新...</p>
@@ -872,9 +848,12 @@ export async function generateForeword(articles: any[]): Promise<string> {
     }
 }
 
-export async function buildForewordContext(articles: any[]): Promise<string> {
+export async function buildForewordContext(articles: ArticleContextInput[]): Promise<string> {
     console.log(`[aiService] 开始为 ${articles.length} 篇文章组装导读上下文...`);
+    // 上下文总量上限（deepseek-v4-flash 上下文 1M，12 万字符安全），优先保证整刊文章覆盖完整
+    const MAX_CONTEXT_LENGTH = 120000;
     const allTexts: string[] = [];
+    let totalLength = 0;
 
     for (let i = 0; i < articles.length; i++) {
         const article = articles[i];
@@ -913,6 +892,12 @@ export async function buildForewordContext(articles: any[]): Promise<string> {
         }
 
         allTexts.push(articleText);
+        totalLength += articleText.length;
+
+        if (totalLength >= MAX_CONTEXT_LENGTH) {
+            console.warn(`[aiService] 导读上下文已达上限 ${MAX_CONTEXT_LENGTH} 字符，停止组装后续 ${articles.length - 1 - i} 篇文章`);
+            break;
+        }
     }
 
     const combinedText = allTexts.join('\n\n');
@@ -920,7 +905,7 @@ export async function buildForewordContext(articles: any[]): Promise<string> {
     return combinedText;
 }
 
-export async function buildSuperContextForGraph(articles: any[]): Promise<string> {
+export async function buildSuperContextForGraph(articles: ArticleContextInput[]): Promise<string> {
     console.log(`[aiService] 开始为 ${articles.length} 篇文章组装超级上下文...`);
 
     const allTexts: string[] = [];
@@ -938,11 +923,13 @@ export async function buildSuperContextForGraph(articles: any[]): Promise<string
         }
 
         // 并行化 PDF 提取（分批并发，每批 4 个 PDF，防 OOM）
-        if (article.pdfData && article.pdfData.trim().length > 100) {
+        // 局部 const 捕获：闭包内 TS 不保持属性收窄（pdfData 可为 null/undefined）
+        const pdfData = article.pdfData;
+        if (pdfData && pdfData.trim().length > 100) {
             const pdfTask = (async () => {
                 console.log(`[aiService]   检测到 PDF 附件 #${i+1}，开始静默抽字...`);
                 try {
-                    const result = await extractAbstractFromPdf(article.pdfData, 5, 20000);
+                    const result = await extractAbstractFromPdf(pdfData, 5, 20000);
                     if (result.success && result.fullText && result.fullText.trim().length > 50) {
                         allTexts.push(`【PDF ${i+1}】${article.title}\n${result.fullText.substring(0, 20000)}`);
                         console.log(`[aiService]   PDF #${i+1} 抽字成功，提取 ${result.fullText.length} 字`);

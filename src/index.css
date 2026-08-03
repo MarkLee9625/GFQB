@@ -512,6 +512,12 @@ body,
     display: block; margin: 24px auto !important; max-width: 100%; height: auto;
     border-radius: 4px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-indent: 0 !important;
 }
+/* 图片懒加载占位：解码/加载完成前保留最小高度与浅灰底，减少滚动布局跳动 */
+.sws-prose img.sws-block-image:not(.loaded) {
+    min-height: 180px;
+    background: #f3f4f6;
+    box-shadow: none;
+}
 .editor-area img:hover {
     outline: 1px dashed #93c5fd;
     outline-offset: 3px;

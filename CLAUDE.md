@@ -21,9 +21,16 @@ npm run test:watch       # vitest 监听模式
 npm run test:file <path> # bash scripts/test-file.sh <path>（单文件测试）
 npm run typecheck        # tsc --noEmit
 npm run test:coverage    # 仅 fileHelpers.ts + pasteCleaner.ts
+npm run clean            # 清理构建产物（dist/ + public 下 PDF.js 资源）
 ```
 
 **开发环境需要 BFF**: `npm run dev:all` 或分两个终端跑 `npm run dev` + `npm run server`。Vite 的 `/api` 代理转发到 BFF :4513。
+
+**Windows 一键启动**: `start.ps1` / `start.bat` 检查 Node/依赖/.env.local → 清理残留 node 进程 → 启动 Vite :4512 + BFF :4513，退出时自动清理进程。
+
+## 项目级技能 (.claude/skills/)
+
+7 个技能:add-article(新建文章)、ai-meta(AI 元数据/图谱/选题)、check-app(全面检查)、app-audit(代码分析)、db-inspect(IndexedDB 检查)、export-data(导出)、git-upload(提交推送)。按需用 Skill 工具调用。
 
 ## 环境变量 (.env.local)
 
@@ -47,6 +54,8 @@ PROXY_SECRET=sws-gongfa-proxy-xxx # BFF 鉴权密钥
 **App.tsx 是唯一状态中枢**: 所有顶层 state 和 useCallback 在此定义，通过 props 下传。无 Redux，纯 React Hooks。
 
 **useJournal** (`hooks/useJournal.ts`) 是业务数据核心入口，掌管 articles 数组的 CRUD + IndexedDB 持久化。
+
+顶层 `hooks/` 共 11 个 hook:useJournal、useExportManager、useImportManager、useBlobManager、useMemoryMonitor、useAppInitialization、useArticleNavigation、usePanZoom、useInView、useAiFeatures、useKeyboardShortcuts。
 
 ### 懒加载策略
 
@@ -75,12 +84,16 @@ Editor、KeyboardShortcutsHelpModal、CategoryManagerModal、ExportOptionsModal�
 - `POST /api/deepseek/generate` 接收前端请求 → `x-sws-proxy-secret` 头鉴权 → 转发 DeepSeek API
 - API Key 不暴露到前端
 - 生产模式同时托管 `dist/` 静态资源
-- 300s 上游超时，SIGTERM/SIGINT 优雅关闭
+- 600s 上游超时，SIGTERM/SIGINT 优雅关闭
 - 请求体限制 5MB
+- `GET /api/health` 健康检查端点
+- 生产模式下同源请求跳过 proxy-secret 校验（前端由同一 server.js 托管）
 
 ### 构建后内联
 
 `scripts/post-build.js` 在 `vite build` 后执行，将所有外部依赖（JS/CSS/字体/图片，包括 10MB+ PDF.js Worker）转为 Base64 内联到单个 HTML。导出的离线阅读器因此可真正单文件离线使用。
+
+注意:生产构建 esbuild `drop: ["console", "debugger"]`，线上包无 console 日志，排障时需在开发模式验证。
 
 ### 其他脚本
 
@@ -89,6 +102,7 @@ Editor、KeyboardShortcutsHelpModal、CategoryManagerModal、ExportOptionsModal�
 - `start-all.sh` — 并行启动 Vite + BFF（`npm run dev:all`）
 - `test-file.sh` — 单文件测试（`npm run test:file <path>`）
 - `check-env.sh` — 环境变量检查
+- `typecheck.sh` — 类型检查（`npm run typecheck`）
 - `post-build.js` — 构建后内联资源
 - `create-pptx.mjs` — 导出 PPTX
 
@@ -114,6 +128,10 @@ Editor、KeyboardShortcutsHelpModal、CategoryManagerModal、ExportOptionsModal�
 `src/services/fetchers/`:
 - `rssFetcher.ts` — RSS 源抓取
 - `patentFetcher.ts` — 专利数据抓取
+
+### AI 服务
+
+`services/aiService.ts` — DeepSeek AI 调用（元数据生成、卷首语、知识图谱数据等）
 
 ### 知识图谱
 

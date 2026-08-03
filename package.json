@@ -7,7 +7,7 @@
     "sync:worker": "node scripts/copy-worker.js",
     "dev": "npm run sync:worker && vite",
     "dev:all": "bash scripts/start-all.sh dev",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 npm run sync:worker && vite build && node scripts/post-build.js",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 npm run sync:worker && vite build && vite build --config vite.reader.config.ts && node scripts/post-build.js",
     "preview": "vite preview",
     "server": "node server.js",
     "server:dev": "nodemon server.js",

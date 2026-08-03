@@ -184,7 +184,6 @@ const AppContent: React.FC = () => {
     setIsEditMode,
     setIsSidebarHidden,
     setUseAlternateDesign,
-    loading,
   });
 
   useEffect(() => {
@@ -247,10 +246,11 @@ const AppContent: React.FC = () => {
 
   const handleReset = useCallback(() => {
     if (!window.confirm("⚠️ 警告：这将清空所有数据并开始新一期！确定吗？")) return;
-    const now = Date.now() + Math.floor(Math.random() * 1000);
+    // ID 生成遵循项目约定：Date.now() * 1000 + 偏移（全量替换无碰撞风险）
+    const now = Date.now() * 1000;
     const fresh: Article[] = [
-      { id: now, title: "封面", category: "封面", content: "", issueText: "NO.01", dateText: "JAN " + new Date().getFullYear() },
-      { id: now + 1, title: "封底", category: "封底", content: "" }
+      { id: now + 1, title: "封面", category: "封面", content: "", issueText: "NO.01", dateText: "JAN " + new Date().getFullYear() },
+      { id: now + 2, title: "封底", category: "封底", content: "" }
     ];
     setArticlesAction(fresh);
     setCurrentId(fresh[0].id);
@@ -354,7 +354,6 @@ const AppContent: React.FC = () => {
   useKeyboardShortcuts({
     currentId,
     isEditorOpen,
-    isCatManagerOpen,
     showShortcutsHelp,
     setIsEditorOpen,
     setCurrentId,
@@ -389,7 +388,15 @@ const AppContent: React.FC = () => {
   const handleCloseCatManager = useCallback(() => setIsCatManagerOpen(false), []);
   const handleCloseExportOptions = useCallback(() => setIsExportOptionsModalOpen(false), []);
   const handleCloseAiCuration = useCallback(() => setIsAiCurationModalOpen(false), []);
-  const handleExportConfirm = useCallback(async (options: any, onProgress?: (percent: number, message?: string) => void) => {
+  const handleExportConfirm = useCallback(async (
+    options: {
+      useAlternateDesign: boolean;
+      includeImages: boolean;
+      optimizeForPrint: boolean;
+      exportType: 'reader' | 'printable' | 'pdf';
+    },
+    onProgress?: (percent: number, message?: string) => void
+  ) => {
     await handleExportWithOptions(options, onProgress);
   }, [handleExportWithOptions]);
 

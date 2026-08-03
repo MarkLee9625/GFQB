@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
+import type { Article } from '../../../src/types';
 
 interface UseEditorKeyboardOptions {
   isOpen: boolean;
   contentRef: React.RefObject<HTMLDivElement | null>;
-  formDataRef: React.MutableRefObject<any>;
-  onSaveRef: React.MutableRefObject<(article: any) => void>;
+  formDataRef: React.MutableRefObject<Partial<Article>>;
+  onSaveRef: React.MutableRefObject<() => void>;
   setSaveToast: (v: string | null) => void;
   execCmd: (cmd: string, val?: string) => void;
 }
@@ -26,9 +27,8 @@ export function useEditorKeyboard({
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 's') {
         e.preventDefault();
-        const data = { ...formDataRef.current, content: contentRef.current?.innerHTML || '' };
-        if (!data.title) return;
-        onSaveRef.current(data);
+        if (!formDataRef.current.title) return;
+        onSaveRef.current();
         setSaveToast('已自动保存');
         const tid = window.setTimeout(() => setSaveToast(null), 1500);
         timeoutIdsRef.current.push(tid);

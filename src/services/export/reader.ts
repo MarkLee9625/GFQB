@@ -45,7 +45,7 @@ interface WorkerError {
 }
 
 /**
- * 优化深拷贝策略 - 分离大对象，减少内存峰值
+ * 优化深拷贝策略 - 分离大对象，减少 JS 侧深拷贝峰值
  *
  * 原理：
  * 1. pdfData、coverImage、backImage 是 Base64 字符串，体积巨大（可能数十MB）
@@ -57,7 +57,9 @@ interface WorkerError {
  * 2. 清空后深拷贝轻量级元数据（标题、分类、标签等）
  * 3. 重新关联大对象引用（非拷贝）
  *
- * 内存峰值：~1.2x（少量临时对象 + 引用）
+ * 注意：仅降低 JS 侧 structuredClone 的拷贝开销；
+ * 后续 postMessage 传输 worker 时大字符串仍会被完整结构化克隆（字符串不可 transfer），
+ * 传输阶段峰值仍约 2x。如需进一步降低，需将大字段抽出单独传输。
  */
 function optimizeStructuredClone(article: Article): Article {
     const pdfDataRef = article.pdfData;
@@ -89,11 +91,88 @@ function optimizeStructuredClone(article: Article): Article {
     return cloned;
 }
 
-const READER_TEMPLATE = "SWS_READER_TEMPLATE_PLACEHOLDER" as string;
+/**
+ * 校验模板是否为真正的阅读版单文件模板。
+ *
+ * Vite dev 的 SPA fallback 会把未命中路径（如 reader-template.html）以 200
+ * 返回开发版 index.html（引用 /@vite/client、/index.tsx、/@react-refresh），
+ * 导出的文件在 file:// 下必然被 CORS 拦截。因此必须按内容特征校验，
+ * 不能只看 </body>。
+ */
+export function isValidReaderTemplate(text: string): boolean {
+  if (!text || !text.includes('</body>')) return false;
+  // 开发版 index.html 特征：命中即拒绝
+  if (
+    text.includes('/@vite/client') ||
+    text.includes('/index.tsx') ||
+    text.includes('@react-refresh')
+  ) {
+    return false;
+  }
+  // 阅读版模板必须带数据注入锚点（reader.html 与 dist/reader-template.html 均保留）
+  return text.includes('<!--SWS_READER_DATA-->') || text.includes('工法情报阅读器');
+}
+
+/**
+ * 加载阅读版单文件模板（dist/reader-template.html，由 post-build.js 生成）。
+ * 模板是精简 React 阅读应用（不含编辑器/PDF.js/IndexedDB）；
+ * 兼容旧构建的 window.__SWS_READER_TEMPLATE__ 全局注入；
+ * 均不可用时返回 null，由调用方回退到 dev 动态骨架。
+ */
+async function loadReaderTemplate(): Promise<string | null> {
+    const legacy = (globalThis as any)?.__SWS_READER_TEMPLATE__;
+    if (typeof legacy === 'string' && isValidReaderTemplate(legacy)) {
+        return legacy;
+    }
+    try {
+        const res = await fetch('reader-template.html', { cache: 'no-store' });
+        if (res.ok) {
+            const text = await res.text();
+            return isValidReaderTemplate(text) ? text : null;
+        }
+    } catch (e) {
+        console.warn('[Export] reader-template.html 加载失败，使用动态骨架', e);
+    }
+    return null;
+}
+
+/**
+ * 将压缩数据注入阅读版模板。
+ * 优先替换 <!--SWS_READER_DATA--> 锚点；兜底使用最后一个 </body>。
+ * 必须使用函数式替换：替换串中若出现 $& / $' 等序列，String.replace 会按
+ * 特殊模式展开，导致模板被复制进脚本中间并截断（历史踩坑，见 post-build.js）。
+ */
+function injectDataIntoReader(
+    template: string,
+    articlesB64: string,
+    configB64: string,
+    compressionMethod: string
+): string {
+    const safeArticlesB64 = articlesB64.replace(/<\//g, '<\\/');
+    const safeConfigB64 = configB64.replace(/<\//g, '<\\/');
+
+    const injectionScript = `
+    <script>
+    window.__SWS_DATA_ARTICLES_B64__ = "${safeArticlesB64}";
+    window.__SWS_DATA_CONFIG_B64__ = "${safeConfigB64}";
+    window.__SWS_COMPRESSION_METHOD__ = "${compressionMethod}";
+    </script>
+    `;
+
+    if (template.includes('<!--SWS_READER_DATA-->')) {
+        return template.replace('<!--SWS_READER_DATA-->', () => injectionScript);
+    }
+    const lastBodyIdx = template.lastIndexOf('</body>');
+    if (lastBodyIdx !== -1) {
+        return template.slice(0, lastBodyIdx) + injectionScript + template.slice(lastBodyIdx);
+    }
+    return template + injectionScript;
+}
 
 /**
  * 生成离线阅读器 HTML
- * 使用构建生成的 Single File App 作为模板，注入数据
+ * 优先使用构建生成的精简阅读版模板（reader-template.html）并注入数据；
+ * dev 模式模板缺失时回退到动态骨架。
  */
 export async function generateReaderHTML(
     articles: Article[],
@@ -172,17 +251,20 @@ export async function generateReaderHTML(
 
                 console.log('[Export] Worker 返回数据，准备生成 HTML...');
 
-                const htmlContent = buildReaderHTML(
-                    articlesB64,
-                    configB64,
-                    compressionMethod,
-                    processedArticles,
-                    options,
-                    metadata
-                );
+                (async () => {
+                    try {
+                        const readerTemplate = await loadReaderTemplate();
+                        const htmlContent = readerTemplate
+                            ? injectDataIntoReader(readerTemplate, articlesB64, configB64, compressionMethod)
+                            : buildReaderHTML(articlesB64, configB64, compressionMethod, processedArticles, options, metadata);
 
-                worker.terminate();
-                resolve(htmlContent);
+                        worker.terminate();
+                        resolve(htmlContent);
+                    } catch (err) {
+                        worker.terminate();
+                        reject(err instanceof Error ? err : new Error(String(err)));
+                    }
+                })();
             }
         };
 
@@ -208,6 +290,9 @@ export async function generateReaderHTML(
     });
 }
 
+/**
+ * dev 模式回退：无 reader-template.html 时生成 vanilla 动态骨架阅读器。
+ */
 function buildReaderHTML(
     articlesB64: string,
     configB64: string,
@@ -224,40 +309,21 @@ function buildReaderHTML(
         sidebarMeta: metadata.sidebarMeta || ''
     };
 
-    if (READER_TEMPLATE === "SWS_READER_TEMPLATE_PLACEHOLDER") {
-        console.log("[Export] Using dynamic skeleton template for export...");
+    console.log("[Export] Using dynamic skeleton template for export...");
 
-        const tocListHtml = processedArticles
-            .filter(a => a.category !== '封面' && a.category !== '封底')
-            .map((a, i) => `<li class="toc-item"><span class="toc-title">${escapeHtml(a.title)}</span><span class="toc-dots"></span><span class="toc-page">${i + 1}</span></li>`)
-            .join('');
+    const tocListHtml = processedArticles
+        .filter(a => a.category !== '封面' && a.category !== '封底')
+        .map((a, i) => `<li class="toc-item"><span class="toc-title">${escapeHtml(a.title)}</span><span class="toc-dots"></span><span class="toc-page">${i + 1}</span></li>`)
+        .join('');
 
-        return getReaderSkeleton({
-            sidebarMeta: config.sidebarMeta,
-            logo: config.logo,
-            tocListHtml,
-            articlesJson: articlesB64,
-            configJson: configB64,
-            compressionMethod
-        });
-    }
-
-    const safeArticlesB64 = articlesB64.replace(/<\//g, '<\\/');
-    const safeConfigB64 = configB64.replace(/<\//g, '<\\/');
-
-    const injectionScript = `
-    <script>
-    window.__SWS_DATA_ARTICLES_B64__ = "${safeArticlesB64}";
-    window.__SWS_DATA_CONFIG_B64__ = "${safeConfigB64}";
-    window.__SWS_COMPRESSION_METHOD__ = "${compressionMethod}";
-    </script>
-    `;
-
-    if (READER_TEMPLATE.includes('</body>')) {
-        return READER_TEMPLATE.replace('</body>', injectionScript + '</body>');
-    } else {
-        return READER_TEMPLATE + injectionScript;
-    }
+    return getReaderSkeleton({
+        sidebarMeta: config.sidebarMeta,
+        logo: config.logo,
+        tocListHtml,
+        articlesJson: articlesB64,
+        configJson: configB64,
+        compressionMethod
+    });
 }
 
 /**

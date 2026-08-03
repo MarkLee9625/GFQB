@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import type { Article } from '../src/types';
 import { isSpecialCategory } from '../src/constants';
+import { htmlToBlocks } from '../src/utils/blockParser';
 import { Icon } from './Icons';
 import LoadingOverlay from './LoadingOverlay';
 import { ArticleRenderer } from './renderers';
@@ -104,8 +105,8 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
   const formDataRef = useRef(formData);
   formDataRef.current = formData;
-  const onSaveRef = useRef((data?: any) => { handleSave(); });
-  onSaveRef.current = (data?: any) => { handleSave(); };
+  const onSaveRef = useRef(() => { handleSave(); });
+  onSaveRef.current = () => { handleSave(); };
 
   useEditorKeyboard({
     isOpen,
@@ -125,10 +126,15 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
 
     let finalContent = contentRef.current?.innerHTML || '';
 
+    // 双存储：保存时把解析结果一并持久化，阅读打开时直接命中 blocks，
+    // 避免每次打开都全量解析正文；封面/封底或空正文不附加。
+    const blocks = finalContent.trim() ? htmlToBlocks(finalContent) : undefined;
+
     onSave({
       ...formData,
       title,
       content: finalContent,
+      blocks,
       pdfData: tempPdf?.data,
       isPublished: targetPublishState !== undefined ? targetPublishState : formData.isPublished
     });
@@ -149,7 +155,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      handleFile(e as any, 'img');
+      handleFile({ target: e.target as HTMLInputElement } as React.ChangeEvent<HTMLInputElement>, 'img');
     };
     input.click();
   }, [handleFile]);
@@ -158,14 +164,29 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     handleEditorClick(e, contentRef);
   }, [handleEditorClick]);
 
-  const handleFieldChange = useCallback((field: string, value: any) => {
+  const handleFieldChange = useCallback((field: string, value: string | number | boolean | string[] | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, [setFormData]);
 
+  // 新建文章时 id 可能为 undefined，渲染器里对 id=0 的更新会被忽略（与 undefined 行为一致）
   const articleForRenderer = useMemo(
-    () => ({ ...formData, title } as Article),
+    () => ({ ...formData, title, id: formData.id ?? 0 } as Article),
     [formData, title]
   );
+
+  // 稳定引用：避免内联对象/箭头函数击穿 EditorRightPanel 的 React.memo
+  const imageCompressSettings = useMemo(() => ({
+    quality: imgCompressQuality,
+    setQuality: setImgCompressQuality,
+    maxWidth: imgCompressMaxWidth,
+    setMaxWidth: setImgCompressMaxWidth,
+    format: imgCompressFormat,
+    setFormat: setImgCompressFormat,
+  }), [imgCompressQuality, imgCompressMaxWidth, imgCompressFormat]);
+
+  const handleToggleCollapse = useCallback(() => {
+    setRightPanelCollapsed(v => !v);
+  }, []);
 
 
   if (!isOpen) return null;
@@ -292,16 +313,9 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
             handleAiSummary={handleAiSummary}
             tempPdf={tempPdf}
             setTempPdf={setTempPdf}
-            imageCompress={{
-              quality: imgCompressQuality,
-              setQuality: setImgCompressQuality,
-              maxWidth: imgCompressMaxWidth,
-              setMaxWidth: setImgCompressMaxWidth,
-              format: imgCompressFormat,
-              setFormat: setImgCompressFormat,
-            }}
+            imageCompress={imageCompressSettings}
             collapsed={rightPanelCollapsed}
-            onToggleCollapse={() => setRightPanelCollapsed(v => !v)}
+            onToggleCollapse={handleToggleCollapse}
           />
         </div>
 

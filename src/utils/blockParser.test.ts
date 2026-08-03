@@ -401,4 +401,22 @@ describe('htmlToBlocks', () => {
       expect(allContent).toContain('加粗');
     });
   });
+
+  describe('I. 解析结果 LRU 缓存', () => {
+    it('I1: 相同内容二次解析返回同一缓存引用（不再全量解析）', () => {
+      const html = '<p>缓存命中测试</p><h2>标题</h2>';
+      const first = htmlToBlocks(html);
+      const second = htmlToBlocks(html);
+      expect(second).toBe(first);
+      expect(second).toHaveLength(2);
+    });
+
+    it('I2: 不同内容解析结果互不影响', () => {
+      const a = htmlToBlocks('<p>AAA</p>');
+      const b = htmlToBlocks('<p>BBB</p>');
+      expect(a).not.toBe(b);
+      expect((a[0] as TextBlock).content).toContain('AAA');
+      expect((b[0] as TextBlock).content).toContain('BBB');
+    });
+  });
 });

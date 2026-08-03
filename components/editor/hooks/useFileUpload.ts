@@ -1,8 +1,9 @@
 import { useCallback, useRef, useEffect } from 'react';
 import type { Article } from '../../../src/types';
-import { fileToDataURL, compressImage } from '../../../src/utils/fileHelpers';
+import { fileToDataURL, compressImage, FILE_SIZE_LIMITS } from '../../../src/utils/fileHelpers';
 import { cleanPastedHtml } from '../../../src/utils/pasteCleaner';
 import { createImageHtml } from '../../../src/utils/encoding';
+import { escapeHtml } from '../../../src/utils/stringUtils';
 import { extractAbstractFromPdf } from '../../../src/services/pdf';
 import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
 
@@ -84,7 +85,7 @@ export function useFileUpload({
     } else if (text) {
       const paragraphs = text.split(/\n\s*\n|\r\n\s*\r\n/);
       const htmlContent = paragraphs
-        .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+        .map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
         .join('');
       insertHtml(htmlContent);
       setTimeout(() => handleAutoIndent(), 50);
@@ -95,18 +96,15 @@ export function useFileUpload({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-    const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
-    const MAX_AUDIO_SIZE = 20 * 1024 * 1024;
-    const MAX_PDF_SIZE = 50 * 1024 * 1024;
-
-    let maxSize = MAX_IMAGE_SIZE;
-    if (type === 'video') maxSize = MAX_VIDEO_SIZE;
-    else if (type === 'audio') maxSize = MAX_AUDIO_SIZE;
-    else if (type === 'pdf') maxSize = MAX_PDF_SIZE;
+    // 与 fileToDataURL 内部限制同源（FILE_SIZE_LIMITS），避免自检通过却在读取时被拒
+    let maxSize = FILE_SIZE_LIMITS.image;
+    if (type === 'video') maxSize = FILE_SIZE_LIMITS.video;
+    else if (type === 'audio') maxSize = FILE_SIZE_LIMITS.audio;
+    else if (type === 'pdf') maxSize = FILE_SIZE_LIMITS.pdf;
 
     if (file.size > maxSize) {
       alert(`文件过大，请压缩后上传`);
+      e.target.value = ''; // 重置 input，否则再次选择同一文件不会触发 onChange
       return;
     }
 
@@ -117,7 +115,8 @@ export function useFileUpload({
           const { category } = formDataFieldsRef.current;
           if (category === '封面' || category === '封底') {
             const base64 = await fileToDataURL(file);
-            const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
+            // 封面/封底固定 2400px + quality 0.92（与 CLAUDE.md 约定及 App.tsx 一致），不用用户滑杆值
+            const src = await compressImage(base64, 2400, 0.92, 'webp');
 
             const dimensions = await getImageDimensions(src);
 
@@ -175,7 +174,7 @@ export function useFileUpload({
           insertHtml(tag);
         }
       } catch (error) {
-        alert("上传失败");
+        alert("上传失败: " + (error instanceof Error ? error.message : '未知错误'));
       } finally {
         setIsProcessing(false);
         e.target.value = '';

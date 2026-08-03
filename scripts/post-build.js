@@ -8,7 +8,6 @@ const __dirname = dirname(__filename);
 
 const DIST_DIR = resolve(__dirname, '../dist');
 const ASSETS_DIR = join(DIST_DIR, 'assets');
-const PLACEHOLDER = "SWS_READER_TEMPLATE_PLACEHOLDER";
 
 async function main() {
     console.log("🚀 Starting Post-Build Processing...");
@@ -138,86 +137,96 @@ async function main() {
             </script>
          `;
 
-        htmlContent = htmlContent.replace('</body>', `${pdfSetupScript}</body>`);
+            if (htmlContent.includes('<!--SWS_BODY_INJECT-->')) {
+        htmlContent = htmlContent.replace('<!--SWS_BODY_INJECT-->', () => pdfSetupScript);
     } else {
-        console.warn("⚠️ PDF.js files not found in public/, skipping inline.");
+        // 兜底：使用最后一个 </body>（bundle 字符串可能包含 </body>，首个命中会截断脚本）
+        const lastBodyIdx = htmlContent.lastIndexOf('</body>');
+        if (lastBodyIdx === -1) {
+            console.error("❌ No </body> found in index.html, PDF.js inline failed!");
+            process.exit(1);
+        }
+        htmlContent = htmlContent.slice(0, lastBodyIdx) + pdfSetupScript + htmlContent.slice(lastBodyIdx);
+    }
+    } else {
+        // copy-worker.js 已保证 PDF.js 核心资源存在；此处缺失说明构建流程异常，必须失败
+        console.error("❌ PDF.js files not found in public/, inline failed!");
+        process.exit(1);
     }
 
-    // 4. Inline D3.js for knowledge graph iframes
+    // 4. Inline D3.js for knowledge graph iframes (offline support)
+    // 图谱 iframe 通过 window.parent.__SWS_D3_SRC__ 读取（见 graphRenderer.ts loadD3），
+    // 无注入时回退 CDN。旧实现匹配 <script src="./d3.min.js"> 从未命中，属于死代码。
     const d3Path = resolve(__dirname, '../public/d3.min.js');
     if (fs.existsSync(d3Path)) {
         console.log("📊 Inlining D3.js for knowledge graph iframes...");
         const d3Code = fs.readFileSync(d3Path, 'utf-8');
-        // Replace the external D3 script tag with inline version preserving CDN fallback
-        const d3InlineScript = '<script>' + d3Code + '<\\/script><script onerror="var s=document.createElement(\'script\');s.src=\'https://d3js.org/d3.v7.min.js\';document.head.appendChild(s);"><\\/script>';
-        htmlContent = htmlContent.replace(
-            /<script src="\.\/d3\.min\.js" onerror="[^"]*"><\/script>/g,
-            d3InlineScript
-        );
-        console.log("   ✅ D3.js inlined into iframes");
+        // JSON.stringify 保证 JS 字符串安全；转义 </script> 与 <!-- 防止提前闭合 script 元素
+        const d3Json = JSON.stringify(d3Code).replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
+        const d3InlineScript = `<script>window.__SWS_D3_SRC__=${d3Json};</script>`;
+            if (htmlContent.includes('<!--SWS_D3_INJECT-->')) {
+        htmlContent = htmlContent.replace('<!--SWS_D3_INJECT-->', () => d3InlineScript);
+        console.log("   ✅ D3.js inlined into page global (window.__SWS_D3_SRC__)");
+    } else if (htmlContent.includes('<head>')) {
+        htmlContent = htmlContent.replace('<head>', `<head>${d3InlineScript}`);
+        console.log("   ✅ D3.js inlined into page global (window.__SWS_D3_SRC__, head fallback)");
     } else {
-        console.warn("⚠️ d3.min.js not found in public/, skipping D3 inline.");
+        console.warn("⚠️ No <head> tag found in index.html, skipping D3 inline.");
+    }
+    } else {
+        console.warn("⚠️ d3.min.js not found in public/, knowledge graphs will fall back to CDN.");
     }
 
-    // 5. Generate Single File Content (Reader Template)
-    const singleFileContent = htmlContent;
+    // 5. 处理独立阅读版入口（reader.html）→ 单文件模板
+    // 阅读版是精简 React 应用（无编辑器/PDF.js/IndexedDB），导出时由 reader.ts
+    // 读取 reader-template.html 并注入数据。不再往编辑器 index.html 内嵌阅读版模板，
+    // 避免模板自拷贝导致的体积膨胀与脚本截断问题。
+    const readerHtmlPath = join(DIST_DIR, 'reader.html');
+    if (fs.existsSync(readerHtmlPath)) {
+        let readerHtml = fs.readFileSync(readerHtmlPath, 'utf-8');
 
-    // Save the single file reader for debugging/verification
-    const readerOutputPath = join(DIST_DIR, 'reader.html');
-    fs.writeFileSync(readerOutputPath, singleFileContent);
-    console.log(`✅ Single-file reader generated at: ${readerOutputPath}`);
+        // Inline CSS
+        readerHtml = readerHtml.replace(/<link rel="stylesheet" crossorigin href="([^"]+)">/g, (match, url) => {
+            const cssPath = join(DIST_DIR, url);
+            if (fs.existsSync(cssPath)) {
+                const css = fs.readFileSync(cssPath, 'utf-8');
+                return `<style>${css}</style>`;
+            }
+            return match;
+        });
 
-    // 5. Inject into Main Bundle (Replace Placeholder)
-    console.log("💉 Injecting reader template into main bundle...");
+        // Inline JS（模块）
+        readerHtml = readerHtml.replace(/<script type="module" crossorigin src="([^"]+)"><\/script>/g, (match, url) => {
+            const jsPath = join(DIST_DIR, url);
+            if (fs.existsSync(jsPath)) {
+                const js = fs.readFileSync(jsPath, 'utf-8');
+                return `<script type="module">${js}</script>`;
+            }
+            return match;
+        });
 
-    // Escape for JS string (JSON.stringify is safest to get a quoted string)
-    const escapedContent = JSON.stringify(singleFileContent);
-    // JSON.stringify returns "content". We need to replace "SWS...PLACEHOLDER" (which is invalid JSON, just a string in code).
-    // In code: `const READER_TEMPLATE = "SWS_...";`
-    // We want: `const READER_TEMPLATE = "<html>...";`
-    // So we replace `"SWS_READER_TEMPLATE_PLACEHOLDER"` with `escapedContent`.
-
-    const assetsDir = join(DIST_DIR, 'assets');
-    const files = fs.readdirSync(assetsDir);
-    let injected = false;
-
-    for (const file of files) {
-        if (file.endsWith('.js')) {
-            const filePath = join(assetsDir, file);
-            let content = fs.readFileSync(filePath, 'utf-8');
-
-            if (content.includes(PLACEHOLDER)) {
-                console.log(`   - Found placeholder in ${file}`);
-                // Replace the quoted placeholder "SWS..." with the quoted content "<html>..."
-                // Since JSON.stringify adds quotes, we replace `"SWS_READER_TEMPLATE_PLACEHOLDER"` with `escapedContent`.
-                // Note: Minification might remove quotes or change usage.
-                // Usually it preserves string literals.
-                // We search for the literal string.
-
-                // If minified: `var x="SWS_..."`
-                // We replace `"SWS_..."` with `"<html>..."`.
-
-                // If the placeholder in code was `const x = "SWS...";`
-                // We look for `"SWS_READER_TEMPLATE_PLACEHOLDER"`.
-
-                const newContent = content.replace(`"${PLACEHOLDER}"`, escapedContent);
-                // Also try single quotes just in case terser changed it
-                const finalContent = newContent.replace(`'${PLACEHOLDER}'`, escapedContent);
-
-                if (content !== finalContent) {
-                    fs.writeFileSync(filePath, finalContent);
-                    console.log(`✅ Injected template into ${file}`);
-                    injected = true;
-                    break; // Assuming only one occurrence
-                }
+        // Inline D3.js（知识图谱离线支持；阅读版不需要 PDF.js）
+        if (fs.existsSync(d3Path)) {
+            const d3CodeReader = fs.readFileSync(d3Path, 'utf-8');
+            const d3JsonReader = JSON.stringify(d3CodeReader).replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
+            const d3InlineScriptReader = `<script>window.__SWS_D3_SRC__=${d3JsonReader};</script>`;
+            if (readerHtml.includes('<!--SWS_D3_INJECT-->')) {
+                readerHtml = readerHtml.replace('<!--SWS_D3_INJECT-->', () => d3InlineScriptReader);
+                console.log("   ✅ D3.js inlined into reader template (window.__SWS_D3_SRC__)");
             }
         }
+
+        // 保留 <!--SWS_READER_DATA--> 锚点，导出时由 reader.ts 注入数据
+        fs.writeFileSync(readerHtmlPath, readerHtml);
+        fs.writeFileSync(join(DIST_DIR, 'reader-template.html'), readerHtml);
+        console.log(`✅ Reader entry single-file generated: ${readerHtmlPath} (${readerHtml.length} chars)`);
+    } else {
+        console.warn("⚠️ dist/reader.html not found, skipping reader template generation.");
     }
 
-    if (!injected) {
-        console.error("❌ Placeholder not found in any JS asset! Template injection failed.");
-        process.exit(1);
-    }
+    // 6. Write back index.html（编辑器单文件，不再内嵌阅读版模板）
+    fs.writeFileSync(indexHtmlPath, htmlContent);
+    console.log(`✅ index.html updated (single-file build, ${htmlContent.length} chars)`);
 
     console.log("🎉 Post-build processing complete.");
 }

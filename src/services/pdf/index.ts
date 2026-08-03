@@ -206,6 +206,11 @@ export const convertPdfToImages = async (
 
     console.log(`[PDF服务] 文件打开成功，共 ${totalPages} 页`);
 
+    // 超长 PDF 静默截断会呈现"完整"的假象，明确提示
+    if (totalPages > MAX_PAGES) {
+      console.warn(`[PDF服务] ⚠️ PDF 共 ${totalPages} 页，超过上限 ${MAX_PAGES} 页，仅转换前 ${MAX_PAGES} 页`);
+    }
+
     for (let i = 1; i <= Math.min(totalPages, MAX_PAGES); i++) {
         try {
             // 调用进度回调

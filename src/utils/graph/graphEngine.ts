@@ -86,6 +86,17 @@ export function generateGraphEngineCode(): string {
   return generateRendererCode() + `
 function initGraph(data) {
     console.log('[Graph] initGraph start. Nodes:', data.nodes.length, 'Links:', data.links.length);
+
+    // HTML 转义：node.name/description/relationship 来自 AI 提取（内容源不可信），
+    // 插入 innerHTML 前必须转义，防止注入 <img onerror> 等载荷
+    function escHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     const canvas = document.getElementById('graphCanvas');
     if (!canvas) {
       console.error('[Graph] Canvas element #graphCanvas not found');
@@ -118,6 +129,10 @@ function initGraph(data) {
     var needsRender = true;
     var _lastTickRender = 0;
     var renderer = new Renderer(ctx, width, height);
+
+    // 提前声明：rebuildVisibilityCache 会引用它们，声明在函数后段存在 TDZ 隐患
+    var MAX_VISIBLE_LINKS = 100;
+    var showAllLinks = false;
 
     function markDirty() {
       visibilityDirty = true;
@@ -154,6 +169,7 @@ function initGraph(data) {
       sortedNodesCache = visibleNodesCache.slice().sort(function(a, b) { return (a.weight || 0) - (b.weight || 0); });
 
       var vlm = {};
+      var bundleCounts = {};
       visibleLinksCache.forEach(function(link) {
         var sourceId = typeof link.source === 'object' ? link.source.id : link.source;
         var targetId = typeof link.target === 'object' ? link.target.id : link.target;
@@ -162,8 +178,14 @@ function initGraph(data) {
         link._targetNode = nodeMap.get(targetId);
 
         var key = sourceId < targetId ? sourceId + '||' + targetId : targetId + '||' + sourceId;
+        // 为同一 source-target 的平行链路分配递增序号（Renderer 据此错位弯曲，
+        // 修复 _bundleIndex 从未赋值导致所有平行链路同向重叠的问题）
+        var bundleIdx = bundleCounts[key] || 0;
+        bundleCounts[key] = bundleIdx + 1;
+        link._bundleIndex = bundleIdx;
+
         if (!vlm[key]) {
-          vlm[key] = { source: sourceId, target: targetId, _sourceNode: link._sourceNode, _targetNode: link._targetNode, strength: link.strength, relationships: new Set([link.relationship]) };
+          vlm[key] = { source: sourceId, target: targetId, _sourceNode: link._sourceNode, _targetNode: link._targetNode, strength: link.strength, relationships: new Set([link.relationship]), _bundleIndex: bundleIdx };
         } else {
           vlm[key].relationships.add(link.relationship);
           if (link.strength > vlm[key].strength) vlm[key].strength = link.strength;
@@ -314,8 +336,6 @@ function initGraph(data) {
     let heartbeatIntervalId = null;
     let resizeObserverRef = null;
     let searchKeyword = '';
-    const MAX_VISIBLE_LINKS = 100;
-    let showAllLinks = false;
 
     let cameraScale = 1;
     let cameraOffsetX = 0;
@@ -435,7 +455,7 @@ function initGraph(data) {
                          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>' +
                          '双击节点，下钻展开隐藏工艺</div>';
             }
-            tooltip.innerHTML = '<span class="tag" style="background:' + hoveredNode.color + '20; color:' + hoveredNode.color + '">' + hoveredNode.typeTag + '</span><br/><strong>' + hoveredNode.name + '</strong><br/><span style="color:#cbd5e1; font-size:11px;">' + hoveredNode.description + '</span>' + statsLine + hintHtml;
+            tooltip.innerHTML = '<span class="tag" style="background:' + hoveredNode.color + '20; color:' + hoveredNode.color + '">' + escHtml(hoveredNode.typeTag) + '</span><br/><strong>' + escHtml(hoveredNode.name) + '</strong><br/><span style="color:#cbd5e1; font-size:11px;">' + escHtml(hoveredNode.description) + '</span>' + statsLine + hintHtml;
             tooltip.style.opacity = 1; tooltip.style.transform = "translateY(0)";
           }
           var ttLeft = e.clientX + 20;
@@ -650,8 +670,8 @@ function initGraph(data) {
         var strength = l.strength || 1;
         var dots = [1,2,3,4,5].map(function(i) { return '<span class="rel-dot' + (i <= strength ? ' active' : '') + '"></span>'; }).join('');
         return '<div class="relation-item">' +
-          '<span style="font-weight:bold; color:#334155;">' + otherNode.name + '</span>' +
-          '<span class="rel-badge">' + direction + ': ' + l.relationship + '</span>' +
+          '<span style="font-weight:bold; color:#334155;">' + escHtml(otherNode.name) + '</span>' +
+          '<span class="rel-badge">' + direction + ': ' + escHtml(l.relationship) + '</span>' +
           '<span class="rel-strength">' + dots + '</span>' +
         '</div>';
       }).join('');

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { Article, ContentBlock } from '../../src/types';
 import { Icon } from '../Icons';
 import { useBlobManager } from '../../hooks/useBlobManager';
-import { ArticleRendererBaseProps } from './types';
+import { useInView } from '../../hooks/useInView';
+import type { ArticleRendererBaseProps } from './types';
 import { htmlToBlocks } from '../../src/utils/blockParser';
 import { BlockRenderer } from '../../src/components/renderers/blocks/BlockRenderer';
 interface ContentRendererProps extends ArticleRendererBaseProps {
@@ -50,6 +51,7 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
   logo,
 }) => {
   const blobManager = useBlobManager();
+  const { ref: pdfSectionRef, inView: pdfInView } = useInView();
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,12 +59,22 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
       setPdfUrl(null);
       return;
     }
+    // 阅读模式：PDF 附件区进入视口后才解码，避免打开文章即冻结主线程
+    if (mode !== 'print' && !pdfInView) {
+      setPdfUrl(null);
+      return;
+    }
+    let cancelled = false;
     const timer = setTimeout(() => {
-      const url = blobManager.getBlobUrl(article.pdfData);
-      setPdfUrl(url);
+      blobManager.getBlobUrlAsync(article.pdfData).then((url) => {
+        if (!cancelled) setPdfUrl(url);
+      });
     }, 0);
-    return () => clearTimeout(timer);
-  }, [article.pdfData, blobManager]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [article.pdfData, blobManager, pdfInView, mode]);
 
   const blocks: ContentBlock[] = useMemo(() => {
     if (article.blocks && article.blocks.length > 0) {
@@ -142,7 +154,7 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
 
         {/* PDF 附件 */}
         {article.pdfData && (
-          <div className="w-full flex flex-col mt-8">
+          <div ref={pdfSectionRef as React.Ref<HTMLDivElement>} className="w-full flex flex-col mt-8">
             <div className="w-full h-[80vh] min-h-[800px] flex flex-col relative rounded-[24px] pdf-viewer-container border border-gray-200 shadow-sm">
               {/* PDF Toolbar */}
               <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 select-none">

@@ -81,11 +81,21 @@ app.get('/api/health', (req, res) => {
 app.post('/api/deepseek/generate', async (req, res) => {
   try {
     const isProduction = process.env.NODE_ENV === 'production';
-    const isSameOrigin = req.headers.origin === `http://localhost:${PORT}`;
 
-    // 生产模式且同源请求：跳过 proxy-secret 校验（前端由同一 server.js 托管）
-    // ⚠️ 安全：不信任缺失的 Origin 头，必须显式匹配才视为同源
-    if (!(isProduction && isSameOrigin)) {
+    // 生产模式同源跳过校验：不能只信任 Origin 头（客户端可任意伪造），
+    // 必须同时校验请求来源为本机回环地址。局域网/IP 访问一律走 secret 校验
+    const remoteAddr = req.socket?.remoteAddress || req.ip || '';
+    const isLoopback =
+      remoteAddr === '127.0.0.1' || remoteAddr === '::1' ||
+      remoteAddr === '::ffff:127.0.0.1';
+    const allowedOrigins = [
+      `http://localhost:${PORT}`,
+      `http://127.0.0.1:${PORT}`,
+      `http://[::1]:${PORT}`,
+    ];
+    const isSameOrigin = typeof req.headers.origin === 'string' && allowedOrigins.includes(req.headers.origin);
+
+    if (!(isProduction && isLoopback && isSameOrigin)) {
       const proxySecret = process.env.PROXY_SECRET;
       if (!proxySecret) {
         console.warn('⚠️  PROXY_SECRET 未配置，代理接口拒绝所有请求');
@@ -156,7 +166,7 @@ app.post('/api/deepseek/generate', async (req, res) => {
     
   } catch (error) {
     if (error.name === 'AbortError') {
-      console.error('🔥 DeepSeek API 请求超时 (>300s)');
+      console.error('🔥 DeepSeek API 请求超时 (>600s)');
       return res.status(504).json({
         error: 'Gateway Timeout',
         message: 'DeepSeek API 请求超时，请稍后重试',
