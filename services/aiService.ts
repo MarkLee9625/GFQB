@@ -81,7 +81,11 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
             if (effectiveMaxTokens !== undefined) body.max_tokens = effectiveMaxTokens;
             if (temperature !== undefined) body.temperature = temperature;
             body.reasoning_effort = reasoningEffort;
-            body.extra_body = { thinking: { type: 'enabled' } };
+            // DeepSeek V4 思考模式：须为请求体顶层 thinking 字段（extra_body 仅为 OpenAI SDK 概念，
+            // 原始 fetch 直连时会被上游忽略）。轻任务（reasoningEffort='low'）关闭思考以控制推理成本。
+            if (reasoningEffort !== 'low') {
+                body.thinking = { type: 'enabled' };
+            }
 
             // 不发送 x-sws-proxy-secret：secret 仅由 Vite 开发代理/BFF 同源校验注入，
             // 客户端携带会把密钥打进 bundle（VITE_ 前缀变量会被 Vite 暴露）
@@ -909,7 +913,7 @@ export async function buildSuperContextForGraph(articles: ArticleContextInput[])
     console.log(`[aiService] 开始为 ${articles.length} 篇文章组装超级上下文...`);
 
     const allTexts: string[] = [];
-    const pdfTasks: Promise<void>[] = [];
+    const pdfTasks: { index: number; title: string; data: string }[] = [];
 
     for (let i = 0; i < articles.length; i++) {
         const article = articles[i];
@@ -922,33 +926,33 @@ export async function buildSuperContextForGraph(articles: ArticleContextInput[])
             allTexts.push(`【文章 ${i+1}】${article.title}\n${article.abstract.substring(0, 5000)}`);
         }
 
-        // 并行化 PDF 提取（分批并发，每批 4 个 PDF，防 OOM）
-        // 局部 const 捕获：闭包内 TS 不保持属性收窄（pdfData 可为 null/undefined）
+        // 仅登记 PDF 任务参数（真正提取在下方分批启动，避免任务创建即并发导致 OOM）
         const pdfData = article.pdfData;
         if (pdfData && pdfData.trim().length > 100) {
-            const pdfTask = (async () => {
-                console.log(`[aiService]   检测到 PDF 附件 #${i+1}，开始静默抽字...`);
-                try {
-                    const result = await extractAbstractFromPdf(pdfData, 5, 20000);
-                    if (result.success && result.fullText && result.fullText.trim().length > 50) {
-                        allTexts.push(`【PDF ${i+1}】${article.title}\n${result.fullText.substring(0, 20000)}`);
-                        console.log(`[aiService]   PDF #${i+1} 抽字成功，提取 ${result.fullText.length} 字`);
-                    }
-                } catch (pdfErr) {
-                    console.warn(`[aiService]   PDF #${i+1} 提取异常:`, pdfErr);
-                }
-            })();
-            pdfTasks.push(pdfTask);
+            pdfTasks.push({ index: i, title: article.title, data: pdfData });
         }
     }
 
-    // 分批等待所有 PDF 提取完成（每批 PDF_PDF_CONCURRENCY 个，防 OOM）
+    // 分批并发提取 PDF（每批 4 个，真实限制同时进行的提取数）
     if (pdfTasks.length > 0) {
-        const PDF_PDF_CONCURRENCY = 4;
-        console.log(`[aiService] 等待 ${pdfTasks.length} 个 PDF 分批提取（每批 ${PDF_PDF_CONCURRENCY} 个）...`);
-        for (let batchStart = 0; batchStart < pdfTasks.length; batchStart += PDF_PDF_CONCURRENCY) {
-            const batch = pdfTasks.slice(batchStart, batchStart + PDF_PDF_CONCURRENCY);
-            await Promise.allSettled(batch);
+        const PDF_CONCURRENCY = 4;
+        console.log(`[aiService] 等待 ${pdfTasks.length} 个 PDF 分批提取（每批 ${PDF_CONCURRENCY} 个）...`);
+        for (let batchStart = 0; batchStart < pdfTasks.length; batchStart += PDF_CONCURRENCY) {
+            const batch = pdfTasks.slice(batchStart, batchStart + PDF_CONCURRENCY);
+            await Promise.allSettled(
+                batch.map(async ({ index, title, data }) => {
+                    console.log(`[aiService]   检测到 PDF 附件 #${index + 1}，开始静默抽字...`);
+                    try {
+                        const result = await extractAbstractFromPdf(data, 5, 20000);
+                        if (result.success && result.fullText && result.fullText.trim().length > 50) {
+                            allTexts.push(`【PDF ${index + 1}】${title}\n${result.fullText.substring(0, 20000)}`);
+                            console.log(`[aiService]   PDF #${index + 1} 抽字成功，提取 ${result.fullText.length} 字`);
+                        }
+                    } catch (pdfErr) {
+                        console.warn(`[aiService]   PDF #${index + 1} 提取异常:`, pdfErr);
+                    }
+                })
+            );
         }
     }
 

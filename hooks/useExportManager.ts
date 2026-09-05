@@ -97,7 +97,8 @@ export function useExportManager({
       }
     } catch (error) {
       console.error('导出失败:', error);
-      alert('导出过程中发生错误，请查看控制台。');
+      // 错误已由 ExportOptionsModal 的 onConfirm catch 展示（弹窗内错误提示），
+      // 此处不再 alert，避免重复反馈
       throw error;
     }
   }, [articles, logo, sidebarMeta, createExportBlob]);

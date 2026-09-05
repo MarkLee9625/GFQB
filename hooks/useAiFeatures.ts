@@ -118,7 +118,7 @@ export function useAiFeatures({
           ? `✅ 质量校验通过！节点 ${qualityReport.nodeCount} 个，关系 ${qualityReport.linkCount} 条，连通率 ${(qualityReport.connectivityRatio * 100).toFixed(0)}%`
           : `⚠️ 质量提示：\n${qualityReport.warnings.join('\n')}`;
         const cacheNote = fromCache ? '\n\n💾 使用历史缓存数据（0 秒加载）' : '';
-        setTimeout(() => alert(`🕸️ 知识图谱生成成功！${fromCache ? '' : ''}\n\n${qualityMsg}${cacheNote}`), 100);
+        setTimeout(() => alert(`🕸️ 知识图谱生成成功！\n\n${qualityMsg}${cacheNote}`), 100);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '未知错误';

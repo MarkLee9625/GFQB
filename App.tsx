@@ -282,8 +282,9 @@ const AppContent: React.FC = () => {
     if (!file || !currentId) return;
     try {
       const base64 = await fileToDataURL(file);
-      const isCoverUpload = uploadTypeRef.current === 'cover' || uploadTypeRef.current === 'back';
-      const compressedBase64 = await compressImage(base64, isCoverUpload ? 2400 : 1200, isCoverUpload ? 0.92 : 0.8, isCoverUpload ? 'original' : 'webp');
+      // 封面/封底固定 2400px + quality 0.92 + WebP（与 useFileUpload / useImageEditor 约定一致，
+      // 避免十几 MB 原图直接写入 IndexedDB）
+      const compressedBase64 = await compressImage(base64, 2400, 0.92, 'webp');
       if (uploadTypeRef.current === 'cover') {
         updateArticle(currentId, { coverImage: compressedBase64 });
       } else {

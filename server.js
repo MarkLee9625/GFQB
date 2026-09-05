@@ -182,7 +182,7 @@ app.post('/api/deepseek/generate', async (req, res) => {
 
 // 生产环境：兜底路由（支持前端 History 路由）
 if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req, res) => {
+  app.get('/*splat', (req, res) => {
     const indexPath = path.join(__dirname, 'dist', 'index.html');
     res.sendFile(indexPath);
   });
