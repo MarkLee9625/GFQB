@@ -1,12 +1,12 @@
 import { useCallback, useRef, useEffect } from 'react';
 import type { Article } from '../src/types';
-import { generateReaderHTML, generatePrintableHTML, exportToPdf, exportReaderHTML, PdfExportOptions } from '../src/services/export';
+import { generatePrintableHTML, exportToPdf, exportReaderHTML, PdfExportOptions } from '../src/services/export';
+import { toast } from '../src/utils/toast';
 
 interface UseExportManagerOptions {
   articles: Article[];
   logo: string;
   sidebarMeta: string;
-  useAlternateDesign: boolean;
   openExportOptionsModal: () => void;
 }
 
@@ -14,7 +14,6 @@ export function useExportManager({
   articles,
   logo,
   sidebarMeta,
-  useAlternateDesign,
   openExportOptionsModal,
 }: UseExportManagerOptions) {
   const exportBlobUrls = useRef<string[]>([]);
@@ -80,7 +79,7 @@ export function useExportManager({
         // 在 await 之前立即打开空白窗口，保留用户手势，防止弹窗拦截
         const printWindow = window.open('', '_blank');
         if (!printWindow) {
-          alert('弹窗被浏览器拦截，请允许此站点弹出窗口后重试。');
+          toast.error('弹窗被浏览器拦截，请允许此站点弹出窗口后重试。');
           return;
         }
         printWindow.document.title = '正在生成打印版...';

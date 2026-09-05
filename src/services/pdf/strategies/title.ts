@@ -8,7 +8,9 @@
  * 4. 最终回退：全文第一个非空行
  */
 
-export async function extractTitle(pdf: any, fullText: string): Promise<string | null> {
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+
+export async function extractTitle(pdf: PDFDocumentProxy, fullText: string): Promise<string | null> {
     // 策略一：基于字号 + Y 坐标的首页分析
     try {
         const firstPage = await pdf.getPage(1);
@@ -18,7 +20,10 @@ export async function extractTitle(pdf: any, fullText: string): Promise<string |
         const Y_THRESHOLD = 5;
         const lineMap = new Map<number, { text: string; maxFontSize: number }>();
 
-        for (const item of textContent.items as any[]) {
+        for (const item of textContent.items) {
+
+            if (!('str' in item)) continue;
+
             const str = (item.str || '').trim();
             if (!str) continue;
 

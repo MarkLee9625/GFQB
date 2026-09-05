@@ -2,7 +2,7 @@
  * DBService 单元测试
  * 使用 fake-indexeddb 模拟浏览器 IndexedDB 环境
  */
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import { DBService } from '../../services/db';
 import { CONSTANTS } from '../../src/constants';

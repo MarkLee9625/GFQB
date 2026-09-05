@@ -43,7 +43,7 @@ const ReaderApp: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const win = window as any;
+        const win = window;
         const method = win.__SWS_COMPRESSION_METHOD__;
         const data = await parseEmbeddedData<Article[]>(win.__SWS_DATA_ARTICLES_B64__, method);
         const config = await parseEmbeddedData<ReaderConfig>(win.__SWS_DATA_CONFIG_B64__, method);

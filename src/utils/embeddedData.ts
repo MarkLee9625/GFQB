@@ -108,7 +108,8 @@ async function decompressDirect(b64: string, method: 'gzip' | 'deflate'): Promis
 
 /** 读取当前页面注入的压缩方式（缺省视为未压缩） */
 export function getEmbeddedCompressionMethod(): EmbeddedCompressionMethod {
-  const m = (globalThis as any)?.__SWS_COMPRESSION_METHOD__;
+  const w = typeof window !== 'undefined' ? window : (globalThis as unknown as Window);
+  const m = w?.__SWS_COMPRESSION_METHOD__;
   return m === 'gzip' || m === 'deflate' ? m : 'none';
 }
 

@@ -3,6 +3,7 @@ import type { Article } from '../../../src/types';
 import { usePanZoom } from '../../../hooks/usePanZoom';
 import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
 import { fileToDataURL, compressImage } from '../../../src/utils/fileHelpers';
+import { toast } from '../../../src/utils/toast';
 
 const noop = () => {};
 
@@ -117,7 +118,7 @@ export function useImageEditor({
       const src = await compressImage(base64, 2400, 0.92, 'webp');
       onUpdate?.(article.id, { [imageField]: src });
     } catch (err) {
-      alert('图片替换失败: ' + (err instanceof Error ? err.message : '请检查图片格式'));
+      toast.error('图片替换失败: ' + (err instanceof Error ? err.message : '请检查图片格式'));
     } finally {
       if (replaceInputRef.current) replaceInputRef.current.value = '';
     }

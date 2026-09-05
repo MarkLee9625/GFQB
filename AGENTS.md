@@ -8,10 +8,15 @@
 
 ## 文件编辑约定（重要）
 
-- 本目录位于 OneDrive 中文路径下，**apply_patch / Read / Edit 工具无法写入**（沙箱封装报错）。
-- **所有文件编辑一律用 PowerShell**：`Get-Content -Raw -LiteralPath` 读取，`[System.IO.File]::WriteAllText / WriteAllLines`（UTF-8 无 BOM）写入；小改动用精确字符串替换，大改动用单引号 here-string 整文件重写。
+- 本目录位于 OneDrive 中文路径下；**DSH 环境下 read / edit / write 工具可直接读写**（已验证可用）。
+- **如果编辑工具报沙箱拒绝（EPERM）**，改用 PowerShell 兜底：`Get-Content -Raw -LiteralPath` 读取，`[System.IO.File]::WriteAllText / WriteAllLines`（UTF-8 无 BOM）写入；小改动用精确字符串替换，大改动用单引号 here-string 整文件重写。
 - 写完后立即回读校验，必要时 `node --check` / `npm run typecheck` 验证。
-- 不要反复尝试 apply_patch，直接走 PowerShell。
+
+## 提示约定（重要）
+
+- **禁止新增 `alert()` / `window.alert` 调用**：统一走全局 Toast（`import { toast } from '../src/utils/toast'`；`toast.info/success/warning/error(message)`，组件为 `ToastHost`，已挂载在 App 根级）。
+- 例外：破坏性操作的确认（`window.confirm`）、导出阅读器内联脚本（`reader/clientScript.ts`）、测试数据中的字符串。
+- 新增 `alert` 会被审查拒绝，请遵守。
 
 ## 可用技能（`.codex/skills/`）
 
@@ -36,6 +41,7 @@ npm run test         # vitest run
 npm run typecheck    # tsc --noEmit
 npm run start        # 生产模式 (NODE_ENV=production node server.js)
 npm run test:watch   # vitest 监听模式
+npm run test:server  # BFF 回归测试 (node --test server.test.mjs)
 npm run test:file <path>  # bash scripts/test-file.sh <path>（单文件测试）
 npm run test:coverage     # 仅 fileHelpers.ts + pasteCleaner.ts
 npm run clean             # 清理构建产物（dist/ + public 下 PDF.js 资源）
@@ -258,7 +264,7 @@ interface Article {
 
 ## 类型配置要点
 
-`strict: true`，但放宽了 `noImplicitAny`、`noUnusedLocals`、`noUnusedParameters` 等。`noEmit: true`。
+`strict: true`，`noUnusedLocals` / `noUnusedParameters` 已开启（未用参数以 `_` 前缀豁免）；`noImplicitAny` 默认开启，`noEmit: true`。
 
 ## 测试
 

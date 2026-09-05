@@ -3,7 +3,7 @@ import type { Article } from './src/types';
 import { CONSTANTS, isSpecialCategory } from './src/constants';
 import { db } from './services/db';
 import { compressImage, fileToDataURL } from './src/utils/fileHelpers';
-import { Icon } from './components/Icons';
+import { toast } from './src/utils/toast';
 import { PaperView } from './components/PaperView';
 import { ErrorBoundary, DBErrorBoundary } from './components/ErrorBoundary';
 import Sidebar from './components/Sidebar';
@@ -18,6 +18,7 @@ import { useImportManager } from './hooks/useImportManager';
 import { useArticleNavigation } from './hooks/useArticleNavigation';
 import { useAiFeatures } from './hooks/useAiFeatures';
 import MainLayout from './src/components/Layout/MainLayout';
+import ToastHost from './components/ToastHost';
 
 const Editor = React.lazy(() => import('./components/Editor').then(m => ({ default: m.Editor })));
 const KeyboardShortcutsHelpModal = React.lazy(() => import('./components/KeyboardShortcutsHelpModal'));
@@ -98,11 +99,6 @@ const AppContent: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [importProgress, setImportProgress] = useState<{ stage: string, details: string } | null>(null);
-  const [exportOptions, setExportOptions] = useState({
-    useAlternateDesign: false,
-    includeImages: true,
-    optimizeForPrint: false,
-  });
 
   // 合并布尔 UI 状态 — useReducer 优化，减少闭包创建
   type UIState = {
@@ -162,12 +158,8 @@ const AppContent: React.FC = () => {
   const setShowShortcutsHelp = makeSetter('showShortcutsHelp');
 
   const openExportOptionsModal = useCallback(() => {
-    setExportOptions(prev => ({
-      ...prev,
-      useAlternateDesign,
-    }));
     setIsExportOptionsModalOpen(true);
-  }, [useAlternateDesign]);
+  }, []);
 
   const importInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -179,8 +171,6 @@ const AppContent: React.FC = () => {
     setLogo,
     setSidebarMeta,
     setCategories,
-    setArticlesAction,
-    setCurrentId,
     setIsEditMode,
     setIsSidebarHidden,
     setUseAlternateDesign,
@@ -198,10 +188,8 @@ const AppContent: React.FC = () => {
 
       if (event.data && event.data.type === 'GRAPH_SEARCH_KEYWORD') {
         const keyword = event.data.keyword;
-        // @ts-ignore
         const found = window.find(keyword, false, false, true, false, false, false);
         if (!found) {
-          // @ts-ignore
           window.find(keyword, false, true, true, false, false, false);
         }
       }
@@ -217,7 +205,7 @@ const AppContent: React.FC = () => {
     if (!loading) {
       db.save(CONSTANTS.KEY, { logo, sidebarMetaText: sidebarMeta }).catch((e: unknown) => {
         console.error('配置保存失败', e);
-        alert('配置保存失败，请刷新页面重试');
+        toast.error('配置保存失败，请刷新页面重试');
       });
     }
   }, [logo, sidebarMeta, loading]);
@@ -292,7 +280,7 @@ const AppContent: React.FC = () => {
       }
     } catch (error) {
       console.error('图片压缩失败:', error);
-      alert('图片上传压缩失败，请重试');
+      toast.error('图片上传压缩失败，请重试');
     }
     e.target.value = '';
   }, [currentId, updateArticle]);
@@ -313,7 +301,6 @@ const AppContent: React.FC = () => {
     articles,
     logo,
     sidebarMeta,
-    useAlternateDesign,
     openExportOptionsModal,
   });
 
@@ -402,6 +389,7 @@ const AppContent: React.FC = () => {
   }, [handleExportWithOptions]);
 
   return (
+    <>
     <MainLayout
       isLoading={loading || !!importProgress}
       loadingMessage={importProgress?.details}
@@ -525,6 +513,8 @@ const AppContent: React.FC = () => {
         </>
       }
     />
+    <ToastHost />
+    </>
   );
 };
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Icon } from './Icons';
+import { toast } from '../src/utils/toast';
 
 interface CategoryManagerModalProps {
   isOpen: boolean;
@@ -49,7 +50,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   const handleRenameSave = () => {
     if (editingCat && editingCat.new && editingCat.new !== editingCat.old) {
       if (categories.includes(editingCat.new)) {
-        alert("该分类名称已存在");
+        toast.warning("该分类名称已存在");
         return;
       }
       const updated = categories.map(c => c === editingCat.old ? editingCat.new : c);

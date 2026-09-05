@@ -3,6 +3,7 @@ import type { Article, UniversalArticleMeta } from '../src/types';
 import { generateForeword, extractGlobalKnowledgeGraph, buildSuperContextForGraph, validateGraphQuality, KnowledgeGraphData } from '../services/aiService';
 import { generateGraphHtml } from '../src/utils/graphRenderer';
 import { parseMarkdownToHtml } from '../src/utils/fileHelpers';
+import { toast } from '../src/utils/toast';
 import { getGraphCache, saveGraphCache, contentHash } from '../services/graphCache';
 
 interface UseAiFeaturesOptions {
@@ -30,7 +31,7 @@ export function useAiFeatures({
     );
 
     if (validArticles.length === 0) {
-      alert("当前没有任何有效文章，无法生成导读！请先添加文章内容。");
+      toast.warning("当前没有任何有效文章，无法生成导读！请先添加文章内容。");
       return;
     }
 
@@ -49,10 +50,10 @@ export function useAiFeatures({
 
       if (newArt) {
         setCurrentId(newArt.id);
-        setTimeout(() => alert('✨ 卷首语生成成功！AI 已自动为您排版。'), 100);
+        toast.success('✨ 卷首语生成成功！AI 已自动为您排版。');
       }
     } catch (err) {
-      alert('生成卷首语失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      toast.error('生成卷首语失败: ' + (err instanceof Error ? err.message : '未知错误'));
     } finally {
       setImportProgress(null);
     }
@@ -67,7 +68,7 @@ export function useAiFeatures({
     );
 
     if (validArticles.length === 0) {
-      return alert("当前无有效内容或 PDF 附件，无法提取图谱！");
+      { toast.warning("当前无有效内容或 PDF 附件，无法提取图谱！"); return; }
     }
 
     setImportProgress({ stage: 'generating', details: '正在深度解析 PDF 与全刊内容，构建超级上下文...' });
@@ -118,7 +119,7 @@ export function useAiFeatures({
           ? `✅ 质量校验通过！节点 ${qualityReport.nodeCount} 个，关系 ${qualityReport.linkCount} 条，连通率 ${(qualityReport.connectivityRatio * 100).toFixed(0)}%`
           : `⚠️ 质量提示：\n${qualityReport.warnings.join('\n')}`;
         const cacheNote = fromCache ? '\n\n💾 使用历史缓存数据（0 秒加载）' : '';
-        setTimeout(() => alert(`🕸️ 知识图谱生成成功！\n\n${qualityMsg}${cacheNote}`), 100);
+        toast.success(`🕸️ 知识图谱生成成功！\n\n${qualityMsg}${cacheNote}`);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '未知错误';
@@ -132,7 +133,7 @@ export function useAiFeatures({
       } else if (errorMessage.includes('JSON')) {
         friendlyMessage = 'AI 返回的数据格式异常，请重试或检查文章内容是否包含足够技术信息。';
       }
-      alert(friendlyMessage);
+      toast.error(friendlyMessage);
     } finally {
       setImportProgress(null);
     }
@@ -154,7 +155,7 @@ export function useAiFeatures({
     );
 
     if (validArticles.length === 0) {
-      return alert("当前无有效内容或 PDF 附件，无法提取图谱！");
+      { toast.warning("当前无有效内容或 PDF 附件，无法提取图谱！"); return; }
     }
 
     // skipCache=true 强制跳过缓存读取，直接调用 AI；生成成功后自动覆盖缓存
@@ -176,10 +177,10 @@ export function useAiFeatures({
 
       if (newArt) {
         setCurrentId(newArt.id);
-        setTimeout(() => alert(`✅ 文章 "${article.title}" 已成功采纳！`), 100);
+        toast.success(`✅ 文章 "${article.title}" 已成功采纳！`);
       }
     } catch (err) {
-      alert('采纳文章失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      toast.error('采纳文章失败: ' + (err instanceof Error ? err.message : '未知错误'));
     }
   }, [createArticle, setCurrentId]);
 

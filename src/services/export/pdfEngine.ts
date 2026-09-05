@@ -12,10 +12,6 @@ import { base64ToUint8Array } from '../../utils/fileHelpers';
  *
  * 此函数在渲染前手动预取字体二进制数据并注入 FontStore，绕过惰性加载机制。
  */
-const FONT_URLS = {
-  regular: 'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@5.2.9/chinese-simplified-400-normal.woff2',
-  bold: 'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-sc@5.2.9/chinese-simplified-700-normal.woff2',
-};
 
 async function preloadFonts(): Promise<void> {
   try {
@@ -249,7 +245,7 @@ export async function exportToPdf(
 /**
  * 生成导出文件名
  */
-function generateFileName(articles: Article[], options: PdfExportOptions): string {
+function generateFileName(articles: Article[], _options: PdfExportOptions): string {
   try {
     // 查找封面文章以获取期号和日期
     const coverArticle = articles.find(article => article.category === '封面');

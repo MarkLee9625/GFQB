@@ -89,7 +89,7 @@ export function usePanZoom(options: UsePanZoomOptions): UsePanZoomReturn {
     onUpdateComplete,
     minScale = 0.5,
     maxScale = 5,
-    scaleStep = 0.1,
+    scaleStep: _scaleStep = 0.1,
     dragThreshold = 2,
     debounceDelay = 150,
   } = options;

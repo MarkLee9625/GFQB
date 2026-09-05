@@ -1,4 +1,4 @@
-import { SHARED_STYLES, MAGAZINE_STYLES, PRINT_STYLES, MISC_STYLES, SEASONAL_STYLES, SVG_ICONS } from '../assets';
+import { SHARED_STYLES, MAGAZINE_STYLES, PRINT_STYLES, MISC_STYLES, SEASONAL_STYLES } from '../assets';
 
 export function getPrintableSkeleton(options: {
     contentHtml: string;

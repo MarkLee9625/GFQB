@@ -89,9 +89,8 @@ export async function extractAbstractFromPdf(
                 const textContent = await page.getTextContent();
 
                 const pageText = textContent.items
-                    // @ts-ignore
-                    .map((item: any) => item.str)
-                    .reduce((acc: string, curr: string) => {
+                    .map((item) => 'str' in item ? item.str : '')
+                    .reduce((acc, curr) => {
                         if (!acc) return curr;
                         const isLastChinese = /[\u4e00-\u9fa5]/.test(acc[acc.length - 1]);
                         const isCurrChinese = /[\u4e00-\u9fa5]/.test(curr[0]);
@@ -231,7 +230,6 @@ export const convertPdfToImages = async (
                 context.fillStyle = '#ffffff';
                 context.fillRect(0, 0, canvas.width, canvas.height);
 
-                // @ts-ignore
                 await page.render({
                     canvasContext: context,
                     viewport: viewport,

@@ -1,4 +1,3 @@
-import { CONSTANTS } from '../constants';
 
 /**
  * 文件转换为DataURL（带内存优化）

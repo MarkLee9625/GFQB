@@ -205,13 +205,6 @@ export async function generateReaderHTML(
     });
     console.log('[Export] 文章数据处理完成，PDF数据已保留，准备生成配置...');
 
-    const config = {
-        company: CONSTANTS.COMPANY_INFO,
-        version: '1.0.0',
-        alternateDesign: options.useAlternateDesign ?? false,
-        logo: metadata.logo || '',
-        sidebarMeta: metadata.sidebarMeta || ''
-    };
 
     console.log('[Export] 开始 Web Worker 导出流程...');
 
@@ -301,12 +294,11 @@ function buildReaderHTML(
     options: ExportOptions,
     metadata: ExportMetadata
 ): string {
+
     const config = {
-        company: CONSTANTS.COMPANY_INFO,
-        version: '1.0.0',
-        alternateDesign: options.useAlternateDesign ?? false,
+        sidebarMeta: metadata.sidebarMeta || '',
         logo: metadata.logo || '',
-        sidebarMeta: metadata.sidebarMeta || ''
+        alternateDesign: options.useAlternateDesign ?? false
     };
 
     console.log("[Export] Using dynamic skeleton template for export...");

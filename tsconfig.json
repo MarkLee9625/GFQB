@@ -19,8 +19,8 @@
     "noImplicitThis": true,
     "useUnknownInCatchVariables": true, // 严格：catch变量必须是unknown
     "alwaysStrict": true,
-    "noUnusedLocals": false, // 放宽：允许未使用的局部变量
-    "noUnusedParameters": false, // 放宽：允许未使用的参数
+    "noUnusedLocals": true, // 严格：不允许未使用的局部变量
+    "noUnusedParameters": true, // 严格：不允许未使用的参数
     "exactOptionalPropertyTypes": false, // 放宽：不强制精确可选属性类型
     "noImplicitReturns": false, // 放宽：允许隐式返回
     "noFallthroughCasesInSwitch": true,

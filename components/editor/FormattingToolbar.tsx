@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../Icons';
+import { toast } from '../../src/utils/toast';
 
 interface FormattingToolbarProps {
   onExecCmd: (cmd: string, val?: string) => void;
@@ -40,7 +41,7 @@ const FormattingToolbar = React.memo(({ onExecCmd, onAutoIndent, onScaleText, is
       const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(url);
       const isAllowedScheme = /^(https?|mailto|tel):/i.test(url);
       if (hasScheme && !isAllowedScheme) {
-        alert('链接地址不安全，仅支持 http/https/mailto/tel 协议');
+        toast.warning('链接地址不安全，仅支持 http/https/mailto/tel 协议');
         return;
       }
       const selection = window.getSelection();

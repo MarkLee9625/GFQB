@@ -1,4 +1,3 @@
-import { CONSTANTS } from '../../../constants';
 import { compressImage } from '../../../utils/fileHelpers';
 
 /**
@@ -113,7 +112,7 @@ export async function inlineOnlineImages(
     }
 
     // 单次正则回调替换（原实现逐图 replace 整串为 O(n²)，多图时重复扫描）
-    const inlinedContent = content.replace(urlRegex, (full, before, url, after) => {
+    const inlinedContent = content.replace(urlRegex, (full, _before, _url, _after) => {
         const r = resultMap.get(full);
         return r ? `<img${r.before}src="${r.base64}"${r.after}>` : full;
     });
@@ -210,7 +209,7 @@ export async function processMediaForPrint(content: string): Promise<string> {
 
     // 3. 彻底清洗富文本数据，开启双维约束，并剥离原生宽高
     const imgRegexAll = /<img([^>]*)>/gi;
-    processedContent = processedContent.replace(imgRegexAll, (match, attrs) => {
+    processedContent = processedContent.replace(imgRegexAll, (_match, attrs) => {
         // 暴力剥离原生 width 和 height 属性
         let cleanAttrs = attrs.replace(/\b(width|height)=["']?\d+["']?/gi, '');
         

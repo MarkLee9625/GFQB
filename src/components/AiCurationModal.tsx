@@ -4,6 +4,7 @@ import type { UniversalArticleMeta } from '../types';
 type SourceType = 'wechat' | 'rss' | 'patent' | 'aip';
 import { fetchRssFeed, RSS_PRESETS } from '../services/fetchers/rssFetcher';
 import { fetchPatents, PATENT_KEYWORDS } from '../services/fetchers/patentFetcher';
+import { toast } from '../utils/toast';
 
 interface AiCurationModalProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
   const [adoptedIds, setAdoptedIds] = useState<Set<string>>(new Set());
   const [selectedRssUrl, setSelectedRssUrl] = useState(RSS_PRESETS[0].url);
   const [patentKeyword, setPatentKeyword] = useState(PATENT_KEYWORDS[0].value);
-  const [translatingId, setTranslatingId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 核心功能：支持 Shift 批量上传并并发解析每一个 MD 文件
@@ -130,7 +131,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
 
     } catch (error) {
       console.error(error);
-      alert("AI 评审遇到网络波动，已完成部分阅卷，剩下的请稍后再试！");
+      toast.error("AI 评审遇到网络波动，已完成部分阅卷，剩下的请稍后再试！");
       setProgressText('');
     } finally {
       setIsProcessing(false);
@@ -146,7 +147,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
 
     // 如果是学术文献（底层类型为了兼容依然是 'patent'），触发深度编译
     if (article.sourceType === 'patent') {
-      setTranslatingId(article.id);
+
       try {
         const translatedContent = await translateAndFormatAcademic(article);
         // 篡改 content 为大模型生成的精美 Markdown 中文报道
@@ -156,11 +157,9 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
         setAdoptedIds(prev => new Set(prev).add(article.id));
       } catch (error) {
         console.error("编译失败", error);
-        alert("AI 深度编译遇到网络波动，已为您采纳英文原文。");
+        toast.error("AI 深度编译遇到网络波动，已为您采纳英文原文。");
         if (onAdopt) onAdopt(article);
         setAdoptedIds(prev => new Set(prev).add(article.id));
-      } finally {
-        setTranslatingId(null);
       }
     } else {
       // 普通微信文章或本地文件，无需翻译，直接采纳原文
@@ -177,8 +176,8 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
        const newArticles = await fetchRssFeed(selectedRssUrl, sourceName);
        
        setArticles(prev => [...prev, ...newArticles]);
-     } catch (error: any) {
-       alert(error.message);
+     } catch (error: unknown) {
+       toast.error(error instanceof Error ? error.message : '未知错误');
      } finally {
        setIsProcessing(false);
      }
@@ -189,8 +188,8 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
      try {
        const newArticles = await fetchPatents(patentKeyword);
        setArticles(prev => [...prev, ...newArticles]);
-     } catch (error: any) {
-       alert(error.message);
+     } catch (error: unknown) {
+       toast.error(error instanceof Error ? error.message : '未知错误');
      } finally {
        setIsProcessing(false);
      }

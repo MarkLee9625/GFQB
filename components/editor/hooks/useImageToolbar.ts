@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { toast } from '../../../src/utils/toast';
 
 export function useImageToolbar() {
   const [selectedImgEl, setSelectedImgEl] = useState<HTMLImageElement | null>(null);
@@ -64,7 +65,7 @@ export function useImageToolbar() {
       }
       selectedImgEl.setAttribute('src', src);
     } catch {
-      alert('替换图片失败');
+      toast.error('替换图片失败，请重试');
     } finally {
       e.target.value = '';
     }

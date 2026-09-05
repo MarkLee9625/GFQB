@@ -11,8 +11,9 @@ export function useMemoryMonitor(thresholdMB = 100) {
     }
 
     const interval = setInterval(() => {
-      // @ts-ignore
-      const { usedJSHeapSize, jsHeapSizeLimit } = performance.memory;
+      const mem = performance.memory;
+      if (!mem) return;
+      const { usedJSHeapSize, jsHeapSizeLimit } = mem;
       const usedMB = usedJSHeapSize / 1024 / 1024;
       const limitMB = jsHeapSizeLimit / 1024 / 1024;
       const percentage = (usedMB / limitMB) * 100;

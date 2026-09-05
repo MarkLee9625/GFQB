@@ -18,6 +18,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:file": "bash scripts/test-file.sh",
+    "test:server": "node --test server.test.mjs",
     "check:env": "bash scripts/check-env.sh",
     "clean": "rm -rf dist public/pdf.min.mjs public/pdf.worker.min.mjs public/cmaps public/standard_fonts public/wasm && echo 'Cleaned build artifacts'"
   },

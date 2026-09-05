@@ -3,6 +3,7 @@ import type { Article } from '../src/types';
 import { db } from '../services/db';
 import { sortArticlesByPriority } from '../src/utils/articleSort';
 import { parseEmbeddedData } from '../src/utils/embeddedData';
+import { toast } from '../src/utils/toast';
 
 export function useJournal() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -38,10 +39,10 @@ export function useJournal() {
       // 避免与 useAppInitialization 的写入竞争导致旧库数据覆盖嵌入数据。
       // 导出端数据为 gzip 压缩（compression.ts），必须按 __SWS_COMPRESSION_METHOD__
       // 在 Worker 中解压后再 JSON.parse，直接 decodeB64Utf8 会解析失败。
-      const embedded = (window as any).__SWS_DATA_ARTICLES_B64__;
+      const embedded = window.__SWS_DATA_ARTICLES_B64__;
       if (embedded) {
         try {
-          const method = (window as any).__SWS_COMPRESSION_METHOD__;
+          const method = window.__SWS_COMPRESSION_METHOD__;
           const jsonData = await parseEmbeddedData<Article[]>(embedded, method);
           if (aborted()) return;
           if (!Array.isArray(jsonData)) {
@@ -53,7 +54,7 @@ export function useJournal() {
         } catch (e) {
           console.error('Reader embedded data parse failed', e);
           if (mountedRef.current) {
-            alert('阅读版数据加载失败：' + (e instanceof Error ? e.message : '未知错误'));
+            toast.error('阅读版数据加载失败：' + (e instanceof Error ? e.message : '未知错误'));
           }
         } finally {
           if (mountedRef.current) setLoading(false);
@@ -88,7 +89,7 @@ export function useJournal() {
       } catch (e) {
         console.error('Failed to load articles', e);
         if (mountedRef.current) {
-          alert('数据加载失败：' + (e instanceof Error ? e.message : '未知错误'));
+          toast.error('数据加载失败：' + (e instanceof Error ? e.message : '未知错误'));
         }
       } finally {
         if (mountedRef.current) setLoading(false);
@@ -117,7 +118,7 @@ export function useJournal() {
         await db.saveArticle(article);
       } catch (e) {
         console.error('Save failed', e);
-        alert('文章保存失败，请刷新页面重试');
+        toast.error('文章保存失败，请稍后重试');
       }
     }, 1000));
   }, []);
@@ -170,14 +171,14 @@ export function useJournal() {
       return newArt;
     } catch (e) {
       console.error('Create failed', e);
-      alert('文章创建失败，请重试');
+      toast.error('文章创建失败，请重试');
     }
   }, []);
 
   const deleteArticle = useCallback(async (id: number) => {
     const art = articlesRef.current.find(a => String(a.id) === String(id));
 
-    if (art?.category === '封面' || art?.category === '封底') return alert('封面和封底不可删除');
+    if (art?.category === '封面' || art?.category === '封底') { toast.warning('封面和封底不可删除'); return; }
     if (!window.confirm('确定要删除这篇文章吗？')) return;
 
     try {
@@ -191,7 +192,7 @@ export function useJournal() {
       setCurrentId(prev => prev === id ? null : prev);
     } catch (e) {
       console.error('Delete failed', e);
-      alert('文章删除失败，请重试');
+      toast.error('文章删除失败，请重试');
     }
   }, []);
 
@@ -209,7 +210,7 @@ export function useJournal() {
     // 同步到数据库
     db.clearAndBulkSaveArticles(ordered).catch((e) => {
       console.error('Reorder save failed', e);
-      alert('排序保存失败，请重试');
+      toast.error('排序保存失败，请重试');
     });
   }, []);
 
@@ -222,7 +223,7 @@ export function useJournal() {
       if (ordered.length > 0) setCurrentId(ordered[0].id);
     } catch (e) {
       console.error("Bulk save failed", e);
-      alert('批量保存失败，请重试');
+      toast.error('批量保存失败，请重试');
     }
   }, [sanitizeArticles]);
 

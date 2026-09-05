@@ -6,8 +6,8 @@ let pdfLibLoaded = false;
 export async function ensurePdfLibLoaded(): Promise<void> {
     if (pdfLibLoaded) return;
 
-    if (typeof window !== 'undefined' && !(window as any).pdfjsDist) {
-        (window as any).pdfjsDist = pdfjsLib;
+    if (typeof window !== 'undefined' && !window.pdfjsDist) {
+        window.pdfjsDist = pdfjsLib;
     }
 
     if (pdfjsLib && pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {

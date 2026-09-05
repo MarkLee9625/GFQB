@@ -20,7 +20,7 @@ interface SidebarProps {
   onReorder: (newOrder: Article[]) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({
+const Sidebar: React.FC<SidebarProps> = React.memo(({
   articles,
   displayArticles,
   currentId,
@@ -55,7 +55,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     const target = (e.target as HTMLElement).closest('li[data-id]');
     if (!target) return;
     const id = Number((target as HTMLElement).dataset.id);
-    if (draggedId === id) return;
+    if (draggedId === id || dragOverId === id) return;
     setDragOverId(id);
   };
 
@@ -159,8 +159,6 @@ const Sidebar: React.FC<SidebarProps> = ({
               {article.pdfData && <span className="bg-red-100 text-red-500 text-[9px] px-1 rounded font-bold mr-1">PDF</span>}
               {article.title}
             </div>
-            <div className="text-[11px] text-gray-400 flex justify-between">
-            </div>
           </li>
         ))}
       </ul>
@@ -190,5 +188,5 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
     </div>
   );
-};
+});
 export default Sidebar;

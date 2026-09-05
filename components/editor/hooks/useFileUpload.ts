@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Article } from '../../../src/types';
 import { fileToDataURL, compressImage, FILE_SIZE_LIMITS } from '../../../src/utils/fileHelpers';
 import { cleanPastedHtml } from '../../../src/utils/pasteCleaner';
@@ -6,6 +6,7 @@ import { createImageHtml } from '../../../src/utils/encoding';
 import { escapeHtml } from '../../../src/utils/stringUtils';
 import { extractAbstractFromPdf } from '../../../src/services/pdf';
 import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
+import { toast } from '../../../src/utils/toast';
 
 interface UseFileUploadOptions {
   contentRef: React.RefObject<HTMLDivElement | null>;
@@ -35,8 +36,6 @@ export function useFileUpload({
   imgCompressQuality,
   imgCompressFormat,
   setTempPdf,
-  saveSelection,
-  restoreSelection,
 }: UseFileUploadOptions) {
   const formDataFieldsRef = useRef({ category: '', title: '', abstract: '' });
   formDataFieldsRef.current = {
@@ -67,7 +66,7 @@ export function useFileUpload({
           const src = await compressImage(base64, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
           insertHtml(createImageHtml(src));
         } catch (err) {
-          alert('粘贴图片失败: ' + (err instanceof Error ? err.message : '请检查图片格式'));
+          toast.error('粘贴图片失败: ' + (err instanceof Error ? err.message : '请检查图片格式'));
         } finally {
           setIsProcessing(false);
         }
@@ -103,7 +102,7 @@ export function useFileUpload({
     else if (type === 'pdf') maxSize = FILE_SIZE_LIMITS.pdf;
 
     if (file.size > maxSize) {
-      alert(`文件过大，请压缩后上传`);
+      toast.warning(`文件过大，请压缩后上传`);
       e.target.value = ''; // 重置 input，否则再次选择同一文件不会触发 onChange
       return;
     }
@@ -174,7 +173,7 @@ export function useFileUpload({
           insertHtml(tag);
         }
       } catch (error) {
-        alert("上传失败: " + (error instanceof Error ? error.message : '未知错误'));
+        toast.error("上传失败: " + (error instanceof Error ? error.message : '未知错误'));
       } finally {
         setIsProcessing(false);
         e.target.value = '';

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Article, ContentBlock } from '../../src/types';
+import type { ContentBlock } from '../../src/types';
 import { Icon } from '../Icons';
 import { useBlobManager } from '../../hooks/useBlobManager';
 import { useInView } from '../../hooks/useInView';
 import type { ArticleRendererBaseProps } from './types';
 import { htmlToBlocks } from '../../src/utils/blockParser';
 import { BlockRenderer } from '../../src/components/renderers/blocks/BlockRenderer';
+import { toast } from '../../src/utils/toast';
 interface ContentRendererProps extends ArticleRendererBaseProps {
   mode: 'edit' | 'read' | 'print';
   logo?: string;
@@ -169,7 +170,7 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
                         e.preventDefault();
                         e.stopPropagation();
                         if (!pdfUrl) {
-                          alert('PDF 正在处理中，请稍后再试...');
+                          toast.warning('PDF 正在处理中，请稍后再试...');
                           return;
                         }
                         try {
@@ -181,7 +182,7 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
                           document.body.removeChild(link);
                         } catch (err) {
                           console.error('下载 PDF 失败', err);
-                          alert('下载失败，请重试');
+                          toast.error('下载失败，请重试');
                         }
                       }}
                       className="bg-white hover:bg-gray-50 text-brand-blue border border-gray-300 rounded-md px-3 py-1.5 text-xs font-bold cursor-pointer flex items-center gap-2 transition-all"

@@ -130,18 +130,19 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
             console.log(`[aiService] API 调用成功 (尝试 ${attempt}/${retries})`);
             return content;
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             clearTimeout(timeoutId);
-            lastError = error;
+            const err = error instanceof Error ? error : new Error(String(error));
+            lastError = err;
 
-            const isAbort = error.name === 'AbortError';
-            const is5xx = /HTTP 5\d{2}/.test(error.message || '');
-            const is429 = error.message?.includes('429');
-            isEmptyContent = error.message?.includes('AI 服务返回内容为空');
+            const isAbort = err.name === 'AbortError';
+            const is5xx = /HTTP 5\d{2}/.test(err.message || '');
+            const is429 = err.message.includes('429');
+            isEmptyContent = err.message.includes('AI 服务返回内容为空');
             const isRetryable = isAbort || is5xx || is429 || isEmptyContent;
 
             if (!isRetryable || attempt >= retries) {
-                console.error(`[aiService] API 调用最终失败 (${attempt}/${retries}):`, error.message);
+                console.error(`[aiService] API 调用最终失败 (${attempt}/${retries}):`, err.message);
                 if (isAbort && timedOut) {
                     lastError = new Error(`AI 请求超时 (${timeoutMs / 1000}s)`);
                 }
@@ -149,7 +150,7 @@ async function callDeepSeekAPI(options: CallOptions): Promise<string> {
             }
 
             const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1) + Math.random() * 1000;
-            console.warn(`[aiService] API 调用失败，${(delay / 1000).toFixed(1)}s 后重试... (${error.message})`);
+            console.warn(`[aiService] API 调用失败，${(delay / 1000).toFixed(1)}s 后重试... (${err.message})`);
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
@@ -485,9 +486,9 @@ export async function extractGlobalKnowledgeGraph(
                 throw new Error('未能识别到有效的 nodes 结构');
             }
             break; // 成功则跳出重试循环
-        } catch (err: any) {
+        } catch (err: unknown) {
             if (attempt < NODE_MAX_RETRIES) {
-                console.warn(`[aiService] Phase 1 解析失败 (尝试 ${attempt}/${NODE_MAX_RETRIES})，准备重试:`, err.message);
+                console.warn(`[aiService] Phase 1 解析失败 (尝试 ${attempt}/${NODE_MAX_RETRIES})，准备重试:`, err instanceof Error ? err.message : String(err));
                 continue;
             }
             throw err; // 最后一次失败则向外抛出
@@ -530,7 +531,7 @@ export async function extractGlobalKnowledgeGraph(
             if (isGenericName(node.name)) { genericFilteredCount++; return false; }
             seenNames.add(node.name);
             const normalizedType = (node.type || '').toLowerCase().trim();
-            node.type = VALID_TYPES.has(normalizedType) ? normalizedType as any : (TYPE_ALIASES[normalizedType] || 'concept') as any;
+            node.type = (VALID_TYPES.has(normalizedType) ? normalizedType : (TYPE_ALIASES[normalizedType] || 'concept')) as KnowledgeNode['type'];
             node.weight = Math.max(1, Math.min(10, Math.round(Number(node.weight) || 5)));
             node.description = (node.description || node.name).substring(0, 80);
             return true;
@@ -606,7 +607,7 @@ function generateFallbackLinks(currentData: KnowledgeGraphData): KnowledgeLink[]
     const processNodes = currentData.nodes.filter(n => n.type === 'process');
     const techNodes = currentData.nodes.filter(n => n.type === 'technology');
     const materialNodes = currentData.nodes.filter(n => n.type === 'material');
-    const conceptNodes = currentData.nodes.filter(n => n.type === 'concept');
+
 
     for (const orphan of orphanNodes) {
         const usedTargetIds = new Set<string>();

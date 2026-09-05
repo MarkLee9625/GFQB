@@ -1,8 +1,10 @@
 import { useCallback } from 'react';
+import type { Article } from '../src/types';
 import { parseEmbeddedData } from '../src/utils/embeddedData';
+import { toast } from '../src/utils/toast';
 
 interface UseImportManagerOptions {
-  setArticlesAction: (articles: any[]) => void;
+  setArticlesAction: (articles: Article[]) => void;
   setLogo: (logo: string) => void;
   setSidebarMeta: (meta: string) => void;
   setCategories: React.Dispatch<React.SetStateAction<string[]>>;
@@ -67,7 +69,7 @@ export function useImportManager({
 
       } catch (err) {
         console.error("Import Parse Error:", err);
-        alert("导入失败：文件格式不正确或已损坏");
+        toast.error("导入失败：文件格式不正确或已损坏");
       }
     };
     reader.readAsText(file);

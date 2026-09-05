@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import 'fake-indexeddb/auto';
 import { useJournal } from '../../hooks/useJournal';
+import { toast } from '../../src/utils/toast';
 
 // 模拟文章数据工厂
 function makeArticle(overrides: Partial<any> = {}) {
@@ -85,7 +86,7 @@ describe('useJournal', () => {
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const first = result.current.articles[0];
-      const originalTitle = first.title;
+
 
       act(() => {
         result.current.updateArticle(first.id, { title: '已更新标题' });
@@ -130,17 +131,17 @@ describe('useJournal', () => {
       const { result } = renderHook(() => useJournal());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
-      const alertSpy = vi.spyOn(window, 'alert').mockReturnValue();
+      const toastSpy = vi.spyOn(toast, 'warning');
 
       const cover = result.current.articles.find(a => a.category === '封面');
       if (cover) {
         await act(async () => {
           await result.current.deleteArticle(cover.id);
         });
-        expect(alertSpy).toHaveBeenCalledWith('封面和封底不可删除');
+        expect(toastSpy).toHaveBeenCalledWith('封面和封底不可删除');
       }
 
-      alertSpy.mockRestore();
+      toastSpy.mockRestore();
     });
 
     it('用户取消确认时不删除', async () => {

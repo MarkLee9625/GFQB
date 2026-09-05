@@ -15,6 +15,7 @@ import { useEditorCommands } from './editor/hooks/useEditorCommands';
 import { useImageToolbar } from './editor/hooks/useImageToolbar';
 import { useFileUpload } from './editor/hooks/useFileUpload';
 import { useEditorKeyboard } from './editor/hooks/useEditorKeyboard';
+import { toast } from '../src/utils/toast';
 
 interface EditorProps {
   isOpen: boolean;
@@ -122,7 +123,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   }, [isOpen, article.id, resetForArticle]);
 
   const handleSave = useCallback((targetPublishState?: boolean) => {
-    if (!title) return alert("请输入标题");
+    if (!title) { toast.warning("请输入标题"); return; }
 
     let finalContent = contentRef.current?.innerHTML || '';
 
@@ -144,11 +145,11 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     handleImgReplace(e, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
   }, [handleImgReplace, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat]);
 
-  const handleArticleUpdate = useCallback((id: number, updates: Partial<Article>) => {
+  const handleArticleUpdate = useCallback((_id: number, updates: Partial<Article>) => {
     setFormData(prev => ({ ...prev, ...updates }));
   }, [setFormData]);
 
-  const handleImageUpload = useCallback((type: 'cover' | 'back') => {
+  const handleImageUpload = useCallback((_type: 'cover' | 'back') => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';

@@ -9,8 +9,35 @@ const __dirname = dirname(__filename);
 const DIST_DIR = resolve(__dirname, '../dist');
 const ASSETS_DIR = join(DIST_DIR, 'assets');
 
+// 知识图谱代码生成模板守卫：
+// graphEngine.ts / Renderer.ts 通过模板字面量返回 JS 源码字符串（注入 iframe srcdoc），
+// 模板内严禁出现反引号（会提前闭合外层模板字面量导致生成代码损坏）。
+// 基线为文件内反引号总数；不一致视为回归，直接终止构建。
+const GRAPH_TEMPLATE_BASELINES = [
+    { file: 'src/utils/graph/graphEngine.ts', backticks: 4 },
+    { file: 'src/utils/graph/Renderer.ts', backticks: 2 },
+];
+
+function validateGraphTemplates() {
+    for (const { file, backticks } of GRAPH_TEMPLATE_BASELINES) {
+        const path = resolve(__dirname, '../', file);
+        if (!fs.existsSync(path)) continue;
+        const content = fs.readFileSync(path, 'utf-8');
+        const count = (content.match(/`/g) || []).length;
+        if (count !== backticks) {
+            console.error(`❌ [安全校验] ${file} 反引号数量 ${count} 与基线 ${backticks} 不一致`);
+            console.error('   知识图谱代码注入模板中禁止使用反引号（会提前闭合外层模板字面量）。');
+            console.error('   如确需调整，请更新 scripts/post-build.js 基线并人工确认生成代码仍为合法 ES5。');
+            process.exit(1);
+        }
+    }
+    console.log('✅ [安全校验] 知识图谱模板反引号基线校验通过');
+}
+
 async function main() {
     console.log("🚀 Starting Post-Build Processing...");
+
+    validateGraphTemplates();
 
     // 1. Read index.html
     const indexHtmlPath = join(DIST_DIR, 'index.html');

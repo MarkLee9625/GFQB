@@ -1,5 +1,5 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -12,8 +12,7 @@ import tailwindcss from '@tailwindcss/vite';
  * - 不包含编辑器功能（Editor/导出引擎/AI/PDF.js 抽词等）；
  * - 构建产物由 post-build.js 内联为单文件模板（reader-template.html）。
  */
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
   return {
     base: './',
     plugins: [

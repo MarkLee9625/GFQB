@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Article } from '../../../src/types';
 import { generateArticleMeta, generateTitleOnly, scaleText } from '../../../services/aiService';
+import { toast } from '../../../src/utils/toast';
 
 interface UseEditorCommandsOptions {
   contentRef: React.RefObject<HTMLDivElement | null>;
@@ -106,7 +107,7 @@ export function useEditorCommands({
 
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
-      alert("请先用鼠标选中需要伸缩的文本段落！");
+      toast.warning("请先用鼠标选中需要伸缩的文本段落！");
       return;
     }
 
@@ -129,7 +130,7 @@ export function useEditorCommands({
 
       saveSelection();
     } catch (err) {
-      alert(`AI ${mode === 'expand' ? '扩写' : '精简'}失败: ` + (err instanceof Error ? err.message : "未知错误"));
+      toast.error(`AI ${mode === 'expand' ? '扩写' : '精简'}失败: ` + (err instanceof Error ? err.message : "未知错误"));
     } finally {
       setIsScalingText(false);
     }
@@ -137,7 +138,7 @@ export function useEditorCommands({
 
   const handleAiSummary = useCallback(async () => {
     const text = contentRef.current?.innerText || '';
-    if (!text || text.length < 50) return alert("内容太少，AI 无法生成总结");
+    if (!text || text.length < 50) { toast.warning("内容太少，AI 无法生成总结"); return; }
 
     if (formData.title && formData.title.trim() !== '' && formData.title !== '未命名文章') {
       if (!window.confirm("这将覆盖现有标题，确定继续吗？")) return;
@@ -154,7 +155,7 @@ export function useEditorCommands({
         tags: result.keywords || prev.tags
       }));
     } catch (err) {
-      alert("AI 总结生成失败: " + (err instanceof Error ? err.message : "未知错误"));
+      toast.error("AI 总结生成失败: " + (err instanceof Error ? err.message : "未知错误"));
     } finally {
       setShowAiLoading(false);
       setIsGeneratingAi(false);
@@ -163,7 +164,7 @@ export function useEditorCommands({
 
   const handleAiTitle = useCallback(async () => {
     const text = contentRef.current?.innerText || '';
-    if (!text || text.length < 50) return alert("内容太少，AI 无法生成标题");
+    if (!text || text.length < 50) { toast.warning("内容太少，AI 无法生成标题"); return; }
 
     setShowTitleLoading(true);
     setIsGeneratingTitle(true);
@@ -171,7 +172,7 @@ export function useEditorCommands({
       const title = await generateTitleOnly(text);
       setTitle(title);
     } catch (err) {
-      alert("AI 标题生成失败: " + (err instanceof Error ? err.message : "未知错误"));
+      toast.error("AI 标题生成失败: " + (err instanceof Error ? err.message : "未知错误"));
     } finally {
       setShowTitleLoading(false);
       setIsGeneratingTitle(false);
