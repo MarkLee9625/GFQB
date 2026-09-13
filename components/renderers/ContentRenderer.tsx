@@ -87,8 +87,32 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
     return [];
   }, [article.blocks, article.content]);
 
+  // 长文分片：首屏先渲染前30块，剩余在空闲时补齐，避免一次性创建数百个BlockRenderer阻塞切篇
+  const [visibleCount, setVisibleCount] = useState(30);
+  useEffect(() => {
+    setVisibleCount(30);
+  }, [article.id, article.blocks, article.content]);
+  useEffect(() => {
+    if (mode === 'print') {
+      if (visibleCount !== blocks.length) setVisibleCount(blocks.length || 30);
+      return;
+    }
+    if (visibleCount >= blocks.length) return;
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(() => setVisibleCount(blocks.length), { timeout: 800 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const timer = setTimeout(() => setVisibleCount(blocks.length), 0);
+    return () => clearTimeout(timer);
+  }, [blocks.length, visibleCount, mode, article.id]);
+
   const renderBlockContent = () => {
     if (blocks.length === 0) return null;
+    const visibleBlocks = visibleCount >= blocks.length ? blocks : blocks.slice(0, visibleCount);
 
     return (
       <div
@@ -98,7 +122,7 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
           lineHeight: article.lineHeight || 2.0
         }}
       >
-        {blocks.map(block => {
+        {visibleBlocks.map(block => {
           const isHeading = block.type === 'heading';
           return (
             <div

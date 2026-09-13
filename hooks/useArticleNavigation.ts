@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import type { Article } from '../src/types';
+import { filterArticlesByQuery } from '../src/utils/articleFilter';
 
 interface UseArticleNavigationOptions {
   articles: Article[];
@@ -20,7 +21,8 @@ export function useArticleNavigation({
   setIsSidebarHidden,
   contentScrollRef,
 }: UseArticleNavigationOptions) {
-  const sortedArticles = useMemo(() => articles.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase())), [articles, searchQuery]);
+  // 空查询返回原数组引用，下游 memo 引用稳定；标题缺失的脏数据按空标题处理（见 articleFilter）
+  const sortedArticles = useMemo(() => filterArticlesByQuery(articles, searchQuery), [articles, searchQuery]);
 
   const articlesRef = useRef(articles);
   articlesRef.current = articles;

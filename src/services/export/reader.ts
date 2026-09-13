@@ -20,7 +20,7 @@ export interface ExportMetadata {
 
 interface WorkerRequest {
     type: 'START_EXPORT';
-    articles: Article[];
+    articlesBlob: Blob;
     options: ExportOptions;
     metadata: ExportMetadata;
     companyInfo: typeof CONSTANTS.COMPANY_INFO;
@@ -42,53 +42,6 @@ interface WorkerProgress {
 interface WorkerError {
     type: 'EXPORT_ERROR';
     error: string;
-}
-
-/**
- * 优化深拷贝策略 - 分离大对象，减少 JS 侧深拷贝峰值
- *
- * 原理：
- * 1. pdfData、coverImage、backImage 是 Base64 字符串，体积巨大（可能数十MB）
- * 2. structuredClone 会对整个对象图进行深拷贝
- * 3. 如果直接深拷贝，内存峰值 = 原对象 + 拷贝对象 = 2x 原始内存
- *
- * 优化：
- * 1. 将大对象引用保存
- * 2. 清空后深拷贝轻量级元数据（标题、分类、标签等）
- * 3. 重新关联大对象引用（非拷贝）
- *
- * 注意：仅降低 JS 侧 structuredClone 的拷贝开销；
- * 后续 postMessage 传输 worker 时大字符串仍会被完整结构化克隆（字符串不可 transfer），
- * 传输阶段峰值仍约 2x。如需进一步降低，需将大字段抽出单独传输。
- */
-function optimizeStructuredClone(article: Article): Article {
-    const pdfDataRef = article.pdfData;
-    const coverImageRef = article.coverImage;
-    const backImageRef = article.backImage;
-
-    const articleForClone: Omit<Article, 'pdfData' | 'coverImage' | 'backImage'> = {
-        id: article.id,
-        title: article.title,
-        category: article.category,
-        content: article.content,
-        date: article.date,
-        issueText: article.issueText,
-        dateText: article.dateText,
-        scale: article.scale,
-        posX: article.posX,
-        posY: article.posY,
-        abstract: article.abstract,
-        tags: article.tags,
-        order: article.order
-    };
-
-    const cloned = structuredClone(articleForClone) as Article;
-
-    cloned.pdfData = pdfDataRef;
-    cloned.coverImage = coverImageRef;
-    cloned.backImage = backImageRef;
-
-    return cloned;
 }
 
 /**
@@ -170,6 +123,76 @@ function injectDataIntoReader(
 }
 
 /**
+ * 文章是否包含知识图谱容器（决定是否内联 D3）。
+ * 图谱正文承载于 content HTML 或 rawHtml 块中，均以 knowledge-graph-container 类名标记。
+ */
+function articlesContainKnowledgeGraph(articles: Article[]): boolean {
+  return articles.some(a => {
+    if ((a.content || '').includes('knowledge-graph-container')) return true;
+    if (a.blocks) {
+      return a.blocks.some(b =>
+        b.type === 'rawHtml' && (b as { html?: string }).html?.includes('knowledge-graph-container')
+      );
+    }
+    return false;
+  });
+}
+
+/**
+ * 获取 D3 源码：优先编辑器页面全局（生产构建已内联），
+ * dev 模式下回退 fetch public/d3.min.js；均失败返回 null（图谱运行时回退 CDN）。
+ */
+async function fetchD3Source(): Promise<string | null> {
+    const inline = (globalThis as any)?.__SWS_D3_SRC__;
+    if (typeof inline === 'string' && inline.length > 0) return inline;
+    try {
+        const res = await fetch('d3.min.js', { cache: 'no-store' });
+        if (res.ok) {
+            const text = await res.text();
+            return text.length > 1000 ? text : null;
+        }
+    } catch (e) {
+        console.warn('[Export] fetch d3.min.js 失败（dev 模式图谱将回退 CDN）', e);
+    }
+    return null;
+}
+
+/**
+ * 按需注入 D3（仅当文章正文包含知识图谱容器时）。
+ * - 有 D3 源码：替换 <!--SWS_D3_INJECT--> 为 window.__SWS_D3_SRC__ 内联脚本；
+ * - 无 D3 源码：移除锚点（图谱 iframe 运行时回退 CDN）。
+ * 防止把 ~250KB 的 D3 无条件打进每一份导出的阅读版。
+ */
+function injectD3IfNeeded(template: string, d3Source: string | null): string {
+    const D3_ANCHOR = '<!--SWS_D3_INJECT-->';
+    if (!template.includes(D3_ANCHOR)) return template;
+
+    if (!d3Source) {
+        return template.replace(D3_ANCHOR, () => '');
+    }
+
+    try {
+        const safe = JSON.stringify(d3Source).replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
+        return template.replace(D3_ANCHOR, () => `<script>window.__SWS_D3_SRC__=${safe};</script>`);
+    } catch (e) {
+        console.warn('[Export] D3 内联失败，跳过（图谱将回退 CDN）', e);
+        return template.replace(D3_ANCHOR, () => '');
+    }
+}
+
+/**
+ * 生成本地文章 JSON Blob（保留 blocks/pdfData/封面封底全部字段）。
+ * 仅在主线程做一次序列化，随后交给 Worker 压缩；
+ * 不再结构化克隆整个对象图，避免同步深拷贝几十 MB 大字符串。
+ * 序列化后立即释放 JSON 字符串引用（Blob 已持有副本），降低内存峰值。
+ */
+function serializeArticles(articles: Article[]): Blob {
+    const json = JSON.stringify(articles);
+    const blob = new Blob([json], { type: 'application/json' });
+    return blob;
+}
+
+/**
  * 生成离线阅读器 HTML
  * 优先使用构建生成的精简阅读版模板（reader-template.html）并注入数据；
  * dev 模式模板缺失时回退到动态骨架。
@@ -183,30 +206,20 @@ export async function generateReaderHTML(
     const sortedArticles = sortArticlesByPriority(articles);
 
     console.log('[Export] 开始处理文章数据，保留PDF数据以支持离线阅读器...');
-    const processedArticles = sortedArticles.map((article, idx) => {
-        try {
-            const articleCopy = optimizeStructuredClone(article);
-
-            if (article.category === '封面' && !articleCopy.coverImage) {
-                console.warn(`[Export] 文章 #${idx} "${article.title}" (封面) coverImage 为空`);
-            }
-            if (article.category === '封底' && !articleCopy.backImage) {
-                console.warn(`[Export] 文章 #${idx} "${article.title}" (封底) backImage 为空`);
-            }
-            if (article.pdfData && !articleCopy.pdfData) {
-                console.error(`[Export] 文章 #${idx} "${article.title}" pdfData 在优化拷贝后丢失！`);
-            }
-
-            return articleCopy;
-        } catch (err) {
-            console.warn(`[Export] 文章 "${article.title}" 优化拷贝失败，使用浅拷贝:`, err);
-            return { ...article };
+    sortedArticles.forEach((article, idx) => {
+        if (article.category === '封面' && !article.coverImage) {
+            console.warn(`[Export] 文章 #${idx} "${article.title}" (封面) coverImage 为空`);
+        }
+        if (article.category === '封底' && !article.backImage) {
+            console.warn(`[Export] 文章 #${idx} "${article.title}" (封底) backImage 为空`);
         }
     });
-    console.log('[Export] 文章数据处理完成，PDF数据已保留，准备生成配置...');
+    console.log('[Export] 文章数据处理完成，PDF数据已保留，准备序列化...');
 
-
-    console.log('[Export] 开始 Web Worker 导出流程...');
+    const blob = serializeArticles(sortedArticles);
+    const needsD3 = articlesContainKnowledgeGraph(sortedArticles);
+    const d3Source = needsD3 ? await fetchD3Source() : null;
+    console.log('[Export] 文章序列化完成，准备 Web Worker 导出流程...');
 
     return new Promise((resolve, reject) => {
         // 安全超时：5 分钟后自动拒绝，防止 Promise 挂死
@@ -248,8 +261,12 @@ export async function generateReaderHTML(
                     try {
                         const readerTemplate = await loadReaderTemplate();
                         const htmlContent = readerTemplate
-                            ? injectDataIntoReader(readerTemplate, articlesB64, configB64, compressionMethod)
-                            : buildReaderHTML(articlesB64, configB64, compressionMethod, processedArticles, options, metadata);
+                            ? (() => {
+                                let html = injectDataIntoReader(readerTemplate, articlesB64, configB64, compressionMethod);
+                                html = injectD3IfNeeded(html, d3Source);
+                                return html;
+                              })()
+                            : buildReaderHTML(articlesB64, configB64, compressionMethod, sortedArticles, options, metadata);
 
                         worker.terminate();
                         resolve(htmlContent);
@@ -274,7 +291,7 @@ export async function generateReaderHTML(
 
         const request: WorkerRequest = {
             type: 'START_EXPORT',
-            articles: processedArticles,
+            articlesBlob: blob,
             options,
             metadata,
             companyInfo: CONSTANTS.COMPANY_INFO
@@ -290,7 +307,7 @@ function buildReaderHTML(
     articlesB64: string,
     configB64: string,
     compressionMethod: string,
-    processedArticles: Article[],
+    sortedArticles: Article[],
     options: ExportOptions,
     metadata: ExportMetadata
 ): string {
@@ -303,7 +320,7 @@ function buildReaderHTML(
 
     console.log("[Export] Using dynamic skeleton template for export...");
 
-    const tocListHtml = processedArticles
+    const tocListHtml = sortedArticles
         .filter(a => a.category !== '封面' && a.category !== '封底')
         .map((a, i) => `<li class="toc-item"><span class="toc-title">${escapeHtml(a.title)}</span><span class="toc-dots"></span><span class="toc-page">${i + 1}</span></li>`)
         .join('');

@@ -8,6 +8,9 @@ description: AI 辅助功能 — 生成文章元数据、卷首语、知识图�
 ## 前置条件
 确保 `.env.local` 中已配置 `DEEPSEEK_API_KEY` 和 `PROXY_SECRET`
 
+## 默认模型
+`deepseek-v4-flash-vision-exp`（实验版；常量集中在 `services/ai/client.ts`，如需回退纯文本版同步改 `REASONER_MODEL`/`CHAT_MODEL` 即可）
+
 ## 可用任务
 
 ### 1. 生成文章元数据 (`generateArticleMeta`)
@@ -21,7 +24,7 @@ description: AI 辅助功能 — 生成文章元数据、卷首语、知识图�
 - 入口: `useAiFeatures.handleGenerateForeword()`
 
 ### 3. 知识图谱 (`extractGlobalKnowledgeGraph`) — [已实现]
-- 提取 40-70 个核心技术节点
+- 提取 35-50 个核心技术节点
 - 建立概念→工艺→技术/装备的关系链路
 - 输出 Canvas 交互式图谱 + 打印用 SVG
 - 有 IndexedDB 缓存（同一内容 hash 不重复调用）
@@ -40,7 +43,8 @@ description: AI 辅助功能 — 生成文章元数据、卷首语、知识图�
 - 包含文献来源、核心解析、应用前景
 
 ### 注意事项
-- AI 响应会包含 `<think>` 推理标签，已内置自动清洗
+- AI 响应会包含 `<think>` 推理标签，已内置自动清洗（含卷首语的 ```html 围栏脱除）
+- 字数要求（标题 12-25 字、卷首语 600-800 字、编译 800-1500 字）配有长度告警，超限仅提示不阻断
 - JSON 解析有 3 层兜底修复（正则→堆栈→自定义）
 - 自动重试 3 次，超时 120s
 - 知识图谱有质量校验（孤立节点检测、连通率评估）

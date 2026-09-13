@@ -2,13 +2,16 @@ import { SHARED_STYLES, MAGAZINE_STYLES, PRINT_STYLES, MISC_STYLES, SEASONAL_STY
 
 export function getPrintableSkeleton(options: {
     contentHtml: string;
+    /** 浏览器标签与另存 PDF 默认文件名来源 */
+    title?: string;
 }) {
+    const docTitle = (options.title || '打印专用版 - 工法情报').replace(/</g, '').slice(0, 120);
     return `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>打印专用版 - 工法情报</title>
+    <title>${docTitle}</title>
     <style>
         ${SHARED_STYLES}
         ${MAGAZINE_STYLES}
@@ -45,18 +48,10 @@ export function getPrintableSkeleton(options: {
         
 
         @media print {
-            /* 1. Page and margin reset — 底部留 12mm 用于 @bottom-center 显示实际页码 */
+            /* 1. Page and margin reset — 底部留 12mm；页脚数字以浏览器原生页眉页脚为准，
+               @bottom-center 仅 Firefox 系生效，Chrome 下靠用户勾选打印对话框选项 */
             @page {
                 size: 210mm 297mm !important;
-                margin: 0 0 12mm 0 !important;
-                @bottom-center {
-                    content: counter(page);
-                    font-size: 9pt;
-                    font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
-                    color: #999;
-                }
-            }
-            @page :first {
                 margin: 0 0 12mm 0 !important;
             }
             html, body, .print-all {
@@ -79,7 +74,8 @@ export function getPrintableSkeleton(options: {
                 overflow: visible !important;
             }
             .print-toolbar ~ .print-page-wrapper:first-of-type,
-            body > .print-page-wrapper:first-child {
+            body > .print-page-wrapper:first-child,
+            .print-page-wrapper.first-page {
                 page-break-before: auto !important;
                 break-before: auto !important;
             }
@@ -176,20 +172,24 @@ export function getPrintableSkeleton(options: {
                 height: auto !important;
             }
 
-            /* 6. PDF full-page image fill */
+            /* 6. PDF full-page image: contain 保纵横比，打印下高度自适应防溢出 */
             .print-page-wrapper.pdf-full-page {
                 padding: 0 !important;
                 margin: 0 !important;
                 width: 100% !important;
-                height: 100vh !important;
-                max-height: 297mm !important;
-                overflow: hidden !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                overflow: visible !important;
+                background: #fff !important;
+                page-break-before: always !important;
+                break-before: page !important;
             }
             .pdf-full-page img {
                 display: block !important;
                 width: 100% !important;
-                height: 100% !important;
-                object-fit: fill !important;
+                height: auto !important;
+                object-fit: contain !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 border: none !important;
@@ -218,6 +218,7 @@ export function getPrintableSkeleton(options: {
         /* Print toolbar */
         .print-toolbar {
             width: 210mm;
+            max-width: 100%;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 20px 30px;
@@ -305,33 +306,47 @@ export function getPrintableSkeleton(options: {
 
     <script>
         window.onload = function() {
-            // Lazy load images
-            var imgs = document.getElementsByTagName('img');
-            for (var i = 0; i < imgs.length; i++) {
-                if (imgs[i].getAttribute('data-src')) {
-                    imgs[i].src = imgs[i].getAttribute('data-src');
-                }
-            }
-            // 估算目录页码：利用屏幕渲染高度推算每个文章占几页
-            // 封面=1页，目录=1页，正文从第3页开始
-            // 打印正文使用 10.5pt/1.8 行高，屏幕使用 18px/2.0，比例约 0.7
-            var MM = 96 / 25.4; // 1mm 对应的 px
+            // 目录页码回填校准：服务端已按 data-target-id 预填（含 PDF 实页），
+            // 此处仅在字体/图片就绪后按 id 重新估算正文页数并校准，不再按下标对应。
+            function calibrate() {
+                try {
+                    var MM = 96 / 25.4; // 1mm 对应的 px
             var pageContentPx = 285 * MM; // 一页正文可用高度 285mm (297mm - 12mm 底边距)
             var fontRatio = 0.7; // 屏幕 → 打印 字体缩放比
             var NORMAL_PAD = 160; // normal-container padding top+bottom (80px each)
 
-            var articleWrappers = document.querySelectorAll('.print-page-wrapper.article-wrapper');
-            var tocItems = document.querySelectorAll('.toc-item');
-            var currentPage = 3; // 封面=1, 目录=2
-            for (var i = 0; i < articleWrappers.length; i++) {
-                if (tocItems[i]) {
-                    tocItems[i].querySelector('.toc-page-number').textContent = currentPage;
-                }
-                var h = articleWrappers[i].offsetHeight;
-                var contentH = Math.max(0, h - NORMAL_PAD) * fontRatio;
-                var pages = Math.max(1, Math.ceil(contentH / pageContentPx));
-                currentPage += pages;
+                    var tocItems = document.querySelectorAll('.toc-item[data-target-id]');
+                    if (!tocItems.length) return;
+                    var coverCount = document.querySelectorAll('.print-page-wrapper.cover-page').length;
+                    var hasToc = !!document.querySelector('.toc-page');
+                    var currentPage = coverCount + (hasToc ? 2 : 1);
+                    for (var i = 0; i < tocItems.length; i++) {
+                        var id = tocItems[i].getAttribute('data-target-id');
+                        var numEl = tocItems[i].querySelector('.toc-page-number');
+                        if (numEl) numEl.textContent = currentPage;
+                        var body = id ? document.querySelector('.print-page-wrapper.article-wrapper[data-article-id="' + id + '"]') : null;
+                        var pdfCount = id ? document.querySelectorAll('.print-page-wrapper.pdf-full-page[data-article-id="' + id + '"]').length : 0;
+                        var bodyPages = 0;
+                        if (body) {
+                            var h = body.offsetHeight;
+                            var contentH = Math.max(0, h - NORMAL_PAD) * fontRatio;
+                            bodyPages = Math.max(1, Math.ceil(contentH / pageContentPx));
+                        }
+                        if (!body && pdfCount === 0) bodyPages = 1;
+                        currentPage += bodyPages + pdfCount;
+                    }
+                } catch (e) { /* 保留服务端预填页码 */ }
             }
+            try {
+                var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready.catch(function(){}) : Promise.resolve();
+                var imgs = Array.prototype.slice.call(document.getElementsByTagName('img'));
+                var decoded = imgs.map(function(im) {
+                    try { return im.decode ? im.decode().catch(function(){}) : Promise.resolve(); }
+                    catch (e) { return Promise.resolve(); }
+                });
+                Promise.all([fontsReady].concat(decoded)).then(function() { setTimeout(calibrate, 50); });
+                setTimeout(calibrate, 3000);
+            } catch (e) { calibrate(); }
         };
     </script>
 </body>

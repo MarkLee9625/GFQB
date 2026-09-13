@@ -77,7 +77,7 @@
 ```
 .
 ├── .claude/skills/              # Claude Code 开发 Skills
-├── CLAUDE.md                    # 项目架构文档
+├── AGENTS.md                    # 项目架构文档（唯一维护入口）
 ├── App.tsx                      # 应用主入口（状态编排）
 ├── index.tsx                    # React 渲染入口
 ├── index.html                   # HTML 入口

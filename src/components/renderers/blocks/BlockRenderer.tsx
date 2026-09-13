@@ -77,6 +77,7 @@ const ImageBlockComponent = React.memo<{ block: ImageBlock; mode: string }>(({ b
       alt={block.alt || ''}
       referrerPolicy="no-referrer"
       decoding="async"
+      loading="lazy"
       className={`sws-block-image ${loaded ? 'loaded' : ''}`}
       style={{ opacity: loaded ? 1 : 0.8, transition: 'opacity 0.2s ease-out' }}
       onLoad={() => setLoaded(true)}
@@ -84,17 +85,89 @@ const ImageBlockComponent = React.memo<{ block: ImageBlock; mode: string }>(({ b
   );
 });
 
-const VideoBlockComponent = React.memo<{ block: VideoBlock }>(({ block }) => (
-  <div className="media-container">
-    <video src={block.src} controls className="sws-block-video" />
-  </div>
-));
+const VideoBlockComponent = React.memo<{ block: VideoBlock; mode: string }>(({ block, mode }) => {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const blobManager = useBlobManager();
+  const { ref, inView } = useInView();
+  // 打印模式不过视口懒加载，直接解码渲染
+  const bypassLazy = mode === 'print';
 
-const AudioBlockComponent = React.memo<{ block: AudioBlock }>(({ block }) => (
-  <div className="media-container">
-    <audio src={block.src} controls className="sws-block-audio" />
-  </div>
-));
+  useEffect(() => {
+    const src = block.src;
+    if (!src) {
+      setBlobUrl(null);
+      return;
+    }
+    if (!bypassLazy && !inView) {
+      setBlobUrl(null);
+      return;
+    }
+    let cancelled = false;
+    // 延后一帧发起，避免滚动过程中同时触发大量解码
+    const timer = setTimeout(() => {
+      blobManager.getBlobUrlAsync(src).then((url) => {
+        if (!cancelled) setBlobUrl(url);
+      });
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [inView, block.src, blobManager, bypassLazy]);
+
+  // data URL 解码完成前不直接当 src 用，避免浏览器在主线程解码整张 base64
+  const isDataUrl = !!block.src && block.src.startsWith('data:');
+  const src = bypassLazy || inView
+    ? (isDataUrl ? (blobUrl ?? undefined) : (blobUrl || block.src))
+    : undefined;
+
+  return (
+    <div ref={ref as React.Ref<HTMLDivElement>} className="media-container">
+      <video src={src} controls preload="metadata" className="sws-block-video" />
+    </div>
+  );
+});
+
+const AudioBlockComponent = React.memo<{ block: AudioBlock; mode: string }>(({ block, mode }) => {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const blobManager = useBlobManager();
+  const { ref, inView } = useInView();
+  // 打印模式不过视口懒加载，直接解码渲染
+  const bypassLazy = mode === 'print';
+
+  useEffect(() => {
+    const src = block.src;
+    if (!src) {
+      setBlobUrl(null);
+      return;
+    }
+    if (!bypassLazy && !inView) {
+      setBlobUrl(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      blobManager.getBlobUrlAsync(src).then((url) => {
+        if (!cancelled) setBlobUrl(url);
+      });
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [inView, block.src, blobManager, bypassLazy]);
+
+  const isDataUrl = !!block.src && block.src.startsWith('data:');
+  const src = bypassLazy || inView
+    ? (isDataUrl ? (blobUrl ?? undefined) : (blobUrl || block.src))
+    : undefined;
+
+  return (
+    <div ref={ref as React.Ref<HTMLDivElement>} className="media-container">
+      <audio src={src} controls className="sws-block-audio" />
+    </div>
+  );
+});
 
 const BlockquoteBlockComponent = React.memo<{ block: BlockquoteBlock }>(({ block }) => (
   <blockquote dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }} />
@@ -157,9 +230,9 @@ export const BlockRenderer = React.memo<BlockRendererProps>(({ block, mode }) =>
     case 'image':
       return <ImageBlockComponent block={block} mode={mode} />;
     case 'video':
-      return <VideoBlockComponent block={block} />;
+      return <VideoBlockComponent block={block} mode={mode} />;
     case 'audio':
-      return <AudioBlockComponent block={block} />;
+      return <AudioBlockComponent block={block} mode={mode} />;
     case 'blockquote':
       return <BlockquoteBlockComponent block={block} />;
     case 'list':

@@ -129,9 +129,14 @@ export class DBService {
 
         request.onsuccess = () => {
           const endTime = performance.now();
-          this.performanceMetrics.saveTime = endTime - startTime;
+          const cost = endTime - startTime;
+          this.performanceMetrics.saveTime = cost;
           this.performanceMetrics.lastOperation = 'save';
           this.performanceMetrics.operationsCount++;
+          // 慢保存打点：>500ms warn便于定位大 base64/长文瓶颈，调用方已有失败 Toast，此处不打扰用户
+          if (cost > 500) {
+            console.warn(`[DB] 保存偏慢 ${cost.toFixed(0)}ms key=${key}`);
+          }
           resolve(true);
         };
 
@@ -246,6 +251,21 @@ export class DBService {
       const request = store.delete(`article-${id}`);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(new Error("删除文章失败"));
+    });
+  }
+
+  // 轻量批量 upsert：仅覆盖传入记录，不做全表游标删除，排序拖拽等高频场景用它
+  async bulkPutArticles(articles: Article[]): Promise<void> {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error("数据库初始化失败");
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(CONSTANTS.DB_STORE, "readwrite");
+      const store = tx.objectStore(CONSTANTS.DB_STORE);
+      for (const article of articles) {
+        store.put(article, `article-${article.id}`);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(new Error("批量保存失败"));
     });
   }
 

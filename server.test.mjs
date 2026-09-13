@@ -89,7 +89,7 @@ test('缺少 x-sws-proxy-secret 头返回 403', async () => {
   const res = await fetch(`${baseUrl}/api/deepseek/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [{ role: 'user', content: 'hi' }] }),
+    body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'user', content: 'hi' }] }),
   });
   assert.equal(res.status, 403);
 });
@@ -98,7 +98,7 @@ test('错误的 x-sws-proxy-secret 头返回 403', async () => {
   const res = await fetch(`${baseUrl}/api/deepseek/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-sws-proxy-secret': 'wrong-secret' },
-    body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [{ role: 'user', content: 'hi' }] }),
+    body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'user', content: 'hi' }] }),
   });
   assert.equal(res.status, 403);
 });
@@ -107,7 +107,7 @@ test('正确 secret 但缺少 messages 返回 400', async () => {
   const res = await fetch(`${baseUrl}/api/deepseek/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-sws-proxy-secret': SECRET },
-    body: JSON.stringify({ model: 'deepseek-v4-flash' }),
+    body: JSON.stringify({ model: 'deepseek-flash' }),
   });
   assert.equal(res.status, 400);
   const body = await res.json();
@@ -124,4 +124,29 @@ test('SPA 兜底路由返回 index.html（/*splat 回归）', async () => {
   assert.equal(res.status, 200);
   const text = await res.text();
   assert.match(text, /<!DOCTYPE html>/i);
+});
+
+test('限流：同一 IP 高频请求触发 429 并携带配额头', async () => {
+  const headers = { 'Content-Type': 'application/json', 'x-sws-proxy-secret': SECRET };
+  const post = () => fetch(`${baseUrl}/api/deepseek/generate`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ model: 'deepseek-flash' }),
+  });
+  // 先确认配额头存在
+  const first = await post();
+  assert.equal(first.headers.get('x-ratelimit-limit'), '60');
+  assert.ok(first.headers.get('x-ratelimit-remaining') !== null);
+  await first.text();
+  // 打满窗口（此前用例已消费少量配额，70 次足以触发）
+  let limited = null;
+  for (let i = 0; i < 70; i++) {
+    const res = await post();
+    if (res.status === 429) { limited = res; break; }
+    await res.text();
+  }
+  assert.ok(limited, '预期触发 429 限流');
+  assert.equal(limited.headers.get('retry-after'), '60');
+  const body = await limited.json();
+  assert.equal(body.error, 'Too Many Requests');
 });

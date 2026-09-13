@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import './src/index.css';
+import './src/reader.css';
 import type { Article } from './src/types';
 import { sortArticlesByPriority } from './src/utils/articleSort';
 import { parseEmbeddedData } from './src/utils/embeddedData';
@@ -14,6 +14,14 @@ interface ReaderConfig {
 
 const SPECIAL_CATEGORIES = new Set(['封面', '封底']);
 
+/** 正则转义：搜索词含特殊字符时不影响 RegExp 构造 */
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** 搜索防抖时长（ms）：避免每次击键都全量扫描所有正文 */
+const SEARCH_DEBOUNCE_MS = 250;
+
 /**
  * 单文件阅读版独立入口
  *
@@ -25,6 +33,7 @@ const ReaderApp: React.FC = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [logo, setLogo] = useState('');
   const [sidebarMeta, setSidebarMeta] = useState('');
   const [alternateDesign, setAlternateDesign] = useState(false);
@@ -70,15 +79,49 @@ const ReaderApp: React.FC = () => {
     };
   }, []);
 
-  // 侧边栏搜索过滤
+  // 静态加载骨架（reader.html #app-boot）在 React 挂载后移除；
+  // createRoot 首次 render 会清空容器，此处兜底防止任何残留
+  useEffect(() => {
+    const boot = document.getElementById('app-boot');
+    if (boot) boot.remove();
+  }, []);
+
+  // 搜索防抖：延迟 SEARCH_DEBOUNCE_MS 后再执行过滤，避免全量正文扫描阻塞输入
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // 小字段小写索引（标题/摘要/标签），正文较大，避免每次输入都 toLowerCase 复制全文
+  const searchMetaIndex = useMemo(() => {
+    return articles.map(a => ({
+      id: a.id,
+      title: (a.title || '').toLowerCase(),
+      abstract: (a.abstract || '').toLowerCase(),
+      tags: (a.tags || []).join(' ').toLowerCase(),
+    }));
+  }, [articles]);
+
+  // article.id → 数组下标 索引（替代渲染时 O(n²) 的 findIndex）
+  const indexById = useMemo(() => {
+    const map = new Map<number, number>();
+    articles.forEach((a, i) => map.set(a.id, i));
+    return map;
+  }, [articles]);
+
+  // 侧边栏搜索过滤：小字段命中直接通过；正文用正则 i 标志匹配，不复制内容
   const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     if (!q) return articles;
-    return articles.filter(a =>
-      (a.title || '').toLowerCase().includes(q) ||
-      (a.content || '').toLowerCase().includes(q)
-    );
-  }, [articles, searchQuery]);
+    const re = new RegExp(escapeRegExp(q), 'i');
+    return articles.filter((a, i) => {
+      const meta = searchMetaIndex[i];
+      if (meta.title.includes(q) || meta.abstract.includes(q) || meta.tags.includes(q)) {
+        return true;
+      }
+      return re.test(a.content || '');
+    });
+  }, [articles, searchMetaIndex, debouncedQuery]);
 
   const goTo = useCallback((index: number) => {
     setCurrentIndex(index);
@@ -189,7 +232,7 @@ const ReaderApp: React.FC = () => {
         </div>
         <ul className="flex-1 overflow-y-auto px-[15px] m-0 list-none">
           {filtered.map(article => {
-            const idx = articles.findIndex(a => a.id === article.id);
+            const idx = indexById.get(article.id) ?? -1;
             const active = idx === currentIndex;
             return (
               <li

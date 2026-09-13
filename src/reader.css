@@ -1,0 +1,45 @@
+/* ============================================================
+   阅读版专属 CSS 入口
+   ============================================================
+   与编辑器（index.css）的区别：Tailwind 工具类不自动扫描全项目，
+   而是显式声明 @source 范围 —— 只扫描阅读版渲染链路上用到的文件，
+   避免把编辑器专用类（编辑器工具栏、模态框、布局等）打进单文件模板。
+
+   共享自定义样式（排版引擎/打印样式/UNIFIED_STYLES）在 base.css。
+   ============================================================ */
+
+@import "tailwindcss" source(none);
+@import "./styles/base.css";
+
+/* 阅读版渲染链路（Tailwind 类扫描范围） */
+@source "../reader.html";
+@source "../reader.tsx";
+@source "../components/renderers";
+@source "../components/Icons.tsx";
+@source "../components/editor/ImageToolbar.tsx";
+@source "../src/components/renderers";
+@source "../src/utils/toast.ts";
+@source "../src/utils/sanitizeHtml.ts";
+@source "../src/utils/htmlTrust.ts";
+@source "../src/utils/blockParser.ts";
+@source "../src/utils/memoize.ts";
+@source "../src/utils/encoding.ts";
+@source "../src/utils/embeddedData.ts";
+@source "../src/utils/articleSort.ts";
+@source "../src/types";
+@source "../src/constants.ts";
+@source "../hooks/useBlobManager.ts";
+@source "../hooks/useInView.ts";
+@source "../hooks/usePanZoom.ts";
+@source "../components/renderers/hooks/useImageEditor.ts";
+@source "../components/renderers/types.ts";
+
+@theme {
+  --color-brand-blue: #005596;
+  --color-brand-dark: #003366;
+  --color-sidebar: #fcfcfc;
+  --color-bg: #f3f4f6;
+
+  --font-family-sans: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-family-serif: "PingFang SC", "Microsoft YaHei", "SimHei", "STHeiti", "Heiti SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}

@@ -1,10 +1,16 @@
 # AGENTS.md
 
-> **维护说明**：本文件（AGENTS.md）为唯一维护入口；`CLAUDE.md` 是指针文件（内容仅 `@AGENTS.md`，Codex/Claude Code 读取时自动导入本文件）。请只维护本文件，勿直接编辑 CLAUDE.md。
+> **维护说明**：本文件（AGENTS.md）为唯一项目文档维护入口。
 
 ## 项目概述
 
 工法情报编辑器：React 19 + TypeScript + Vite + IndexedDB 的本地优先情报编辑工具，BFF 代理接 DeepSeek API。**始终使用简体中文回复。**
+
+## 暂停开发事项（2026-09-05 用户决议）
+
+- **AI 选题评审暂停开发**：`batchEvaluateArticles`（`services/ai/review.ts`）及配套入口（`AiCurationModal` 评审链路）暂时用不到，现有代码保持原样可用，不删除、不增强。
+- 连带搁置：已识别的“评审批量无上限→按 10 篇分批”改造，在评审解冻前不实施。
+- 同日决议：卷首语（`generateForeword`）推理强度保持默认 `max`，不降档。
 
 ## 文件编辑约定（重要）
 
@@ -62,11 +68,11 @@ PROXY_SECRET=sws-gongfa-proxy-xxx # BFF 鉴权密钥
 - App.tsx 是状态中枢（唯一 state 集中地）→ Hooks → Services → IndexedDB
 - 数据落在 IndexedDB（db.ts 单例）
 
-> 完整技术栈、代码规范见下文「附录：实现细节（原 CLAUDE.md 内容）」。
+> 完整技术栈、代码规范见下文「附录：实现细节」。
 
 ---
 
-## 附录：实现细节（原 CLAUDE.md 内容）
+## 附录：实现细节
 
 ## 技术栈
 

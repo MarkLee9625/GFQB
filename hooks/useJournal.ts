@@ -128,7 +128,17 @@ export function useJournal() {
     setArticles(prev => {
       const idx = prev.findIndex(a => a.id === numId);
       if (idx === -1) return prev;
-      const updated = { ...prev[idx], ...updates };
+      // 浅比较 bailout：更新字段与现值全等时直接返回原引用，避免无效重渲染击穿 memo
+      const current = prev[idx];
+      let changed = false;
+      for (const key of Object.keys(updates) as (keyof Article)[]) {
+        if (!Object.is(current[key], updates[key])) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return prev;
+      const updated = { ...current, ...updates };
       debouncedSaveArticle(updated);
       const next = [...prev];
       next[idx] = updated;
@@ -207,8 +217,8 @@ export function useJournal() {
     const ordered = sortArticlesByPriority(withUpdatedOrder);
     setArticles(ordered);
 
-    // 同步到数据库
-    db.clearAndBulkSaveArticles(ordered).catch((e) => {
+    // 同步到数据库：排序无增删，用轻量 upsert，避免 clear+游标删除全表重写大 base64
+    db.bulkPutArticles(ordered).catch((e) => {
       console.error('Reorder save failed', e);
       toast.error('排序保存失败，请重试');
     });

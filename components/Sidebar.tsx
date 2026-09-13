@@ -42,6 +42,23 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [dragOverId, setDragOverId] = React.useState<number | null>(null);
 
+  // 搜索防抖：本地即时响应输入，300ms后才上抛，避免每次击键全量过滤+列表重渲染
+  const [localQuery, setLocalQuery] = React.useState(searchQuery);
+  const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    setLocalQuery(searchQuery);
+  }, [searchQuery]);
+  React.useEffect(() => {
+    if (localQuery === searchQuery) return;
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      onSearchChange(localQuery);
+    }, 300);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [localQuery, searchQuery, onSearchChange]);
+
   const handleDragStart = (e: React.DragEvent<HTMLUListElement>) => {
     const target = (e.target as HTMLElement).closest('li[data-id]');
     if (!target) return;
@@ -50,13 +67,18 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
     e.dataTransfer.effectAllowed = 'move';
   };
 
+  const dragOverRafRef = React.useRef<number | null>(null);
   const handleDragOver = (e: React.DragEvent<HTMLUListElement>) => {
     e.preventDefault();
+    if (dragOverRafRef.current !== null) return;
     const target = (e.target as HTMLElement).closest('li[data-id]');
     if (!target) return;
     const id = Number((target as HTMLElement).dataset.id);
     if (draggedId === id || dragOverId === id) return;
-    setDragOverId(id);
+    dragOverRafRef.current = requestAnimationFrame(() => {
+      dragOverRafRef.current = null;
+      setDragOverId(id);
+    });
   };
 
   const handleDrop = (e: React.DragEvent<HTMLUListElement>) => {
@@ -134,8 +156,8 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
           <input
             className="bg-transparent border-none w-full outline-none text-[13px] text-gray-900"
             placeholder="搜索文章..."
-            value={searchQuery}
-            onChange={e => onSearchChange(e.target.value)}
+            value={localQuery}
+            onChange={e => setLocalQuery(e.target.value)}
           />
         </div>
       </div>
@@ -152,7 +174,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
           <li
             key={article.id}
             data-id={article.id}
-            draggable={!searchQuery && !['封面', '封底'].includes(article.category)}
+            draggable={!localQuery && !searchQuery && !['封面', '封底'].includes(article.category)}
             className={`p-[14px_15px] rounded cursor-pointer transition-all mb-[2px] border-l-2 ${currentId === article.id ? 'bg-blue-50 border-brand-blue' : 'border-transparent hover:bg-gray-100'} ${dragOverId === article.id ? 'border-t-4 border-t-brand-blue' : ''} ${draggedId === article.id ? 'opacity-40' : ''}`}
           >
             <div className={`text-[14px] font-semibold mb-1 leading-[1.4] font-sans ${currentId === article.id ? 'text-brand-blue' : 'text-gray-700'} ${['封面', '封底'].includes(article.category) ? 'text-brand-blue font-bold' : ''}`}>

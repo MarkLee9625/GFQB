@@ -1,6 +1,6 @@
 import { useCallback, useRef, useEffect } from 'react';
 import type { Article } from '../src/types';
-import { generatePrintableHTML, exportToPdf, exportReaderHTML, PdfExportOptions } from '../src/services/export';
+import { generatePrintableHTML, exportReaderHTML } from '../src/services/export';
 import { toast } from '../src/utils/toast';
 
 interface UseExportManagerOptions {
@@ -46,7 +46,7 @@ export function useExportManager({
   }, [cleanupTemporaryBlobUrls]);
 
   const createExportBlob = useCallback((content: string) => {
-    const blob = new Blob([content], { type: 'text/html' });
+    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     addTemporaryBlobUrl(url);
     return url;
@@ -57,22 +57,12 @@ export function useExportManager({
       useAlternateDesign: boolean;
       includeImages: boolean;
       optimizeForPrint: boolean;
-      exportType: 'reader' | 'printable' | 'pdf';
+      exportType: 'reader' | 'printable';
     },
     onProgress?: (percent: number, message?: string) => void
   ) => {
     try {
-      if (options.exportType === 'pdf') {
-        onProgress?.(0, '开始生成 PDF...');
-        const pdfOptions: PdfExportOptions = {
-          useAlternateDesign: options.useAlternateDesign,
-          includeImages: options.includeImages,
-          optimizeForPrint: options.optimizeForPrint,
-          logo
-        };
-        await exportToPdf(articles, pdfOptions);
-        onProgress?.(100, 'PDF 生成完成');
-      } else if (options.exportType === 'reader') {
+      if (options.exportType === 'reader') {
         await exportReaderHTML(articles, options, { logo, sidebarMeta }, onProgress);
       } else {
         onProgress?.(0, '开始生成打印版...');
@@ -82,17 +72,35 @@ export function useExportManager({
           toast.error('弹窗被浏览器拦截，请允许此站点弹出窗口后重试。');
           return;
         }
-        printWindow.document.title = '正在生成打印版...';
-        const pEl = printWindow.document.createElement('p');
-        pEl.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#999;font-size:14px;';
-        pEl.textContent = '正在为您准备打印版，请稍候...';
-        printWindow.document.body.appendChild(pEl);
+        try {
+          printWindow.document.title = '正在生成打印版...';
+          const pEl = printWindow.document.createElement('p');
+          pEl.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#999;font-size:14px;';
+          pEl.textContent = '正在为您准备打印版，请稍候...';
+          printWindow.document.body.appendChild(pEl);
 
-        const htmlContent = await generatePrintableHTML(articles, options, { logo, sidebarMeta });
-        onProgress?.(90, '正在打开预览...');
-        const url = createExportBlob(htmlContent);
-        printWindow.location.href = url;
-        onProgress?.(100, '打印版生成完成');
+          const htmlContent = await generatePrintableHTML(
+            articles,
+            options,
+            { logo, sidebarMeta },
+            (done, total) => {
+              // 正文处理占 0–90%，打开预览占 90–100%
+              const percent = total > 0 ? Math.round((done / total) * 90) : 0;
+              onProgress?.(percent, total > 0 ? `正在处理第 ${done}/${total} 篇...` : '正在处理...');
+            }
+          );
+          if (printWindow.closed) {
+            onProgress?.(90, '预览窗口已关闭');
+            return;
+          }
+          onProgress?.(90, '正在打开预览...');
+          const url = createExportBlob(htmlContent);
+          printWindow.location.href = url;
+          onProgress?.(100, '打印版生成完成');
+        } catch (err) {
+          try { if (!printWindow.closed) printWindow.close(); } catch { /* 忽略关闭异常 */ }
+          throw err;
+        }
       }
     } catch (error) {
       console.error('导出失败:', error);

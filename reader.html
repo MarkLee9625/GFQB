@@ -6,10 +6,43 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>工法情报阅读器</title>
+  <style id="sws-boot-skeleton-css">
+    /* React 挂载前的静态加载骨架（内联样式，不依赖 Tailwind/JS） */
+    #app-boot {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+    }
+    #app-boot .boot-inner { text-align: center; }
+    #app-boot .boot-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e5e7eb;
+      border-top-color: #005596;
+      border-radius: 50%;
+      animation: sws-boot-spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+    #app-boot .boot-text { color: #6b7280; font-size: 14px; }
+    #app-boot .boot-hint { color: #9ca3af; font-size: 12px; margin-top: 6px; }
+    @keyframes sws-boot-spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 
 <body class="bg-bg text-gray-900 overflow-hidden m-0 p-0 h-full">
-  <div id="root" class="h-full w-full"></div>
+  <div id="root" class="h-full w-full">
+    <div id="app-boot">
+      <div class="boot-inner">
+        <div class="boot-spinner"></div>
+        <div class="boot-text">正在加载数据...</div>
+        <div class="boot-hint">文件较大，请稍候</div>
+      </div>
+    </div>
+  </div>
 
   <!--SWS_READER_DATA-->
   <script type="module" src="/reader.tsx"></script>

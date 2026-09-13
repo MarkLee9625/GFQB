@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useState, useDeferredValue } from 'react';
 import type { Article } from '../src/types';
 import { isSpecialCategory } from '../src/constants';
 import { htmlToBlocks } from '../src/utils/blockParser';
@@ -125,20 +125,29 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   const handleSave = useCallback((targetPublishState?: boolean) => {
     if (!title) { toast.warning("请输入标题"); return; }
 
-    let finalContent = contentRef.current?.innerHTML || '';
-
-    // 双存储：保存时把解析结果一并持久化，阅读打开时直接命中 blocks，
-    // 避免每次打开都全量解析正文；封面/封底或空正文不附加。
-    const blocks = finalContent.trim() ? htmlToBlocks(finalContent) : undefined;
-
-    onSave({
+    const finalContent = contentRef.current?.innerHTML || '';
+    const snapshot: Partial<Article> = {
       ...formData,
       title,
       content: finalContent,
-      blocks,
       pdfData: tempPdf?.data,
       isPublished: targetPublishState !== undefined ? targetPublishState : formData.isPublished
-    });
+    };
+
+    // 大文档解析放空闲时段，避免点击保存时长时间阻塞主线程；单次保存语义不变
+    const doSave = () => {
+      try {
+        // 双存储：保存时把解析结果一并持久化，阅读打开时直接命中 blocks，
+        // 避免每次打开都全量解析正文；封面/封底或空正文不附加。
+        const blocks = finalContent.trim() ? htmlToBlocks(finalContent) : undefined;
+        onSave({ ...snapshot, blocks });
+      } catch {
+        onSave(snapshot);
+      }
+    };
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    if (typeof ric === 'function') ric(doSave, { timeout: 500 });
+    else setTimeout(doSave, 0);
   }, [formData, title, tempPdf, onSave]);
 
   const handleImgReplaceWithSettings = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,10 +178,12 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     setFormData(prev => ({ ...prev, [field]: value }));
   }, [setFormData]);
 
+  // 标题输入 deferred：封面/封底预览不阻塞击键，输入保持即时，预览延后一拍
+  const deferredTitle = useDeferredValue(title);
   // 新建文章时 id 可能为 undefined，渲染器里对 id=0 的更新会被忽略（与 undefined 行为一致）
   const articleForRenderer = useMemo(
-    () => ({ ...formData, title, id: formData.id ?? 0 } as Article),
-    [formData, title]
+    () => ({ ...formData, title: deferredTitle, id: formData.id ?? 0 } as Article),
+    [formData, deferredTitle]
   );
 
   // 稳定引用：避免内联对象/箭头函数击穿 EditorRightPanel 的 React.memo

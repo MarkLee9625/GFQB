@@ -232,16 +232,10 @@ async function main() {
             return match;
         });
 
-        // Inline D3.js（知识图谱离线支持；阅读版不需要 PDF.js）
-        if (fs.existsSync(d3Path)) {
-            const d3CodeReader = fs.readFileSync(d3Path, 'utf-8');
-            const d3JsonReader = JSON.stringify(d3CodeReader).replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
-            const d3InlineScriptReader = `<script>window.__SWS_D3_SRC__=${d3JsonReader};</script>`;
-            if (readerHtml.includes('<!--SWS_D3_INJECT-->')) {
-                readerHtml = readerHtml.replace('<!--SWS_D3_INJECT-->', () => d3InlineScriptReader);
-                console.log("   ✅ D3.js inlined into reader template (window.__SWS_D3_SRC__)");
-            }
-        }
+        // 不在此处内联 D3：阅读版模板保留 <!--SWS_D3_INJECT--> 锚点，
+        // 由导出端（reader.ts injectD3IfNeeded）按文章是否含知识图谱按需注入，
+        // 避免每份导出的阅读版都携带 ~250KB 的 D3。
+        // （编辑器 index.html 的 D3 内联见上方第 4 步，保持不变。）
 
         // 保留 <!--SWS_READER_DATA--> 锚点，导出时由 reader.ts 注入数据
         fs.writeFileSync(readerHtmlPath, readerHtml);
@@ -254,6 +248,18 @@ async function main() {
     // 6. Write back index.html（编辑器单文件，不再内嵌阅读版模板）
     fs.writeFileSync(indexHtmlPath, htmlContent);
     console.log(`✅ index.html updated (single-file build, ${htmlContent.length} chars)`);
+
+    // 7. 单文件体积门禁：基线约 5.9MB；超 8MB 告警（排查误内联），超 12MB 直接失败
+    const SINGLE_WARN_BYTES = 8 * 1024 * 1024;
+    const SINGLE_FAIL_BYTES = 12 * 1024 * 1024;
+    const singleSize = fs.statSync(indexHtmlPath).size;
+    console.log(`📏 index.html 单文件体积: ${(singleSize / 1024 / 1024).toFixed(2)}MB`);
+    if (singleSize > SINGLE_FAIL_BYTES) {
+        console.error(`❌ 单文件体积 ${(singleSize / 1024 / 1024).toFixed(2)}MB 超过上限 12MB，检查是否误内联重复资源`);
+        process.exit(1);
+    } else if (singleSize > SINGLE_WARN_BYTES) {
+        console.warn(`⚠️ 单文件体积 ${(singleSize / 1024 / 1024).toFixed(2)}MB 超过 8MB 预警线，请确认新增资源是否必要`);
+    }
 
     console.log("🎉 Post-build processing complete.");
 }

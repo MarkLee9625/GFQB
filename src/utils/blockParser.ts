@@ -23,10 +23,27 @@ import type {
  * 解析结果 LRU 缓存
  *
  * 同一篇文章的内容在本会话内可能被多次打开/重渲染，
- * 按 content 字符串缓存 blocks，避免每次 DOMParser + cleanPastedHtml 全量解析。
+ * 按 content 轻量指纹缓存 blocks，避免每次 DOMParser + cleanPastedHtml 全量解析。
  * 保存文章时 blocks 已持久化，此缓存主要兜底旧文章与导入文章。
+ * 注意：不用完整 html 作键，避免几 MB 正文在 Map 键中常驻导致内存翻倍。
  */
 const htmlToBlocksCache = createLruCache<ContentBlock[]>(30);
+
+function cacheKeyForHtml(html: string): string {
+  const len = html.length;
+  // 首/中/尾采样哈希即可区分不同文档，避免全串扫描与大键驻留
+  let hash = 2166136261;
+  const sample = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      hash ^= s.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+  };
+  sample(html.slice(0, 4096));
+  if (len > 8192) sample(html.slice((len >> 1) - 2048, (len >> 1) + 2048));
+  if (len > 4096) sample(html.slice(-4096));
+  return `${len}:${(hash >>> 0).toString(36)}`;
+}
 
 const INLINE_TAGS = new Set([
   'b', 'i', 'a', 'strong', 'em', 'u', 's', 'code', 'br',
@@ -391,7 +408,8 @@ function parseNode(node: Node, results: ContentBlock[], indexCounter: { value: n
 export function htmlToBlocks(html: string): ContentBlock[] {
   if (!html || !html.trim()) return [];
 
-  const cached = htmlToBlocksCache.get(html);
+  const cacheKey = cacheKeyForHtml(html);
+  const cached = htmlToBlocksCache.get(cacheKey);
   if (cached) return cached;
 
   const hasRawHtmlContainers = RAW_HTML_CONTAINER_CLASSES.some(cls => html.includes(cls));
@@ -448,6 +466,6 @@ export function htmlToBlocks(html: string): ContentBlock[] {
     }
     return true;
   });
-  htmlToBlocksCache.set(html, result);
+  htmlToBlocksCache.set(cacheKey, result);
   return result;
 }

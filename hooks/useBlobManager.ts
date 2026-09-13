@@ -6,23 +6,46 @@ import { base64ToBlob } from '../src/utils/fileHelpers';
  * 放在模块顶层以支持跨组件、跨 Hook 实例的缓存复用
  */
 const globalBlobCache = new Map<string, { url: string; timestamp: number }>();
-const MAX_CACHE_SIZE = 100;
+const MAX_CACHE_SIZE = 300;
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+/** 收集当前 DOM 中仍被引用的 blob URL；驱逐/过期时跳过它们，避免已渲染媒体失效 */
+function collectReferencedBlobUrls(): Set<string> {
+  const referenced = new Set<string>();
+  if (typeof document === 'undefined') return referenced;
+  const els = document.querySelectorAll('img, video, audio, iframe, source');
+  for (const el of Array.from(els)) {
+    const src = el.getAttribute('src');
+    if (src && src.startsWith('blob:')) referenced.add(src);
+    const poster = el.getAttribute('poster');
+    if (poster && poster.startsWith('blob:')) referenced.add(poster);
+  }
+  return referenced;
+}
 
 const cleanupExpiredUrls = (): void => {
   const now = Date.now();
-  const expiredTime = 5 * 60 * 1000;
+  const referenced = collectReferencedBlobUrls();
 
   for (const [key, value] of globalBlobCache.entries()) {
-    if (now - value.timestamp > expiredTime) {
+    // 仍在 DOM 中使用的 URL 即使过期也暂不释放（图片可能被回看）
+    const active = referenced.has(value.url);
+    if (active) {
+      value.timestamp = now; // 刷新使用时间，避免下一轮反复扫描
+      continue;
+    }
+    if (now - value.timestamp > CACHE_TTL_MS) {
       URL.revokeObjectURL(value.url);
       globalBlobCache.delete(key);
     }
   }
 
   if (globalBlobCache.size > MAX_CACHE_SIZE) {
-    const entries = [...globalBlobCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const entries = [...globalBlobCache.entries()]
+      .filter(([, v]) => !referenced.has(v.url)) // 引用的不驱逐
+      .sort((a, b) => a[1].timestamp - b[1].timestamp);
     const evictCount = globalBlobCache.size - MAX_CACHE_SIZE;
-    for (let i = 0; i < evictCount; i++) {
+    for (let i = 0; i < evictCount && i < entries.length; i++) {
       URL.revokeObjectURL(entries[i][1].url);
       globalBlobCache.delete(entries[i][0]);
     }

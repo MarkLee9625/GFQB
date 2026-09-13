@@ -55,6 +55,27 @@ app.use(express.urlencoded({ extended: true }));
 // DeepSeek API 配置
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
+// 简易内存限流：单实例 BFF 防刷（AI 上游按量计费），无外部依赖
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 60;
+const rateLimitBuckets = new Map(); // ip -> { count, windowStart }
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  // 惰性清理过期窗口（本工具 IP 量极小，全量扫描成本可忽略）
+  for (const [key, bucket] of rateLimitBuckets) {
+    if (now - bucket.windowStart >= RATE_LIMIT_WINDOW_MS) rateLimitBuckets.delete(key);
+  }
+  if (rateLimitBuckets.size > 1000) rateLimitBuckets.clear();
+  const bucket = rateLimitBuckets.get(ip);
+  if (!bucket || now - bucket.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    rateLimitBuckets.set(ip, { count: 1, windowStart: now });
+    return { limited: false, remaining: RATE_LIMIT_MAX_REQUESTS - 1 };
+  }
+  bucket.count += 1;
+  return { limited: bucket.count > RATE_LIMIT_MAX_REQUESTS, remaining: Math.max(0, RATE_LIMIT_MAX_REQUESTS - bucket.count) };
+}
+
 // 生产环境：托管前端静态资源
 if (process.env.NODE_ENV === 'production') {
   console.log('\x1b[36m%s\x1b[0m', '🚀 生产模式：启用静态资源托管');
@@ -114,7 +135,21 @@ app.post('/api/deepseek/generate', async (req, res) => {
         });
       }
     }
-    
+
+    // 限流（鉴权之后、上游之前）：同一 IP 每分钟最多 60 次，防止误刷/脚本耗尽上游配额
+    const clientIp = req.ip || remoteAddr || 'unknown';
+    const limit = checkRateLimit(clientIp);
+    res.setHeader('X-RateLimit-Limit', String(RATE_LIMIT_MAX_REQUESTS));
+    res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
+    if (limit.limited) {
+      console.warn(`⏳ 限流拒绝 ${clientIp}（1 分钟超 ${RATE_LIMIT_MAX_REQUESTS} 次）`);
+      res.setHeader('Retry-After', '60');
+      return res.status(429).json({
+        error: 'Too Many Requests',
+        message: '请求过于频繁，请稍后重试',
+      });
+    }
+
     const { messages } = req.body;
     
     if (!messages || !Array.isArray(messages)) {
@@ -127,7 +162,7 @@ app.post('/api/deepseek/generate', async (req, res) => {
     const apiUrl = DEEPSEEK_API_URL;
     const requestedModel = (req.body.model || 'unknown').substring(0, 50);
 
-    console.log(`📤 转发请求到 DeepSeek API (模型: ${requestedModel})...`);
+    console.log(`📤 转发请求到 DeepSeek API (模型: ${requestedModel}, 来源: ${clientIp})...`);
 
     const controller = new AbortController();
     const upstreamTimeout = setTimeout(() => controller.abort(), 600_000);

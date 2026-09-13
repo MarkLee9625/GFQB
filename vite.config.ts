@@ -47,6 +47,15 @@ export default defineConfig(({ mode }) => {
           entryFileNames: 'assets/[name]-[hash].js',
           chunkFileNames: 'assets/[name]-[hash].js',
           assetFileNames: 'assets/[name]-[hash].[ext]',
+          // 首屏分包：react/pdf/graph 独立 chunk，编辑器懒 chunk 可并行加载
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor';
+              if (id.includes('pdfjs-dist') || id.includes('@react-pdf') || id.includes('pdf-lib') || id.includes('react-pdf-html') || id.includes('fflate') || id.includes('file-saver')) return 'pdf-vendor';
+              if (id.includes('/d3')) return 'graph-vendor';
+              return 'vendor';
+            }
+          },
         },
       },
       reportCompressedSize: true,

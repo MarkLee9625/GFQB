@@ -1,0 +1,621 @@
+/* ============================================================
+   共享自定义样式（编辑器与阅读版共同使用）
+   从 index.css 剥离：Tailwind 工具类由入口文件按各自扫描范围生成，
+   此文件仅保留手写 CSS（排版引擎、打印样式、UNIFIED_STYLES 等）。
+   ============================================================ */
+
+/* 全局防御性 CSS - 防止布局错乱 */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* 自定义滚动条调整，这些用工具类难以实现 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+/* 编辑器区域样式优化 */
+.editor-area {
+  min-height: 400px;
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 100%;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+.editor-area:empty::before {
+  content: attr(data-placeholder);
+  color: #d1d5db;
+  pointer-events: none;
+  display: block;
+  font-style: italic;
+}
+
+.editor-area img, .editor-area video {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* ============================================================
+   专业中文期刊排版引擎 (Auto-Typography) - 强制生效版
+   任务：接管正文段落，强制首行缩进 2 字符，并保护特殊元素
+   ============================================================ */
+
+/* 1. 强制正文首行缩进 2 字符 (2em)，并使用 !important 击穿框架默认样式 */
+.editor-area p,
+.sws-prose p,
+.article-body p,
+.editor-area > div,
+.sws-prose > div {
+  text-indent: 2em !important;
+  margin-bottom: 1em !important; 
+  text-align: justify !important; 
+}
+
+/* 2. 防御机制：绝对禁止图片和视频所在的段落发生缩进，防止布局歪斜 */
+.editor-area p:has(img),
+.sws-prose p:has(img),
+.article-body p:has(img),
+.editor-area > div:has(img),
+.sws-prose > div:has(img),
+.editor-area p:has(video),
+.sws-prose p:has(video) {
+  text-indent: 0 !important;
+  text-align: center !important; 
+}
+
+/* 3. 防御机制：如果是刻意居中/右对齐的段落（如署名、引用），剥离缩进 */
+.editor-area p[style*="text-align: center"],
+.sws-prose p[style*="text-align: center"],
+.editor-area p[style*="text-align: right"],
+.sws-prose p[style*="text-align: right"],
+.editor-area p[class*="text-center"],
+.sws-prose p[class*="text-center"],
+.editor-area > div[style*="text-align: center"],
+.sws-prose > div[style*="text-align: center"] {
+  text-indent: 0 !important;
+}
+
+/* 4. 防御机制：标题、列表、表格内容不需要首行缩进 */
+.editor-area h1, .editor-area h2, .editor-area h3, .editor-area h4,
+.sws-prose h1, .sws-prose h2, .sws-prose h3, .sws-prose h4,
+.editor-area ul, .editor-area ol, .editor-area li,
+.sws-prose ul, .sws-prose ol, .sws-prose li,
+.editor-area table, .editor-area td, .editor-area th {
+  text-indent: 0 !important;
+}
+
+/* 5. 期刊级标题间距控制 (收紧各级标题上方的过度留白) */
+.editor-area h1, .sws-prose h1, .article-body h1,
+.editor-area h2, .sws-prose h2, .article-body h2,
+.editor-area h3, .sws-prose h3, .article-body h3,
+.editor-area h4, .sws-prose h4, .article-body h4 {
+  margin-top: 1.2em !important; /* 强制缩小顶部间距，原默认值通常很大 */
+  margin-bottom: 0.8em !important; /* 保持与下方正文的紧凑感 */
+  line-height: 1.5 !important;
+}
+
+/* 6. 幽灵空行粉碎机：清理富文本导入时产生的不可见空行 (这是导致间距突然变大的元凶) */
+.sws-prose:not(.editor-area) p:empty,
+.article-body p:empty,
+.sws-prose:not(.editor-area) p:has(> br:only-child),
+.article-body p:has(> br:only-child) {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* 纸张拟物化与翻页间隙 */
+.editor-area .pdf-page-container {
+  width: 100% !important;
+  max-width: 850px !important;
+  background: #ffffff;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  margin: 3rem auto !important; /* 强翻页间隙 */
+  border-radius: 4px;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+/* 强制图片完美贴合纸张边缘，消除缩水 */
+.editor-area .pdf-page-container img {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  object-fit: fill !important;
+}
+
+/* PDF 预览容器防御性样式 */
+.pdf-viewer-container,
+.pdf-viewer-container * {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   重构版打印样式 — 绝对单页隔离
+   任务：隐藏所有交互UI，确保PDF页面绝对分页
+   ============================================================ */
+@media print {
+  /* 1. 禁用所有动画和过渡，防止打印引擎抓取到 opacity: 0 的初始空帧 */
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* 2. 强制剥离透明度隐身，确保所有非隐藏元素绝对可见 */
+  body, html, #root, .sws-prose, .article-body {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* 3. 强制正文颜色为纯黑，防止 Tailwind 颜色变量在打印上下文中断链 */
+  .sws-prose, .article-body {
+    color: #000000 !important;
+  }
+  .sws-prose *, .article-body * {
+    color: #000000 !important;
+    text-shadow: none !important;
+  }
+
+  /* 4. 彻底打通遮挡层，防止任何绝对定位的白板遮盖文字 */
+  .ambient-bg, .tech-grid {
+    display: none !important;
+  }
+
+  /* 页面设置 — A4 物理基准，无外边距 */
+  @page {
+    size: A4 portrait;
+    margin: 0 !important;
+  }
+
+  /* ========================================================
+     第1步：隐藏所有非内容交互UI（Sidebar, Toolbar等）
+     ======================================================== */
+  
+  /* 基础重置 — 解除所有屏幕布局约束 */
+  html, body, #root, #root > div {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* 隐藏所有交互UI组件 */
+  .no-print,
+  /* 浮动菜单按钮（已在MainLayout中添加no-print类） */
+  .sidebar-hidden,
+  .immersive-mode,
+  /* Sidebar 组件 */
+  [class*="sidebar"],
+  /* Toolbar 组件 */
+  [class*="toolbar"],
+  /* 编辑器工具栏 */
+  [class*="editor-toolbar"],
+  /* 模态窗口 */
+  [class*="modal"],
+  /* 所有按钮 */
+  button,
+  /* 所有可点击交互元素 */
+  .clickable-area,
+  /* 浮动操作按钮 */
+  .float-button,
+  /* 设计切换按钮 */
+  .DesignToggle,
+  /* 装饰性背景 */
+  .TechGrid,
+  .AmbientBg,
+  /* 全屏按钮 */
+  .pdf-expand-btn,
+  /* 加载指示器 */
+  [class*="loading"],
+  [class*="spinner"],
+  /* 所有输入控件 */
+  input,
+  select,
+  textarea,
+  /* 导航胶囊 */
+  .NavigationCapsule,
+  /* 布局控制按钮 */
+  [class*="layout-control"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+  }
+  /* 确保 PDF 查看器在打印时可见 */
+  .pdf-viewer-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    width: auto !important;
+  }
+
+  /* ========================================================
+     第2步：解除布局约束，主渲染区全宽
+     ======================================================== */
+  
+  /* MainLayout 容器：移除flex布局，改为块级全宽 */
+  #root > div,
+  #root > div > div {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: none !important;
+  }
+
+  /* 主内容区域：全宽、无内边距、无背景色 */
+  #root > div > div > div {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    position: static !important;
+  }
+
+  /* 滚动区域：解除所有滚动约束 */
+  .scrollbar-thin {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+  }
+
+  /* ========================================================
+     第3步：内容区域样式优化
+     ======================================================== */
+  
+  /* 文章容器 */
+  .sws-prose {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+
+  /* 避免文本截断 */
+  .sws-prose h1,
+  .sws-prose h2,
+  .sws-prose h3,
+  .sws-prose h4,
+  .sws-prose h5,
+  .sws-prose h6,
+  .sws-prose blockquote,
+  img,
+  table {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    widows: 3 !important;
+    orphans: 3 !important;
+  }
+
+  /* 防止标题与后续内容分离 */
+  .sws-prose h1,
+  .sws-prose h2,
+  .sws-prose h3 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* ========================================================
+     第4步：PDF页面绝对单页隔离（最高优先级）
+     ======================================================== */
+  
+  /* PDF页面容器 — 绝对物理A4尺寸 + 安全高度 */
+  .pdf-page-container,
+  .media-container.pdf-page-container {
+    /* A4物理尺寸（210mm × 297mm），使用安全高度防止子像素溢出 */
+    width: 210mm !important;
+    height: 296.5mm !important; /* 安全阈值：防止子像素溢出导致空白页 */
+    
+    /* 布局控制 */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    
+    /* 边界控制 */
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: white !important;
+    box-sizing: border-box !important;
+    
+    /* 绝对分页控制 — 每个容器必须独占一页 */
+    page-break-before: always !important;
+    break-before: page !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    
+    /* 内容溢出控制 */
+    overflow: hidden !important;
+    
+    /* 防止缩放 */
+    transform: none !important;
+    max-width: none !important;
+    max-height: none !important;
+  }
+
+  /* PDF页面中的图片 — 贴合容器 */
+  .pdf-page-image {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* ========================================================
+     第5步：通用图片和媒体处理
+     ======================================================== */
+  
+  /* 所有图片响应式约束 */
+  img,
+  canvas,
+  svg {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    display: block !important;
+  }
+
+  /* 封面封底图片特殊处理 */
+  .magazine-cover img,
+  .magazine-back-cover img {
+    width: 100% !important;
+    max-width: 85% !important;
+    max-height: 85% !important;
+    margin: 0 auto !important;
+  }
+
+  /* ========================================================
+     第6步：表格和复杂元素处理
+     ======================================================== */
+  
+  /* 表格分页优化 */
+  table {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* 防止表格跨页断裂 */
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* ========================================================
+     第7步：装饰性元素彻底隐藏
+     ======================================================== */
+  
+  /* 所有背景渐变、阴影、装饰性边框 */
+  [class*="gradient"],
+  [class*="shadow"],
+  [class*="blur"],
+  [class*="backdrop"] {
+    background: white !important;
+    box-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    opacity: 1 !important;
+  }
+
+  /* 透明和半透明元素 */
+  [class*="opacity-"],
+  [class*="transparent"] {
+    opacity: 1 !important;
+    background: white !important;
+  }
+}
+
+/* ============================================================
+   UNIFIED_STYLES - 全局共享排版引擎
+   从 types.ts CONSTANTS.UNIFIED_STYLES 迁移，避免组件内重复注入
+   ============================================================ */
+.sws-prose {
+  font-family: "PingFang SC", "Microsoft YaHei", "SimHei", "STHeiti", "Heiti SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 18px;
+  line-height: 2.0;
+  color: #1f2937;
+  text-align: justify;
+}
+.sws-prose p, .sws-prose div:not(.pdf-summary-card), .sws-prose span, .sws-prose li {
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+    color: inherit;
+    background-color: transparent !important;
+}
+.sws-prose h2 {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    font-size: 24px !important;
+    font-weight: bold !important;
+    color: #111 !important;
+    margin-top: 50px; margin-bottom: 25px; padding-left: 15px;
+    border-left: 4px solid #005596; line-height: 1.4 !important; text-indent: 0 !important;
+}
+.sws-prose img, .sws-prose video {
+    display: block; margin: 24px auto !important; max-width: 100%; height: auto;
+    border-radius: 4px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-indent: 0 !important;
+}
+/* 图片懒加载占位：解码/加载完成前保留最小高度与浅灰底，减少滚动布局跳动 */
+.sws-prose img.sws-block-image:not(.loaded) {
+    min-height: 180px;
+    background: #f3f4f6;
+    box-shadow: none;
+}
+.editor-area img:hover {
+    outline: 1px dashed #93c5fd;
+    outline-offset: 3px;
+    cursor: pointer;
+}
+.editor-area img.img-selected {
+    outline: 2px solid #005596;
+    outline-offset: 3px;
+}
+.sws-prose .image-caption {
+    text-align: center !important;
+    font-size: 14px !important;
+    color: #6b7280 !important;
+    font-style: italic !important;
+    text-indent: 0 !important;
+    margin: 4px 0 16px 0 !important;
+    line-height: 1.6 !important;
+}
+.media-container {
+    display: block;
+    margin: 24px 0 !important;
+    text-align: center;
+}
+.sws-prose blockquote {
+    border-left: 3px solid #005596; margin: 30px 0; padding: 5px 25px;
+    color: #4b5563 !important; font-style: italic; background: #f9fafb !important; text-indent: 0 !important;
+}
+.sws-prose ul { list-style-type: disc; padding-left: 2em; margin-bottom: 25px; }
+.sws-prose ol { list-style-type: decimal; padding-left: 2em; margin-bottom: 25px; }
+.sws-prose .pdf-summary-card {
+    font-family: "PingFang SC", "Microsoft YaHei", "SimHei", "STHeiti", "Heiti SC", "Helvetica Neue", Arial, sans-serif !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    font-size: 15px !important;
+    line-height: 1.7 !important;
+    text-indent: 0 !important;
+    background-color: #F3F4F6 !important;
+    color: #111827 !important;
+    padding: 18px 24px !important;
+    border-radius: 6px;
+    border-left: 5px solid #005596 !important;
+    display: block;
+    margin: 30px 0 !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+.sws-prose .pdf-summary-card *,
+.sws-prose .pdf-summary-card p,
+.sws-prose .pdf-summary-card div,
+.sws-prose .pdf-summary-card span {
+    font-family: inherit !important;
+    font-weight: 900 !important;
+    color: inherit !important;
+    background-color: transparent !important;
+}
+.sws-prose .pdf-summary-card b,
+.sws-prose .pdf-summary-card strong {
+    display: none !important;
+}
+.pdf-page-image {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    display: block !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+}
+.pdf-page-container {
+    width: 210mm !important;
+    height: 297mm !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: none !important;
+    background: white !important;
+    box-sizing: border-box !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+}
+
+.media-container,
+.pdf-summary-card,
+.pdf-page-container {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 500px;
+}
+
+.cover-img-selected img,
+.cover-img-selected > .loaded {
+    outline: 3px solid #005596 !important;
+    outline-offset: 4px !important;
+}

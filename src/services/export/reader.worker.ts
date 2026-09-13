@@ -2,19 +2,21 @@
  * 阅读器导出 Web Worker
  *
  * 职责：
- * 1. 接收主线程传来的 articles 数组（已通过 optimizeStructuredClone 优化）
- * 2. 在 Worker 线程执行 JSON.stringify 序列化
- * 3. 在 Worker 线程执行 compressData 压缩
- * 4. 返回压缩后的 Base64 字符串
+ * 1. 接收主线程传来的文章 JSON Blob（Blob 结构化克隆只按引用共享底层数据，无字节复制）
+ * 2. 在 Worker 线程读取 JSON 文本并压缩
+ * 3. 返回压缩后的 Base64 字符串
  *
- * 注意：Worker 内不能访问 DOM 和 window 对象
+ * 注意：Worker 内不能访问 DOM 和 window 对象。
+ * 主线程不再 postMessage 整个对象图（避免同步深拷贝几十 MB 的 content/pdfData/base64 图），
+ * 改为 JSON.stringify 一次 → Blob → postMessage(Blob)，克隆开销为 O(1)。
  */
 
 import { compressData, uint8ArrayToBase64 } from './compression';
 
 interface WorkerRequest {
   type: 'START_EXPORT';
-  articles: any[];
+  /** 文章 JSON 文本（主线程已 stringify，保留 blocks/pdfData 等全部字段） */
+  articlesBlob: Blob;
   options: {
     useAlternateDesign?: boolean;
     includeImages?: boolean;
@@ -37,16 +39,16 @@ interface WorkerRequest {
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
-  const { type, articles, options, metadata, companyInfo } = event.data;
+  const { type, articlesBlob, options, metadata, companyInfo } = event.data;
 
   if (type !== 'START_EXPORT') return;
 
   try {
-    self.postMessage({ type: 'EXPORT_PROGRESS', percent: 10, message: '开始序列化...' });
+    self.postMessage({ type: 'EXPORT_PROGRESS', percent: 10, message: '读取文章数据...' });
 
-    const rawArticlesJson = JSON.stringify(articles);
+    const rawArticlesJson = await articlesBlob.text();
 
-    self.postMessage({ type: 'EXPORT_PROGRESS', percent: 50, message: '序列化完成，开始压缩...' });
+    self.postMessage({ type: 'EXPORT_PROGRESS', percent: 50, message: '数据读取完成，开始压缩...' });
 
     const articlesResult = await compressData(rawArticlesJson, 'gzip');
     const articlesB64 = uint8ArrayToBase64(articlesResult.data);

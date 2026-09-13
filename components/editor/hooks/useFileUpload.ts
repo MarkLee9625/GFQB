@@ -114,7 +114,7 @@ export function useFileUpload({
           const { category } = formDataFieldsRef.current;
           if (category === '封面' || category === '封底') {
             const base64 = await fileToDataURL(file);
-            // 封面/封底固定 2400px + quality 0.92（与 CLAUDE.md 约定及 App.tsx 一致），不用用户滑杆值
+            // 封面/封底固定 2400px + quality 0.92（与 AGENTS.md 约定及 App.tsx 一致），不用用户滑杆值
             const src = await compressImage(base64, 2400, 0.92, 'webp');
 
             const dimensions = await getImageDimensions(src);

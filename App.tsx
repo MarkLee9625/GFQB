@@ -141,25 +141,31 @@ const AppContent: React.FC = () => {
 
   const { isEditMode, isSidebarHidden, isImmersive, isFullscreen, isEditorOpen, isCatManagerOpen, useAlternateDesign, isAiCurationModalOpen, isExportOptionsModalOpen, showShortcutsHelp } = uiState;
 
-  const makeSetter = (key: keyof UIState) => useCallback((v: boolean | ((p: boolean) => boolean)) => {
-    if (typeof v === 'function') dispatchUI({ key, updater: v as (prev: boolean) => boolean });
-    else dispatchUI({ key, value: v });
+  // UI setter 稳定化：useMemo 一次生成稳定引用，避免渲染函数内调 Hook 击穿 memo
+  const uiSetters = useMemo(() => {
+    const make = (key: keyof UIState) => (v: boolean | ((p: boolean) => boolean)) => {
+      if (typeof v === 'function') dispatchUI({ key, updater: v as (prev: boolean) => boolean });
+      else dispatchUI({ key, value: v });
+    };
+    return {
+      setIsEditMode: make('isEditMode'),
+      setIsSidebarHidden: make('isSidebarHidden'),
+      setIsImmersive: make('isImmersive'),
+      setIsFullscreen: make('isFullscreen'),
+      setIsEditorOpen: make('isEditorOpen'),
+      setIsCatManagerOpen: make('isCatManagerOpen'),
+      setUseAlternateDesign: make('useAlternateDesign'),
+      setIsAiCurationModalOpen: make('isAiCurationModalOpen'),
+      setIsExportOptionsModalOpen: make('isExportOptionsModalOpen'),
+      setShowShortcutsHelp: make('showShortcutsHelp'),
+    };
   }, []);
 
-  const setIsEditMode = makeSetter('isEditMode');
-  const setIsSidebarHidden = makeSetter('isSidebarHidden');
-  const setIsImmersive = makeSetter('isImmersive');
-  const setIsFullscreen = makeSetter('isFullscreen');
-  const setIsEditorOpen = makeSetter('isEditorOpen');
-  const setIsCatManagerOpen = makeSetter('isCatManagerOpen');
-  const setUseAlternateDesign = makeSetter('useAlternateDesign');
-  const setIsAiCurationModalOpen = makeSetter('isAiCurationModalOpen');
-  const setIsExportOptionsModalOpen = makeSetter('isExportOptionsModalOpen');
-  const setShowShortcutsHelp = makeSetter('showShortcutsHelp');
+  const { setIsEditMode, setIsSidebarHidden, setIsImmersive, setIsFullscreen, setIsEditorOpen, setIsCatManagerOpen, setUseAlternateDesign, setIsAiCurationModalOpen, setIsExportOptionsModalOpen, setShowShortcutsHelp } = uiSetters;
 
   const openExportOptionsModal = useCallback(() => {
     setIsExportOptionsModalOpen(true);
-  }, []);
+  }, [setIsExportOptionsModalOpen]);
 
   const importInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -355,6 +361,26 @@ const AppContent: React.FC = () => {
 
   useMemoryMonitor(150);
 
+  // 首屏空闲预加载编辑器分块：loading 结束后在 idle 时 warm lazy chunk，打开编辑器无等待
+  useEffect(() => {
+    if (loading) return;
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const preload = () => {
+      import('./components/Editor').catch(() => {});
+      import('./components/CategoryManagerModal').catch(() => {});
+      import('./components/ExportOptionsModal').catch(() => {});
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(preload, { timeout: 2000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const timer = setTimeout(preload, 1000);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
   const handleNextArticle = useCallback(() => {
     handleNavigateRef.current?.('next');
   }, []);
@@ -381,7 +407,7 @@ const AppContent: React.FC = () => {
       useAlternateDesign: boolean;
       includeImages: boolean;
       optimizeForPrint: boolean;
-      exportType: 'reader' | 'printable' | 'pdf';
+      exportType: 'reader' | 'printable';
     },
     onProgress?: (percent: number, message?: string) => void
   ) => {

@@ -113,7 +113,7 @@ export function useImageEditor({
     if (!file) return;
     try {
       const base64 = await fileToDataURL(file);
-      // 封面/封底固定 2400px + quality 0.92 + WebP（与 CLAUDE.md 约定及 App.tsx 上传路径一致），
+      // 封面/封底固定 2400px + quality 0.92 + WebP（与 AGENTS.md 约定及 App.tsx 上传路径一致），
       // 避免十几 MB 原图直接写入 IndexedDB
       const src = await compressImage(base64, 2400, 0.92, 'webp');
       onUpdate?.(article.id, { [imageField]: src });
