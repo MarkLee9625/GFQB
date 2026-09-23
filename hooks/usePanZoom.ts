@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { isSpecialCategory } from '../src/constants';
 
 export interface UsePanZoomOptions {
   // 初始状态
@@ -132,7 +133,7 @@ export function usePanZoom(options: UsePanZoomOptions): UsePanZoomReturn {
 
   // 拖拽事件处理
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!isEditable || (category !== '封面' && category !== '封底')) return;
+    if (!isEditable || !isSpecialCategory(category)) return;
     if ((e.target as HTMLElement).closest('button, input, .clickable-area')) return;
 
     hasUserInteractedRef.current = true;
@@ -229,7 +230,7 @@ export function usePanZoom(options: UsePanZoomOptions): UsePanZoomReturn {
     if (!isEditable || mode !== 'edit' || !element) return;
 
     const handleWheel = (e: WheelEvent) => {
-      if (category !== '封面' && category !== '封底') return;
+      if (!isSpecialCategory(category)) return;
       
       e.preventDefault();
       e.stopPropagation();

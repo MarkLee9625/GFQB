@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from './Icons';
 import type { Article } from '../src/types';
+import { isSpecialCategory } from '../src/constants';
 
 interface SidebarProps {
   articles: Article[];
@@ -174,10 +175,10 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({
           <li
             key={article.id}
             data-id={article.id}
-            draggable={!localQuery && !searchQuery && !['封面', '封底'].includes(article.category)}
+            draggable={!localQuery && !searchQuery && !isSpecialCategory(article.category)}
             className={`p-[14px_15px] rounded cursor-pointer transition-all mb-[2px] border-l-2 ${currentId === article.id ? 'bg-blue-50 border-brand-blue' : 'border-transparent hover:bg-gray-100'} ${dragOverId === article.id ? 'border-t-4 border-t-brand-blue' : ''} ${draggedId === article.id ? 'opacity-40' : ''}`}
           >
-            <div className={`text-[14px] font-semibold mb-1 leading-[1.4] font-sans ${currentId === article.id ? 'text-brand-blue' : 'text-gray-700'} ${['封面', '封底'].includes(article.category) ? 'text-brand-blue font-bold' : ''}`}>
+            <div className={`text-[14px] font-semibold mb-1 leading-[1.4] font-sans ${currentId === article.id ? 'text-brand-blue' : 'text-gray-700'} ${isSpecialCategory(article.category) ? 'text-brand-blue font-bold' : ''}`}>
               {article.pdfData && <span className="bg-red-100 text-red-500 text-[9px] px-1 rounded font-bold mr-1">PDF</span>}
               {article.title}
             </div>

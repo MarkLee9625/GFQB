@@ -737,7 +737,7 @@ console.log("Icons rendered.");
   const secureFlow = [
     { label: "浏览器前端", sub: "不持有 API Key", color: C.primary, icon: icons.globe },
     { label: "x-sws-proxy-secret", sub: "请求头鉴权", color: C.accent, icon: icons.lock },
-    { label: "Express BFF :3001", sub: "server.js 代理层", color: C.cyan, icon: icons.server },
+    { label: "Express BFF :4513", sub: "server.js 代理层", color: C.cyan, icon: icons.server },
     { label: "DeepSeek API", sub: "AI 大模型服务", color: C.purple, icon: icons.brain },
   ];
 
@@ -789,9 +789,9 @@ console.log("Icons rendered.");
     "API Key 仅存于服务端\n环境变量 .env.local",
     "请求头鉴权防止\n未授权访问",
     "生产模式同时托管\ndist/ 静态资源",
-    "300s 上游超时\nSIGTERM 优雅关闭",
+    "600s 上游超时\nSIGTERM 优雅关闭",
     "请求体限制 5MB\n防止资源滥用",
-    "开发环境仅允许\nlocalhost:3000 跨域",
+    "生产同源仅放行\nloopback 请求",
   ];
 
   secPoints.forEach((p, i) => {

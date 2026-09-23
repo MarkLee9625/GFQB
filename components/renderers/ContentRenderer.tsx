@@ -7,6 +7,7 @@ import type { ArticleRendererBaseProps } from './types';
 import { htmlToBlocks } from '../../src/utils/blockParser';
 import { BlockRenderer } from '../../src/components/renderers/blocks/BlockRenderer';
 import { toast } from '../../src/utils/toast';
+import { isSpecialCategory } from '../../src/constants';
 interface ContentRendererProps extends ArticleRendererBaseProps {
   mode: 'edit' | 'read' | 'print';
   logo?: string;
@@ -145,7 +146,7 @@ export const ContentRenderer = React.memo<ContentRendererProps>(({
           {article.title}
         </h1>
         <div className="text-gray-400 text-[13px] flex flex-wrap gap-y-3 gap-x-5 font-medium font-sans uppercase tracking-[1px] items-center">
-          {article.category !== '封面' && article.category !== '封底' && article.tags && article.tags.length > 0 ? (
+          {!isSpecialCategory(article.category) && article.tags && article.tags.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               <Icon name="search" className="w-3 h-3 mt-1" />
               {article.tags.map((tag, i) => (

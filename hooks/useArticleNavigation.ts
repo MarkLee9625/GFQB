@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from 'react';
 import type { Article } from '../src/types';
 import { filterArticlesByQuery } from '../src/utils/articleFilter';
+import { isSpecialCategory } from '../src/constants';
 
 interface UseArticleNavigationOptions {
   articles: Article[];
@@ -31,7 +32,7 @@ export function useArticleNavigation({
     const numId = Number(id);
     setCurrentId(numId);
     const art = articlesRef.current.find(a => a.id === numId);
-    const isSpecial = art?.category === '封面' || art?.category === '封底';
+    const isSpecial = isSpecialCategory(art?.category);
 
     if (isSpecial) {
       setIsImmersive(true);

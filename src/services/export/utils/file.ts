@@ -54,7 +54,3 @@ export function base64ToFile(base64: string, fileName: string, fallbackMime = 'a
     const u8arr = base64ToUint8Array(parts.base64);
     return new File([u8arr as BlobPart], fileName, { type: mime });
 }
-
-export function encodeContent(content: string): string {
-    return btoa(unescape(encodeURIComponent(content)));
-}

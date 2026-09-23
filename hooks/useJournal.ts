@@ -4,6 +4,8 @@ import { db } from '../services/db';
 import { sortArticlesByPriority } from '../src/utils/articleSort';
 import { parseEmbeddedData } from '../src/utils/embeddedData';
 import { toast } from '../src/utils/toast';
+import { generateArticleId, createDefaultSpecialArticles } from '../src/utils/articleDefaults';
+import { isSpecialCategory } from '../src/constants';
 
 export function useJournal() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -18,7 +20,7 @@ export function useJournal() {
     return list.map((a, index) => {
       const numId = Number(a.id);
       // 修复：如果 ID 是 NaN 或 0，生成一个新的临时 ID，防止“僵尸”文章无法操作
-      const safeId = (!isNaN(numId) && numId !== 0) ? numId : Date.now() + index;
+      const safeId = (!isNaN(numId) && numId !== 0) ? numId : generateArticleId(index + 1);
 
       return {
         ...a,
@@ -71,11 +73,7 @@ export function useJournal() {
         const data = sanitizeArticles(rawData);
 
         if (data.length === 0) {
-          const now = Date.now();
-          const fresh: Article[] = [
-            { id: now, title: "封面", category: "封面", content: "", issueText: "NO.01", dateText: "JAN " + new Date().getFullYear(), order: 0 },
-            { id: now + 1, title: "封底", category: "封底", content: "", order: 99999 }
-          ];
+          const fresh = createDefaultSpecialArticles();
           await db.clearAndBulkSaveArticles(fresh);
           if (aborted()) return;
           setArticles(fresh);
@@ -145,8 +143,7 @@ export function useJournal() {
 
       if (updates.category !== undefined) {
         const oldCategory = prev[idx].category;
-        if (updates.category === '封面' || updates.category === '封底' ||
-            oldCategory === '封面' || oldCategory === '封底') {
+        if (isSpecialCategory(updates.category) || isSpecialCategory(oldCategory)) {
           return sortArticlesByPriority(next);
         }
       }
@@ -188,7 +185,7 @@ export function useJournal() {
   const deleteArticle = useCallback(async (id: number) => {
     const art = articlesRef.current.find(a => String(a.id) === String(id));
 
-    if (art?.category === '封面' || art?.category === '封底') { toast.warning('封面和封底不可删除'); return; }
+    if (isSpecialCategory(art?.category)) { toast.warning('封面和封底不可删除'); return; }
     if (!window.confirm('确定要删除这篇文章吗？')) return;
 
     try {

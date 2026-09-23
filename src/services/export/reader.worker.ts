@@ -20,7 +20,6 @@ interface WorkerRequest {
   options: {
     useAlternateDesign?: boolean;
     includeImages?: boolean;
-    optimizeForPrint?: boolean;
   };
   metadata: {
     logo?: string;

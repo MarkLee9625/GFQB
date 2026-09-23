@@ -4,6 +4,7 @@ import { CONSTANTS, isSpecialCategory } from './src/constants';
 import { db } from './services/db';
 import { compressImage, fileToDataURL } from './src/utils/fileHelpers';
 import { toast } from './src/utils/toast';
+import { createDefaultSpecialArticles } from './src/utils/articleDefaults';
 import { PaperView } from './components/PaperView';
 import { ErrorBoundary, DBErrorBoundary } from './components/ErrorBoundary';
 import Sidebar from './components/Sidebar';
@@ -240,12 +241,8 @@ const AppContent: React.FC = () => {
 
   const handleReset = useCallback(() => {
     if (!window.confirm("⚠️ 警告：这将清空所有数据并开始新一期！确定吗？")) return;
-    // ID 生成遵循项目约定：Date.now() * 1000 + 偏移（全量替换无碰撞风险）
-    const now = Date.now() * 1000;
-    const fresh: Article[] = [
-      { id: now + 1, title: "封面", category: "封面", content: "", issueText: "NO.01", dateText: "JAN " + new Date().getFullYear() },
-      { id: now + 2, title: "封底", category: "封底", content: "" }
-    ];
+    // ID 与默认数据同空库初始化共用一套约定（见 articleDefaults.ts）
+    const fresh = createDefaultSpecialArticles();
     setArticlesAction(fresh);
     setCurrentId(fresh[0].id);
   }, [setArticlesAction, setCurrentId]);
@@ -406,7 +403,6 @@ const AppContent: React.FC = () => {
     options: {
       useAlternateDesign: boolean;
       includeImages: boolean;
-      optimizeForPrint: boolean;
       exportType: 'reader' | 'printable';
     },
     onProgress?: (percent: number, message?: string) => void

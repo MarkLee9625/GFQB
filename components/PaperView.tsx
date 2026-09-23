@@ -23,12 +23,14 @@ const PaperViewComponent: React.FC<PaperViewProps> = ({
   useAlternateDesign,
   setUseAlternateDesign
 }) => {
-  if (!article) return null;
-
+  // Hooks 必须无条件调用：early return 若在 useCallback 之前，
+  // article 在 undefined/defined 间切换会导致 hook 数量变化而崩溃
   const handleSetAlternateDesign = useCallback(
     (value: boolean) => setUseAlternateDesign(value),
     [setUseAlternateDesign]
   );
+
+  if (!article) return null;
 
   return (
     <div className="relative">

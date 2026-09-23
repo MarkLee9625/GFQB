@@ -22,7 +22,6 @@ interface CoverImageEditorProps {
   handleImgAlign: (align: 'left' | 'center' | 'right') => void;
   handleImgDelete: () => void;
   handleImgReplace: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleImgCaption: () => void;
 }
 
 export const CoverImageEditor: React.FC<CoverImageEditorProps> = React.memo(({
@@ -46,7 +45,6 @@ export const CoverImageEditor: React.FC<CoverImageEditorProps> = React.memo(({
   handleImgAlign,
   handleImgDelete,
   handleImgReplace,
-  handleImgCaption,
 }) => {
   return (
     <>
@@ -84,9 +82,7 @@ export const CoverImageEditor: React.FC<CoverImageEditorProps> = React.memo(({
         <ImageToolbar
           position={toolbarPos}
           onAlign={handleImgAlign}
-          onSize={() => {}}
           onReplace={handleImgReplace}
-          onCaption={handleImgCaption}
           onDelete={handleImgDelete}
           replaceInputRef={replaceInputRef}
         />

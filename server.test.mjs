@@ -114,6 +114,29 @@ test('正确 secret 但缺少 messages 返回 400', async () => {
   assert.match(body.message, /messages/);
 });
 
+test('生产模式 loopback + 合法 Origin 跳过 secret 校验（进入参数校验 → 400）', async () => {
+  // server.js：isProduction && isLoopback && Origin ∈ {localhost,127.0.0.1,[::1]}:PORT → 免 secret。
+  // 本测试经 127.0.0.1 访问（isLoopback ✓），手动带 Origin: baseUrl 命中白名单，
+  // 缺 secret 应到达参数校验（400/messages）而不是被 403 拦截。
+  const res = await fetch(`${baseUrl}/api/deepseek/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: baseUrl },
+    body: JSON.stringify({ model: 'deepseek-flash' }),
+  });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(body.message, /messages/);
+});
+
+test('生产模式 loopback 但非法 Origin 仍走 secret 校验（缺 secret → 403）', async () => {
+  const res = await fetch(`${baseUrl}/api/deepseek/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'http://evil.example.com' },
+    body: JSON.stringify({ model: 'deepseek-flash' }),
+  });
+  assert.equal(res.status, 403);
+});
+
 test('SPA 兜底路由返回 index.html（/*splat 回归）', async () => {
   const indexPath = path.join(__dirname, 'dist', 'index.html');
   if (!fs.existsSync(indexPath)) {

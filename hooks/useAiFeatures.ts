@@ -4,6 +4,7 @@ import { generateForeword, extractGlobalKnowledgeGraph, buildSuperContextForGrap
 import { generateGraphHtml } from '../src/utils/graphRenderer';
 import { parseMarkdownToHtml } from '../src/utils/fileHelpers';
 import { toast } from '../src/utils/toast';
+import { isSpecialCategory } from '../src/constants';
 import { getGraphCache, saveGraphCache, contentHash } from '../services/graphCache';
 
 interface UseAiFeaturesOptions {
@@ -25,8 +26,7 @@ export function useAiFeatures({
     if (importProgress) return;
     // 用内容判定有效性（默认标题是'无标题'，比对占位标题字符串不可靠）
     const validArticles = articles.filter(a =>
-      a.category !== '封面' &&
-      a.category !== '封底' &&
+      !isSpecialCategory(a.category) &&
       (a.content || a.pdfData)
     );
 
@@ -62,8 +62,7 @@ export function useAiFeatures({
   const handleGenerateGraph = useCallback(async (skipCache = false) => {
     if (importProgress) return;
     const validArticles = articles.filter(a =>
-      a.category !== '封面' &&
-      a.category !== '封底' &&
+      !isSpecialCategory(a.category) &&
       (a.content || a.pdfData)
     );
 
@@ -149,8 +148,7 @@ export function useAiFeatures({
     if (!confirmed) return;
 
     const validArticles = articles.filter(a =>
-      a.category !== '封面' &&
-      a.category !== '封底' &&
+      !isSpecialCategory(a.category) &&
       (a.content || a.pdfData)
     );
 

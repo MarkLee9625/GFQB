@@ -7,6 +7,7 @@ import { escapeHtml } from '../../../src/utils/stringUtils';
 import { extractAbstractFromPdf } from '../../../src/services/pdf';
 import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
 import { toast } from '../../../src/utils/toast';
+import { isSpecialCategory } from '../../../src/constants';
 
 interface UseFileUploadOptions {
   contentRef: React.RefObject<HTMLDivElement | null>;
@@ -112,7 +113,7 @@ export function useFileUpload({
     try {
         if (type === 'img') {
           const { category } = formDataFieldsRef.current;
-          if (category === '封面' || category === '封底') {
+          if (isSpecialCategory(category)) {
             const base64 = await fileToDataURL(file);
             // 封面/封底固定 2400px + quality 0.92（与 AGENTS.md 约定及 App.tsx 一致），不用用户滑杆值
             const src = await compressImage(base64, 2400, 0.92, 'webp');
@@ -180,8 +181,23 @@ export function useFileUpload({
       }
   }, [imgCompressMaxWidth, imgCompressQuality, imgCompressFormat, contentRef, setFormData, setIsProcessing, setTempPdf]);
 
+  // 封面/封底更换图片：临时 file input → 复用 handleFile 的压缩入库链路
+  // （原 Editor 组件体逻辑下沉，_type 仅保留调用方签名兼容）
+  const handleImageUpload = useCallback((_type: 'cover' | 'back') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      handleFile({ target: e.target as HTMLInputElement } as React.ChangeEvent<HTMLInputElement>, 'img');
+    };
+    input.click();
+  }, [handleFile]);
+
   return {
     handlePaste,
     handleFile,
+    handleImageUpload,
   };
 }

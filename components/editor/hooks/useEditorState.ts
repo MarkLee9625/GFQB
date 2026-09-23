@@ -1,13 +1,17 @@
 import { useState, useEffect, useMemo, useDeferredValue, useCallback, useRef } from 'react';
 import type { Article } from '../../../src/types';
+import { htmlToBlocks } from '../../../src/utils/blockParser';
+import { toast } from '../../../src/utils/toast';
 
 interface UseEditorStateOptions {
   isOpen: boolean;
   article: Partial<Article>;
   categories: string[];
+  contentRef: React.RefObject<HTMLDivElement | null>;
+  onSave: (article: Partial<Article>) => void;
 }
 
-export function useEditorState({ isOpen, article, categories }: UseEditorStateOptions) {
+export function useEditorState({ isOpen, article, categories, contentRef, onSave }: UseEditorStateOptions) {
   const [formData, setFormData] = useState<Partial<Article>>({});
   const [title, setTitle] = useState('');
   const [tempPdf, setTempPdf] = useState<{ name: string; data: string } | null>(null);
@@ -18,6 +22,7 @@ export function useEditorState({ isOpen, article, categories }: UseEditorStateOp
   const [showTitleLoading, setShowTitleLoading] = useState(false);
   const [isScalingText, setIsScalingText] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
 
   const [imgCompressQuality, setImgCompressQuality] = useState(() => {
     const saved = localStorage.getItem('SWS_IMG_COMPRESS_QUALITY');
@@ -84,6 +89,35 @@ export function useEditorState({ isOpen, article, categories }: UseEditorStateOp
     }
   }, [isOpen]);
 
+  // 保存编排：校验 → 快照 → 空闲时段解析 blocks → 双存储落盘（原 Editor 组件体逻辑下沉）
+  const handleSave = useCallback((targetPublishState?: boolean) => {
+    if (!title) { toast.warning("请输入标题"); return; }
+
+    const finalContent = contentRef.current?.innerHTML || '';
+    const snapshot: Partial<Article> = {
+      ...formData,
+      title,
+      content: finalContent,
+      pdfData: tempPdf?.data,
+      isPublished: targetPublishState !== undefined ? targetPublishState : formData.isPublished
+    };
+
+    // 大文档解析放空闲时段，避免点击保存时长时间阻塞主线程；单次保存语义不变
+    const doSave = () => {
+      try {
+        // 双存储：保存时把解析结果一并持久化，阅读打开时直接命中 blocks，
+        // 避免每次打开都全量解析正文；封面/封底或空正文不附加。
+        const blocks = finalContent.trim() ? htmlToBlocks(finalContent) : undefined;
+        onSave({ ...snapshot, blocks });
+      } catch {
+        onSave(snapshot);
+      }
+    };
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+    if (typeof ric === 'function') ric(doSave, { timeout: 500 });
+    else setTimeout(doSave, 0);
+  }, [formData, title, tempPdf, contentRef, onSave]);
+
   return {
     formData, setFormData,
     title, setTitle,
@@ -100,5 +134,7 @@ export function useEditorState({ isOpen, article, categories }: UseEditorStateOp
     imgCompressFormat, setImgCompressFormat,
     contentAreaStyle,
     resetForArticle,
+    rightPanelCollapsed, setRightPanelCollapsed,
+    handleSave,
   };
 }

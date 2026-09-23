@@ -40,7 +40,6 @@ export const BackRenderer = React.memo<BackRendererProps>(({
     handleImgAlign,
     handleImgDelete,
     handleImgReplace,
-    handleImgCaption,
   } = useImageEditor({
     article,
     mode,
@@ -84,7 +83,6 @@ export const BackRenderer = React.memo<BackRendererProps>(({
         handleImgAlign={handleImgAlign}
         handleImgDelete={handleImgDelete}
         handleImgReplace={handleImgReplace}
-        handleImgCaption={handleImgCaption}
       />
 
       {/* Header section */}

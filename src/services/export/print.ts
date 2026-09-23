@@ -1,5 +1,5 @@
 import { Article } from '../../types/models';
-import { CONSTANTS } from '../../constants';
+import { CONSTANTS, isSpecialCategory } from '../../constants';
 import { getPrintableSkeleton } from './print/printableSkeleton';
 import { convertPdfToImages } from '../pdf';
 import { processMediaForPrint, inlineOnlineImages } from './utils/media';
@@ -15,17 +15,9 @@ export const PRINT_ARTICLE_CONCURRENCY = 3;
 /** 整刊 PDF 光栅页数上限，超出后按顺序截断并明示 */
 export const PRINT_MAX_TOTAL_PDF_PAGES = 150;
 
-/**
- * 提取正文纯文本（供阈值判定）
- * @deprecated 请直接使用 `getPlainText`（utils/stringUtils），此处仅为兼容保留。
- */
-export function getPrintablePlainText(html: string): string {
-    return getPlainText(html);
-}
-
-/** 是否有实质性正文内容 */
+/** 是否有实质性正文内容（纯文本长度阈值判定） */
 export function hasPrintableBodyContent(processedHtml: string): boolean {
-    return getPrintablePlainText(processedHtml).length > PRINT_BODY_TEXT_THRESHOLD;
+    return getPlainText(processedHtml).length > PRINT_BODY_TEXT_THRESHOLD;
 }
 
 interface ProcessedContentArticle {
@@ -77,8 +69,8 @@ function renderCover(article: Article, alternateDesign: boolean): string {
     const coverImageHtml = hasCover
         ? `<img src="${escapeAttr(article.coverImage ?? '')}" alt="Cover" style="width:100%;height:100%;object-fit:cover;display:block;" />`
         : '<div class="cover-img-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;background:#f3f4f6;">暂无封面图片</div>';
-    // 背景模糊层在有封面图时完全被不透明的 cover-image-layer 遮住，去掉可省下一份 base64 体积
-    const ambientStyle = hasCover ? '' : '';
+    // 背景模糊层在有封面图时完全被不透明的 cover-image-layer 遮住，
+    // 恒空的 ambientStyle 内联样式已删除（原 `hasCover ? '' : ''` 死三元）
 
     if (isMagazine) {
         return `
@@ -105,7 +97,7 @@ function renderCover(article: Article, alternateDesign: boolean): string {
     <div class="print-page-wrapper cover-page">
         <div class="cover-root">
             <div class="tech-grid"></div>
-            <div class="ambient-bg" style="${ambientStyle}"></div>
+            <div class="ambient-bg"></div>
             <div class="cover-image-layer">${coverImageHtml}</div>
             <div class="cover-overlay" style="background:linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.7) 100%);"></div>
             <div class="cover-header" style="padding:30px 50px;">
@@ -125,7 +117,6 @@ function renderBackCover(article: Article, alternateDesign: boolean, logo: strin
         ? `<img src="${escapeAttr(article.backImage ?? '')}" alt="Back" style="width:100%;height:100%;object-fit:cover;display:block;" />`
         : '<div class="cover-img-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;background:#f3f4f6;">暂无封底图片</div>';
     const company = CONSTANTS.COMPANY_INFO;
-    const ambientStyle = hasBack ? '' : '';
 
     if (isMagazine) {
         return `
@@ -157,7 +148,7 @@ function renderBackCover(article: Article, alternateDesign: boolean, logo: strin
     <div class="print-page-wrapper back-page">
         <div class="normal-back-root">
             <div class="tech-grid"></div>
-            <div class="ambient-bg" style="${ambientStyle}"></div>
+            <div class="ambient-bg"></div>
             <div class="cover-image-layer">${backImageHtml}</div>
             <div class="cover-overlay" style="background:linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.8) 100%);"></div>
             <div class="normal-back-header" style="padding:30px 50px; z-index:3;">
@@ -262,7 +253,7 @@ export async function generatePrintableHTML(
 
     const covers = sortedArticles.filter(a => a.category === '封面');
     const backs = sortedArticles.filter(a => a.category === '封底');
-    const contents = sortedArticles.filter(a => a.category !== '封面' && a.category !== '封底');
+    const contents = sortedArticles.filter(a => !isSpecialCategory(a.category));
 
     // 第一遍：并发处理正文（保持原顺序组装）
     const processed: ProcessedContentArticle[] = new Array(contents.length);
@@ -297,10 +288,8 @@ export async function generatePrintableHTML(
             const startPage = currentPage;
             const bodyPages = p.hasContent || p.article.abstract ? 1 : 0;
             currentPage += bodyPages + p.pdfImages.length;
-            // 纯图片 PDF 无头 wrapper 也至少占其实页数；失败占位占 1 页已含在 bodyPages 中
-            if (!p.hasContent && !p.article.abstract && p.pdfImages.length > 0) {
-                // bodyPages 为 0，上面已只加 pdf 页数，无需调整
-            }
+            // 纯图片 PDF 无头 wrapper 也至少占其实页数；失败占位占 1 页已含在 bodyPages 中，
+            // bodyPages 为 0 时上面已只加 pdf 页数，无需额外调整（原空 if 分支已删）
             return `
             <li class="toc-item" data-target-id="${p.article.id}">
                 <span class="toc-title">${escapeHtml(p.article.title)}</span>

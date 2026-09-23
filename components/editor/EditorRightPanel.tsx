@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Article } from '../../src/types';
 import { Icon } from '../Icons';
+import { isSpecialCategory } from '../../src/constants';
 
 interface ImageCompressSettings {
   quality: number;
@@ -133,7 +134,7 @@ const EditorRightPanel = React.memo(({
 
       <SectionBlock title="基础信息" icon="edit" defaultOpen={true}>
         <div className="space-y-4 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
-          {(category === '封面' || category === '封底') ? (
+          {isSpecialCategory(category) ? (
             <div className="flex flex-col gap-2">
               <label className="text-[10px] font-bold text-gray-500 flex justify-between">
                 特殊页面类型 <button onClick={onManageCats} className="text-brand-blue hover:underline">管理</button>

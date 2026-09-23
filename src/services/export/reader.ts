@@ -1,5 +1,5 @@
 import type { Article } from '../../types';
-import { CONSTANTS } from '../../constants';
+import { CONSTANTS, isSpecialCategory } from '../../constants';
 import { getReaderSkeleton } from './reader/readerSkeleton';
 import { saveAs } from 'file-saver';
 import { sortArticlesByPriority } from '../../utils/articleSort';
@@ -8,7 +8,6 @@ import { escapeHtml } from '../../utils/stringUtils';
 export interface ExportOptions {
     useAlternateDesign?: boolean;
     includeImages?: boolean;
-    optimizeForPrint?: boolean;
 }
 
 export interface ExportMetadata {
@@ -321,7 +320,7 @@ function buildReaderHTML(
     console.log("[Export] Using dynamic skeleton template for export...");
 
     const tocListHtml = sortedArticles
-        .filter(a => a.category !== '封面' && a.category !== '封底')
+        .filter(a => !isSpecialCategory(a.category))
         .map((a, i) => `<li class="toc-item"><span class="toc-title">${escapeHtml(a.title)}</span><span class="toc-dots"></span><span class="toc-page">${i + 1}</span></li>`)
         .join('');
 

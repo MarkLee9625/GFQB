@@ -42,7 +42,6 @@ export const CoverRenderer = React.memo<CoverRendererProps>(({
     handleImgAlign,
     handleImgDelete,
     handleImgReplace,
-    handleImgCaption,
   } = useImageEditor({
     article,
     mode,
@@ -86,7 +85,6 @@ export const CoverRenderer = React.memo<CoverRendererProps>(({
         handleImgAlign={handleImgAlign}
         handleImgDelete={handleImgDelete}
         handleImgReplace={handleImgReplace}
-        handleImgCaption={handleImgCaption}
       />
 
       {/* Header — overlaid on image */}

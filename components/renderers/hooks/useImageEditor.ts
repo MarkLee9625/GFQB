@@ -5,8 +5,6 @@ import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
 import { fileToDataURL, compressImage } from '../../../src/utils/fileHelpers';
 import { toast } from '../../../src/utils/toast';
 
-const noop = () => {};
-
 type ImageType = 'cover' | 'back';
 
 interface UseImageEditorOptions {
@@ -124,8 +122,6 @@ export function useImageEditor({
     }
   }, [article.id, imageField, onUpdate]);
 
-  const handleImgCaption = noop;
-
   useEffect(() => {
     if (imageContainerRef.current && imageUrl) {
       const { clientWidth, clientHeight } = imageContainerRef.current;
@@ -168,6 +164,5 @@ export function useImageEditor({
     handleImgAlign,
     handleImgDelete,
     handleImgReplace,
-    handleImgCaption,
   };
 }

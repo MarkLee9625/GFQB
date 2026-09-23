@@ -5,14 +5,13 @@ import type { Article } from './src/types';
 import { sortArticlesByPriority } from './src/utils/articleSort';
 import { parseEmbeddedData } from './src/utils/embeddedData';
 import { ArticleRenderer } from './components/renderers';
+import { isSpecialCategory } from './src/constants';
 
 interface ReaderConfig {
   logo?: string;
   sidebarMeta?: string;
   alternateDesign?: boolean;
 }
-
-const SPECIAL_CATEGORIES = new Set(['封面', '封底']);
 
 /** 正则转义：搜索词含特殊字符时不影响 RegExp 构造 */
 function escapeRegExp(str: string): string {
@@ -171,15 +170,19 @@ const ReaderApp: React.FC = () => {
 
   const current = articles[currentIndex];
 
-  // 封面/封底自动隐藏侧边栏，其余恢复显示
+  // 封面/封底自动隐藏侧边栏，翻回普通文章时恢复显示。
+  // 用 ref 标记「是否由封面/封底自动隐藏」：仅此时恢复，
+  // 避免覆盖用户在普通文章页手动隐藏的选择（原 else-if 分支恒为 no-op）
+  const autoHiddenRef = useRef(false);
   useEffect(() => {
-    if (current && SPECIAL_CATEGORIES.has(current.category)) {
+    if (current && isSpecialCategory(current.category)) {
       setSidebarHidden(true);
-    } else if (!sidebarHidden) {
+      autoHiddenRef.current = true;
+    } else if (autoHiddenRef.current) {
       setSidebarHidden(false);
+      autoHiddenRef.current = false;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, current]);
+  }, [current]);
 
   if (loading) {
     return (

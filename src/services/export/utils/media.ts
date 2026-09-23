@@ -64,7 +64,7 @@ async function fetchImageAsBase64(url: string, timeoutMs = 8000): Promise<string
  * 将文章 HTML 内容中所有在线图片（http/https）转为 Base64 内联
  * - 跳过已经是 data: 的图片（已内联）
  * - 跳过 blob: URL
- * - 单图最多等待 5 秒，失败则静默保留原 URL（不影响整体导出）
+ * - 单图最多等待 8 秒，失败则静默保留原 URL（不影响整体导出）
  */
 export async function inlineOnlineImages(
     content: string,

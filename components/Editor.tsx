@@ -1,7 +1,6 @@
-import React, { useRef, useCallback, useEffect, useMemo, useState, useDeferredValue } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useDeferredValue } from 'react';
 import type { Article } from '../src/types';
 import { isSpecialCategory } from '../src/constants';
-import { htmlToBlocks } from '../src/utils/blockParser';
 import { Icon } from './Icons';
 import LoadingOverlay from './LoadingOverlay';
 import { ArticleRenderer } from './renderers';
@@ -15,7 +14,6 @@ import { useEditorCommands } from './editor/hooks/useEditorCommands';
 import { useImageToolbar } from './editor/hooks/useImageToolbar';
 import { useFileUpload } from './editor/hooks/useFileUpload';
 import { useEditorKeyboard } from './editor/hooks/useEditorKeyboard';
-import { toast } from '../src/utils/toast';
 
 interface EditorProps {
   isOpen: boolean;
@@ -31,7 +29,6 @@ const noop = () => {};
 export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onClose, onSave, onManageCats }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const imgReplaceInputRef = useRef<HTMLInputElement | null>(null);
-  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
 
   const {
     formData, setFormData,
@@ -49,7 +46,9 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     imgCompressFormat, setImgCompressFormat,
     contentAreaStyle,
     resetForArticle,
-  } = useEditorState({ isOpen, article, categories });
+    rightPanelCollapsed, setRightPanelCollapsed,
+    handleSave,
+  } = useEditorState({ isOpen, article, categories, contentRef, onSave });
 
   const { saveSelection, saveSelectionSync, restoreSelection } = useSelectionManager();
 
@@ -88,6 +87,7 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   const {
     handlePaste,
     handleFile,
+    handleImageUpload,
   } = useFileUpload({
     contentRef,
     formData,
@@ -122,34 +122,6 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
     resetForArticle(contentRef);
   }, [isOpen, article.id, resetForArticle]);
 
-  const handleSave = useCallback((targetPublishState?: boolean) => {
-    if (!title) { toast.warning("请输入标题"); return; }
-
-    const finalContent = contentRef.current?.innerHTML || '';
-    const snapshot: Partial<Article> = {
-      ...formData,
-      title,
-      content: finalContent,
-      pdfData: tempPdf?.data,
-      isPublished: targetPublishState !== undefined ? targetPublishState : formData.isPublished
-    };
-
-    // 大文档解析放空闲时段，避免点击保存时长时间阻塞主线程；单次保存语义不变
-    const doSave = () => {
-      try {
-        // 双存储：保存时把解析结果一并持久化，阅读打开时直接命中 blocks，
-        // 避免每次打开都全量解析正文；封面/封底或空正文不附加。
-        const blocks = finalContent.trim() ? htmlToBlocks(finalContent) : undefined;
-        onSave({ ...snapshot, blocks });
-      } catch {
-        onSave(snapshot);
-      }
-    };
-    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-    if (typeof ric === 'function') ric(doSave, { timeout: 500 });
-    else setTimeout(doSave, 0);
-  }, [formData, title, tempPdf, onSave]);
-
   const handleImgReplaceWithSettings = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     handleImgReplace(e, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat);
   }, [handleImgReplace, imgCompressMaxWidth, imgCompressQuality, imgCompressFormat]);
@@ -157,18 +129,6 @@ export const Editor: React.FC<EditorProps> = ({ isOpen, article, categories, onC
   const handleArticleUpdate = useCallback((_id: number, updates: Partial<Article>) => {
     setFormData(prev => ({ ...prev, ...updates }));
   }, [setFormData]);
-
-  const handleImageUpload = useCallback((_type: 'cover' | 'back') => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      handleFile({ target: e.target as HTMLInputElement } as React.ChangeEvent<HTMLInputElement>, 'img');
-    };
-    input.click();
-  }, [handleFile]);
 
   const handleContentClick = useCallback((e: React.MouseEvent) => {
     handleEditorClick(e, contentRef);

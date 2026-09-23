@@ -56,7 +56,6 @@ export function useExportManager({
     options: {
       useAlternateDesign: boolean;
       includeImages: boolean;
-      optimizeForPrint: boolean;
       exportType: 'reader' | 'printable';
     },
     onProgress?: (percent: number, message?: string) => void

@@ -19,7 +19,8 @@ export default defineConfig(({ mode }) => {
           target: 'http://localhost:4513',
           changeOrigin: true,
           headers: {
-            'x-sws-proxy-secret': env.VITE_PROXY_SECRET || env.PROXY_SECRET || '',
+            // 绝不能读 VITE_ 前缀的密钥：VITE_ 变量会被注入客户端 bundle（见 AGENTS.md 环境变量约定）
+            'x-sws-proxy-secret': env.PROXY_SECRET || '',
           },
         },
       },
@@ -51,7 +52,7 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (id.includes('node_modules')) {
               if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor';
-              if (id.includes('pdfjs-dist') || id.includes('@react-pdf') || id.includes('pdf-lib') || id.includes('react-pdf-html') || id.includes('fflate') || id.includes('file-saver')) return 'pdf-vendor';
+              if (id.includes('pdfjs-dist') || id.includes('fflate') || id.includes('file-saver')) return 'pdf-vendor';
               if (id.includes('/d3')) return 'graph-vendor';
               return 'vendor';
             }

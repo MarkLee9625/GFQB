@@ -8,7 +8,6 @@ interface ExportOptionsModalProps {
   onConfirm: (options: {
     useAlternateDesign: boolean;
     includeImages: boolean;
-    optimizeForPrint: boolean;
     exportType: 'reader' | 'printable';
   }, onProgress?: (percent: number, message?: string) => void) => Promise<void>;
 }
@@ -21,7 +20,6 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
 }) => {
   const [selectedDesign, setSelectedDesign] = useState<'original' | 'magazine'>(currentUseAlternateDesign ? 'magazine' : 'original');
   const [includeImages, setIncludeImages] = useState(true);
-  const [optimizeForPrint, setOptimizeForPrint] = useState(false);
   const [exportType, setExportType] = useState<'reader' | 'printable'>('printable');
 
   // 导出进度状态
@@ -58,7 +56,6 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
         {
           useAlternateDesign: selectedDesign === 'magazine',
           includeImages,
-          optimizeForPrint: exportType === 'printable' || optimizeForPrint,
           exportType,
         },
         (percent, message) => {
@@ -224,21 +221,6 @@ const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
                     className="w-5 h-5 text-brand-blue rounded focus:ring-brand-blue"
                   />
                 </label>
-
-                {exportType === 'reader' && (
-                  <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <div>
-                      <div className="font-medium text-gray-800">包含打印适配</div>
-                      <div className="text-sm text-gray-500">在阅读器中启用打印样式支持</div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={optimizeForPrint}
-                      onChange={(e) => setOptimizeForPrint(e.target.checked)}
-                      className="w-5 h-5 text-brand-blue rounded focus:ring-brand-blue"
-                    />
-                  </label>
-                )}
               </div>
 
               {/* 预览说明 */}
