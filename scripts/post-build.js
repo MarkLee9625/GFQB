@@ -27,7 +27,7 @@ function validateGraphTemplates() {
         if (count !== backticks) {
             console.error(`❌ [安全校验] ${file} 反引号数量 ${count} 与基线 ${backticks} 不一致`);
             console.error('   知识图谱代码注入模板中禁止使用反引号（会提前闭合外层模板字面量）。');
-            console.error('   如确需调整，请更新 scripts/post-build.js 基线并人工确认生成代码仍为合法 ES5。');
+            console.error('   如确需调整，请更新 scripts/post-build.js 基线并人工确认模板内仍无反引号/${}（生成代码目标 ES2017+，不再限定 ES5）。');
             process.exit(1);
         }
     }

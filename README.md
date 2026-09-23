@@ -134,7 +134,7 @@
 │   ├── components/
 │   │   ├── AiCurationModal.tsx  # AI 选题工作台
 │   │   └── Layout/MainLayout.tsx
-│   ├── services/export/         # 导出引擎（reader/print/pdf）
+│   ├── services/export/         # 导出引擎（reader/print）
 │   ├── services/pdf/            # PDF 解析（含策略模式）
 │   ├── services/fetchers/       # RSS + 专利数据抓取
 │   ├── types/                   # 类型定义
@@ -176,7 +176,6 @@
 | 排序 | `order` 字段升序，封面=0，封底=99999 |
 | CSS | TailwindCSS v4 + 全局打印样式 |
 | 测试 | Vitest + jsdom |
-| 导出 PDF | `@react-pdf/renderer` + `pdf-lib` |
 | 导出 HTML | `post-build.js` 内联全量资源 |
 
 ---

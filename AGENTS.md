@@ -21,7 +21,7 @@
 ## 提示约定（重要）
 
 - **禁止新增 `alert()` / `window.alert` 调用**：统一走全局 Toast（`import { toast } from '../src/utils/toast'`；`toast.info/success/warning/error(message)`，组件为 `ToastHost`，已挂载在 App 根级）。
-- 例外：破坏性操作的确认（`window.confirm`）、导出阅读器内联脚本（`reader/clientScript.ts`）、测试数据中的字符串。
+- 例外：破坏性操作的确认（`window.confirm`）、导出阅读器内联脚本（`reader/clientScript.ts` 及其按序拼接的拆分片段 `src/services/export/reader/client/*`，如 `client/render.ts`）、测试数据中的字符串。
 - 新增 `alert` 会被审查拒绝，请遵守。
 
 ## 可用技能（`.codex/skills/`）
@@ -86,7 +86,7 @@ npm run dev:all          # 并行启动 Vite :4512 + BFF :4513
 npm run build            # 生产构建 → dist/（sync worker → vite build → post-build 内联资源）
 npm start                # 生产模式 (NODE_ENV=production node server.js)
 npm run server           # 仅启动 BFF 代理 :4513
-npm run test             # vitest run（测试文件在 src/**/*.{test,spec}.*）
+npm run test             # vitest run（测试文件在 src/**/*.{test,spec}.* 与 hooks/**/*.{test,spec}.*）
 npm run test:watch       # vitest 监听模式
 npm run test:file <path> # bash scripts/test-file.sh <path>（单文件测试）
 npm run typecheck        # tsc --noEmit
@@ -176,14 +176,13 @@ Editor、KeyboardShortcutsHelpModal、CategoryManagerModal、ExportOptionsModal�
 - `post-build.js` — 构建后内联资源
 - `create-pptx.mjs` — 导出 PPTX
 
-### 导出引擎（三引擎架构）
+### 导出引擎（双引擎架构）
 
 `src/services/export/`:
 - **reader** — 生成单 HTML 离线阅读器（含 Base64 内联资源 + 全文检索）
 - **print** — 生成打印优化版 HTML（A4 分页、隐藏 UI 元素）
-- **pdf** — 通过 `@react-pdf/renderer` + `pdf-lib` 生成 PDF，含封面/封底/目录/页眉页脚
 
-`index.ts` 作为门面统一导出三个引擎。
+`index.ts` 作为门面统一导出两个引擎。PDF 直出链路已于 v1.9.0 下线（代码与依赖均已移除）。
 
 ### PDF 解析
 
@@ -215,7 +214,7 @@ Editor、KeyboardShortcutsHelpModal、CategoryManagerModal、ExportOptionsModal�
 `graphEngine.ts` 和 `Renderer.ts` 不是标准 TS 模块，它们导出 `generateGraphEngineCode()` / `generateRendererCode()` 函数，返回 **JS 源码字符串**。实际 D3/Canvas 代码嵌入在模板字面量内部，通过 `graphRenderer.ts` 组装后注入 iframe 的 `srcdoc` 中运行。编辑时必须注意：
 - 模板字面量内严禁出现反引号 `` ` `` 和 `${}` 语法（会导致外层模板提前闭合）
 - 字符串拼接一律使用 `+`
-- 生成的代码是 ES5 风格（`var`、`function`、`''` 字符串）
+- 生成代码面向现代浏览器（允许 `const`/`let`/`Map`/`Object.values`，目标 ES2017+；iframe `srcdoc` 环境可控），不再限定 ES5
 
 `services/graphCache.ts` 提供 IndexedDB LRU 缓存。
 
@@ -280,7 +279,7 @@ interface Article {
 
 ## 设计模式
 
-- **门面**: `src/services/export/index.ts` 统一导出三个导出引擎
+- **门面**: `src/services/export/index.ts` 统一导出两个导出引擎（reader/print）
 - **组合**: `ArticleRenderer` 按 category 分发到 Cover/Back/Content
 - **策略**: PDF 抽字多策略（`src/services/pdf/strategies/`）
 - **内容-显示分离**: content(HTML) + blocks(结构化) 双存储
