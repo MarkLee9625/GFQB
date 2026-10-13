@@ -4,6 +4,7 @@ import { getReaderSkeleton } from './reader/readerSkeleton';
 import { saveAs } from 'file-saver';
 import { sortArticlesByPriority } from '../../utils/articleSort';
 import { escapeHtml } from '../../utils/stringUtils';
+import { resolveArticlesMediaData } from '../../../services/mediaStore';
 
 export interface ExportOptions {
     useAlternateDesign?: boolean;
@@ -202,6 +203,8 @@ export async function generateReaderHTML(
     metadata: ExportMetadata = {},
     onProgress?: (percent: number, message?: string) => void
 ): Promise<string> {
+    // P0-A 防御性还原：阅读器是单 HTML 自包含产物，媒体引用绝不能外泄到导出文件
+    articles = await resolveArticlesMediaData(articles);
     const sortedArticles = sortArticlesByPriority(articles);
 
     console.log('[Export] 开始处理文章数据，保留PDF数据以支持离线阅读器...');

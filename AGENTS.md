@@ -6,6 +6,12 @@
 
 工法情报编辑器：React 19 + TypeScript + Vite + IndexedDB 的本地优先情报编辑工具，BFF 代理接 DeepSeek API。**始终使用简体中文回复。**
 
+## 开发路线图（2026-10-11 编制）
+
+**进度：P0-A 媒体资产拆表 ✅ / P0-B 保存链路 flush ✅（2026-10-13 完成，实施记录与验收证据见该文档「实施记录」节）；P1-A/P1-B/P2 系列待开发。**
+
+后续开发按 **`docs/开发方案-性能优化与功能增强.md`** 执行：8 张任务卡（P0-A 媒体拆表、P0-B 保存 flush、P1-A 回收站+备份、P1-B 状态域拆分、P2-A 撤销栈、P2-B 图谱 ?raw 改造、P2-C 小件包、P3 随卡测试），每卡含现状证据/设计/步骤/验收/风险。**开工前先读该文档**；完成后在此节标注进度并回填文档附录 B 性能基线。
+
 ## 暂停开发事项（2026-09-05 用户决议）
 
 - **AI 选题评审暂停开发**：`batchEvaluateArticles`（`services/ai/review.ts`）及配套入口（`AiCurationModal` 评审链路）暂时用不到，现有代码保持原样可用，不删除、不增强。
@@ -195,8 +201,9 @@ Editor、KeyboardShortcutsHelpModal、CategoryManagerModal、ExportOptionsModal�
 ### 数据源抓取
 
 `src/services/fetchers/`:
-- `rssFetcher.ts` — RSS 源抓取
-- `patentFetcher.ts` — 专利数据抓取
+- `rssFetcher.ts` — RSS 源抓取（rss2json + AllOrigins 双引擎降档）
+- `paperFetcher.ts` — 论文检索：OpenAlex 直连优先 + BFF(`/api/papers/search`)/arXiv 兜底；含摘要重建、DOI/标题去重、摘要质量门槛、游标分页。入口 `searchPapers()`，消费方 `AiCurationModal`（Tab「前沿学术文献」，sourceType='paper' 采纳时触发 AI 深度编译）
+- `patentFetcher.ts` — 专利网页抓取（**休眠**：已无调用方；Google Patents 无 CORS 且选择器失效，保留备将来专利 Tab 复用）
 
 ### AI 服务
 
@@ -252,7 +259,7 @@ interface Article {
 ### UniversalArticleMeta（AI 选题，`src/types/intelligence.ts`）
 
 ```typescript
-{ id, sourceType: 'wechat'|'rss'|'patent'|'aip', sourceName, title, content, url?, publishDate?, aiSummary?, reason?, tags?, decision: 'pending'|'recommend'|'reject' }
+{ id, sourceType: 'wechat'|'rss'|'patent'|'aip'|'paper', sourceName, title, content, url?, publishDate?, aiSummary?, reason?, tags?, decision: 'pending'|'recommend'|'reject', /* paper 附加 */ abstract?, authors?, journal?, year?, citationCount?, doi? }
 ```
 
 ## 关键约定
@@ -261,8 +268,9 @@ interface Article {
 - **封面/封底**: category 固定不变，order 强制 0/99999，禁止删除（`isSpecialCategory` 判断）
 - **排序**: 普通文章按 `order` 升序
 - **图片**: 统一 WebP，maxWidth=1200（封面/封底 2400px + quality=0.92）。`src/utils/fileHelpers.ts`
-- **IndexedDB**: 库名 `SWS_DATABASE_REACT`，单表 `journal_store`，key 格式 `article-{id}` 或 `config-{key}`
+- **IndexedDB**: 库名 `SWS_DATABASE_REACT`（v4，双表），`journal_store`（key `article-{id}` / `config-{key}`）+ `media_store`（key = 媒体内容哈希，P0-A 新增）
 - **存储**: content（HTML）为主，blocks 按需结构化解析，双存储互补
+- **媒体引用（P0-A，重要）**: 文章里的 base64 媒体统一抽到 `media_store`，字段内只留 `sws-media://{hash}` 引用。**任何需要真实 data URL 的场景（导出、AI 上下文、PDF 抽字）必须先经 `services/mediaStore.ts` 还原**（`resolveMediaValue` / `resolveArticleMediaData` / `resolveArticlesMediaData`）；渲染链路统一走 `useBlobManager().getBlobUrlAsync`（已支持引用解析）。导出引擎已内置兜底还原，但新写的导出/分析路径请显式还原。
 - **Vite**: `base: './'`（相对路径）、`target: 'esnext'`、chunkSizeWarningLimit=1000KB
 - **路径别名**: `@/` → 项目根目录
 - **样式**: 全局 CSS 常量 `CONSTANTS.UNIFIED_STYLES` 在 `src/constants.ts`，含强制中文排版规则（首行缩进 2 字符、图片居中、标题无缩进等）

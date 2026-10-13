@@ -17,6 +17,16 @@ import { useInView } from '../../../../hooks/useInView';
 import { useBlobManager } from '../../../../hooks/useBlobManager';
 import { sanitizeHtml } from '../../../utils/sanitizeHtml';
 import { isSelfGeneratedHtmlCached } from '../../../utils/htmlTrust';
+import { resolveMediaValue } from '../../../../services/mediaStore';
+
+/**
+ * 需要「先解码再渲染」的本地媒体：base64 data URL 与 P0-A 的 sws-media:// 引用
+ * 都不能直接当 src 用（前者会在主线程重复解码整张 base64，后者不是可请求的 URL）。
+ */
+function needsDeferredSrc(src: string | null | undefined): boolean {
+  if (!src) return false;
+  return src.startsWith('data:') || src.startsWith('sws-media://');
+}
 
 interface BlockRendererProps {
   block: ContentBlock;
@@ -65,9 +75,9 @@ const ImageBlockComponent = React.memo<{ block: ImageBlock; mode: string }>(({ b
 
   // data URL 在解码完成前不直接当 src 用，避免浏览器在主线程再次解码整张 base64；
   // 外部 URL 则等 getBlobUrlAsync 原样返回后立即显示
-  const isDataUrl = !!block.src && block.src.startsWith('data:');
+  const deferred = needsDeferredSrc(block.src);
   const imageSrc = bypassLazy || inView
-    ? (isDataUrl ? (blobUrl ?? undefined) : (blobUrl || block.src))
+    ? (deferred ? (blobUrl ?? undefined) : (blobUrl || block.src))
     : undefined;
 
   return (
@@ -115,10 +125,10 @@ const VideoBlockComponent = React.memo<{ block: VideoBlock; mode: string }>(({ b
     };
   }, [inView, block.src, blobManager, bypassLazy]);
 
-  // data URL 解码完成前不直接当 src 用，避免浏览器在主线程解码整张 base64
-  const isDataUrl = !!block.src && block.src.startsWith('data:');
+  // data URL / sws-media:// 解码完成前不直接当 src 用，避免浏览器在主线程解码整张 base64
+  const deferred = needsDeferredSrc(block.src);
   const src = bypassLazy || inView
-    ? (isDataUrl ? (blobUrl ?? undefined) : (blobUrl || block.src))
+    ? (deferred ? (blobUrl ?? undefined) : (blobUrl || block.src))
     : undefined;
 
   return (
@@ -157,9 +167,9 @@ const AudioBlockComponent = React.memo<{ block: AudioBlock; mode: string }>(({ b
     };
   }, [inView, block.src, blobManager, bypassLazy]);
 
-  const isDataUrl = !!block.src && block.src.startsWith('data:');
+  const deferred = needsDeferredSrc(block.src);
   const src = bypassLazy || inView
-    ? (isDataUrl ? (blobUrl ?? undefined) : (blobUrl || block.src))
+    ? (deferred ? (blobUrl ?? undefined) : (blobUrl || block.src))
     : undefined;
 
   return (
@@ -214,10 +224,28 @@ const FigureBlockComponent = React.memo<{ block: FigureBlock; mode: string }>(({
 ));
 
 const RawHtmlBlockComponent = React.memo<{ block: RawHtmlBlock }>(({ block }) => {
+  // P0-A：块内 HTML 可能含 sws-media:// 引用（如上传视频/音频生成的 media-container），
+  // 渲染前必须还原为 data URL，否则这些媒体在阅读态直接不可加载。
+  const [html, setHtml] = useState(block.html);
+
+  useEffect(() => {
+    setHtml(block.html);
+    if (!block.html.includes('sws-media://')) return;
+    let cancelled = false;
+    void resolveMediaValue(block.html)
+      .then((resolved) => {
+        if (!cancelled && resolved) setHtml(resolved);
+      })
+      .catch((err) => {
+        console.warn('[BlockRenderer] rawHtml 媒体还原失败', err);
+      });
+    return () => { cancelled = true; };
+  }, [block.html]);
+
   // 系统自生成的 HTML（知识图谱等）跳过净化，否则 iframe/script 会被剥离
-  const sanitized = isSelfGeneratedHtmlCached(block.html)
-    ? block.html
-    : sanitizeHtml(block.html);
+  const sanitized = isSelfGeneratedHtmlCached(html)
+    ? html
+    : sanitizeHtml(html);
   return <div dangerouslySetInnerHTML={{ __html: sanitized }} />;
 });
 

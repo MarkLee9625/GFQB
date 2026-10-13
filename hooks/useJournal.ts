@@ -6,6 +6,19 @@ import { parseEmbeddedData } from '../src/utils/embeddedData';
 import { toast } from '../src/utils/toast';
 import { generateArticleId, createDefaultSpecialArticles } from '../src/utils/articleDefaults';
 import { isSpecialCategory } from '../src/constants';
+import { migrateArticlesToMediaRefs, findMissingMediaHashes } from '../services/mediaStore';
+
+/** 保存防抖窗口：连续编辑合并为一次落盘 */
+const SAVE_DEBOUNCE_MS = 1000;
+/** 保存最长等待：防抖被连续编辑不断重置时，仍保证该时间内落盘一次 */
+const SAVE_MAX_WAIT_MS = 3000;
+
+interface PendingSave {
+  article: Article;
+  timer: ReturnType<typeof setTimeout>;
+  /** 本轮连续编辑的首次入队时间（maxWait 计时起点） */
+  queuedAt: number;
+}
 
 export function useJournal() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -70,20 +83,39 @@ export function useJournal() {
 
         const rawData = await db.getArticles();
         if (aborted()) return;
-        const data = sanitizeArticles(rawData);
+        let data = sanitizeArticles(rawData);
 
         if (data.length === 0) {
           const fresh = createDefaultSpecialArticles();
           await db.clearAndBulkSaveArticles(fresh);
           if (aborted()) return;
-          setArticles(fresh);
-          setCurrentId(fresh[0].id);
-        } else {
-          const ordered = sortArticlesByPriority(data);
-          if (aborted()) return;
-          setArticles(ordered);
-          if (ordered.length > 0) setCurrentId(ordered[0].id);
+          data = fresh;
         }
+
+        // P0-A：旧库媒体拆表迁移（幂等、可中断续跑）。
+        // 在进入可编辑状态前完成，避免迁移写回与用户编辑竞争互相覆盖；
+        // 迁移后回读瘦身版文章，使内存收益立即生效。
+        try {
+          const migration = await migrateArticlesToMediaRefs({
+            articles: data,
+            onStart: (total) => {
+              if (total > 0 && mountedRef.current) toast.info(`正在整理媒体库（一次性，共 ${total} 篇）…`);
+            },
+          });
+          if (aborted()) return;
+          if (!migration.skipped) {
+            data = sanitizeArticles(await db.getArticles());
+            if (aborted()) return;
+            if (mountedRef.current) toast.success(`媒体库整理完成（共 ${migration.media} 项媒体）`);
+          }
+        } catch (e) {
+          console.warn('[媒体库] 迁移失败，下次启动将重试', e);
+        }
+
+        const ordered = sortArticlesByPriority(data);
+        if (aborted()) return;
+        setArticles(ordered);
+        if (ordered.length > 0) setCurrentId(ordered[0].id);
       } catch (e) {
         console.error('Failed to load articles', e);
         if (mountedRef.current) {
@@ -100,44 +132,129 @@ export function useJournal() {
     };
   }, [sanitizeArticles]);
 
-  // 按文章 id 分桶防抖：不同文章的保存互不取消（单一 debounce 实例会清掉前一篇的保存导致丢失）
-  const saveTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  // ---- 保存调度：按文章 id 分桶防抖 + maxWait 上限 + 可 flush ----
+  // 分桶理由：不同文章的保存互不取消（单一 debounce 实例会清掉前一篇的保存导致丢失）
+  const pendingSavesRef = useRef<Map<number, PendingSave>>(new Map());
+  /** 失败重试计数（成功/取消即清零，超过上限放弃并提示） */
+  const retryCountsRef = useRef<Map<number, number>>(new Map());
+  const MAX_SAVE_RETRIES = 3;
+  /** debouncedSaveArticle 的自引用：persistNow 失败后需重新入队（避免两个 useCallback 循环依赖） */
+  const debouncedSaveRef = useRef<((article: Article) => void) | null>(null);
+
+  // P0-A 参考：article 最新值的稳定读取口（UPDATE 的浅比较与落盘都在 updater 之外使用）
+  const articlesRef = useRef(articles);
+  articlesRef.current = articles;
+
+  const persistNow = useCallback(async (article: Article) => {
+    const id = Number(article.id);
+    try {
+      await db.saveArticle(article);
+      retryCountsRef.current.delete(id);
+    } catch (e) {
+      console.error('Save failed', e);
+      const attempts = (retryCountsRef.current.get(id) ?? 0) + 1;
+      retryCountsRef.current.set(id, attempts);
+      if (attempts <= MAX_SAVE_RETRIES) {
+        // 必须自动重试：state 已等于目标值，用户再点"保存"会被浅比较 bailout 吞掉（写不进去）
+        toast.error(`文章保存失败，正在自动重试（${attempts}/${MAX_SAVE_RETRIES}）`);
+        debouncedSaveRef.current?.(article);
+      } else {
+        retryCountsRef.current.delete(id);
+        toast.error('文章保存失败：已重试多次，请检查磁盘空间或刷新页面');
+      }
+    }
+  }, []);
+
+  const cancelPendingSave = useCallback((id: number) => {
+    const entry = pendingSavesRef.current.get(id);
+    if (entry) {
+      clearTimeout(entry.timer);
+      pendingSavesRef.current.delete(id);
+    }
+    retryCountsRef.current.delete(id);
+  }, []);
+
+  const cancelAllPendingSaves = useCallback(() => {
+    for (const [, entry] of pendingSavesRef.current) clearTimeout(entry.timer);
+    pendingSavesRef.current.clear();
+  }, []);
 
   const debouncedSaveArticle = useCallback((article: Article) => {
     const id = Number(article.id);
-    const timers = saveTimersRef.current;
+    const pending = pendingSavesRef.current;
+    const existing = pending.get(id);
+    if (existing) clearTimeout(existing.timer);
 
-    const existing = timers.get(id);
-    if (existing) clearTimeout(existing);
+    const queuedAt = existing?.queuedAt ?? Date.now();
+    // maxWait 兜底：连续编辑时延迟逐步收敛，最迟 queuedAt + SAVE_MAX_WAIT_MS 落盘
+    const delay = Math.min(SAVE_DEBOUNCE_MS, Math.max(0, queuedAt + SAVE_MAX_WAIT_MS - Date.now()));
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      void persistNow(article);
+    }, delay);
+    pending.set(id, { article, timer, queuedAt });
+  }, [persistNow]);
+  debouncedSaveRef.current = debouncedSaveArticle;
 
-    timers.set(id, setTimeout(async () => {
-      timers.delete(id);
-      try {
-        await db.saveArticle(article);
-      } catch (e) {
-        console.error('Save failed', e);
-        toast.error('文章保存失败，请稍后重试');
-      }
-    }, 1000));
-  }, []);
+  /** 立即执行全部待落盘保存（页面隐藏/关闭、显式保存前调用） */
+  const flushPendingSaves = useCallback(async (): Promise<void> => {
+    const pending = pendingSavesRef.current;
+    if (pending.size === 0) return;
+    const jobs: Promise<void>[] = [];
+    for (const [id, entry] of Array.from(pending.entries())) {
+      clearTimeout(entry.timer);
+      pending.delete(id);
+      jobs.push(persistNow(entry.article));
+    }
+    await Promise.all(jobs);
+  }, [persistNow]);
 
-  const updateArticle = useCallback((id: number, updates: Partial<Article>) => {
+  // 页面隐藏/关闭前强制落盘：防抖窗口内的最后一次编辑不再丢失
+  // （IndexedDB 事务在页面卸载后仍会继续提交，此处发起 put 即可）
+  useEffect(() => {
+    const onPageHide = () => { void flushPendingSaves(); };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') void flushPendingSaves();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [flushPendingSaves]);
+
+  const updateArticle = useCallback((id: number, updates: Partial<Article>, options?: { immediate?: boolean }) => {
     const numId = Number(id);
+    const immediate = options?.immediate === true;
+
+    // 副作用（落盘调度）一律放在 setState 之外：StrictMode 下 updater 会被双调用，
+    // 写在里面会让每次保存写两遍（并重跑一遍媒体抽取/哈希），与本次优化目标相反。
+    const current = articlesRef.current.find(a => a.id === numId);
+    if (!current) return;
+
+    // 浅比较 bailout：更新字段与现值全等时直接返回，避免无效重渲染与无效写库
+    let changed = false;
+    for (const key of Object.keys(updates) as (keyof Article)[]) {
+      if (!Object.is(current[key], updates[key])) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) return;
+
+    const updated = { ...current, ...updates };
+    if (immediate) {
+      // 显式保存：跳过防抖立即落盘，并取消该文章待执行的防抖保存
+      cancelPendingSave(numId);
+      void persistNow(updated);
+    } else {
+      debouncedSaveArticle(updated);
+    }
+
     setArticles(prev => {
       const idx = prev.findIndex(a => a.id === numId);
       if (idx === -1) return prev;
-      // 浅比较 bailout：更新字段与现值全等时直接返回原引用，避免无效重渲染击穿 memo
-      const current = prev[idx];
-      let changed = false;
-      for (const key of Object.keys(updates) as (keyof Article)[]) {
-        if (!Object.is(current[key], updates[key])) {
-          changed = true;
-          break;
-        }
-      }
-      if (!changed) return prev;
-      const updated = { ...current, ...updates };
-      debouncedSaveArticle(updated);
       const next = [...prev];
       next[idx] = updated;
 
@@ -149,10 +266,7 @@ export function useJournal() {
       }
       return next;
     });
-  }, [debouncedSaveArticle]);
-
-  const articlesRef = useRef(articles);
-  articlesRef.current = articles;
+  }, [debouncedSaveArticle, persistNow, cancelPendingSave]);
 
   const createArticle = useCallback(async (articleData: Partial<Article>) => {
     const maxOrder = articlesRef.current.length > 0
@@ -189,6 +303,8 @@ export function useJournal() {
     if (!window.confirm('确定要删除这篇文章吗？')) return;
 
     try {
+      // 先取消待落盘保存，避免删除后又被防抖定时器写回（文章复活）
+      cancelPendingSave(Number(id));
       await db.deleteArticle(id);
 
       setArticles(prev => {
@@ -201,7 +317,7 @@ export function useJournal() {
       console.error('Delete failed', e);
       toast.error('文章删除失败，请重试');
     }
-  }, []);
+  }, [cancelPendingSave]);
 
   const reorderArticles = useCallback((newArticles: Article[]) => {
     // 核心修复：根据拖拽后的新顺序，重新分配 order 权重 (0, 1000, 2000...)
@@ -215,24 +331,35 @@ export function useJournal() {
     setArticles(ordered);
 
     // 同步到数据库：排序无增删，用轻量 upsert，避免 clear+游标删除全表重写大 base64
+    // 同时取消待落盘保存：本次 upsert 已含全部文章最新状态，旧任务会把过期 order 写回
+    cancelAllPendingSaves();
     db.bulkPutArticles(ordered).catch((e) => {
       console.error('Reorder save failed', e);
       toast.error('排序保存失败，请重试');
     });
-  }, []);
+  }, [cancelAllPendingSaves]);
 
   const setArticlesAction = useCallback(async (newArticles: Article[]) => {
     const sanitized = sanitizeArticles(newArticles); // 先清洗类型
     const ordered = sortArticlesByPriority(sanitized);
     try {
+      // 整表替换前取消全部待落盘保存，避免旧文章被防抖定时器写回
+      cancelAllPendingSaves();
       await db.clearAndBulkSaveArticles(ordered);
       setArticles(ordered);
       if (ordered.length > 0) setCurrentId(ordered[0].id);
+
+      // 悬空引用守卫：导入"含引用但本地媒体库没有"的项目文件时给出可见告警
+      // （生产构建会 drop console，仅靠 warn 用户完全无感）
+      const missing = await findMissingMediaHashes(ordered);
+      if (missing.length > 0) {
+        toast.warning(`有 ${missing.length} 项媒体在本地媒体库中缺失（常见于跨设备导入的项目文件），相关图片/附件将无法显示`);
+      }
     } catch (e) {
       console.error("Bulk save failed", e);
       toast.error('批量保存失败，请重试');
     }
-  }, [sanitizeArticles]);
+  }, [sanitizeArticles, cancelAllPendingSaves]);
 
   return {
     articles,
@@ -243,6 +370,7 @@ export function useJournal() {
     createArticle,
     deleteArticle,
     reorderArticles,
-    setArticlesAction
+    setArticlesAction,
+    flushPendingSaves
   };
 }

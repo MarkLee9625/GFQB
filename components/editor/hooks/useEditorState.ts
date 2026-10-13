@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useDeferredValue, useCallback, useRef } f
 import type { Article } from '../../../src/types';
 import { htmlToBlocks } from '../../../src/utils/blockParser';
 import { toast } from '../../../src/utils/toast';
+import { resolveMediaValue } from '../../../services/mediaStore';
 
 interface UseEditorStateOptions {
   isOpen: boolean;
@@ -83,8 +84,34 @@ export function useEditorState({ isOpen, article, categories, contentRef, onSave
         setTempPdf(null);
       }
 
-      if (contentRef.current) {
-        contentRef.current.innerHTML = currentArticle?.content || '';
+      const rawContent = currentArticle?.content || '';
+      const articleId = currentArticle?.id;
+      const el = contentRef.current;
+      if (el) {
+        el.innerHTML = rawContent;
+      }
+
+      // P0-A：正文内 sws-media:// 引用异步还原为 data URL 供编辑显示。
+      // 「用户是否已改动」用输入事件标记判定——不用 innerHTML 比较：外部导入/手改的 HTML
+      // 经 DOM 归一化后（如 `<br/>`→`<br>`）必然与原字符串不等，会把还原永久误判掉。
+      if (el && rawContent.includes('sws-media://')) {
+        let userEdited = false;
+        const markEdited = () => { userEdited = true; };
+        el.addEventListener('input', markEdited, { once: true });
+        void resolveMediaValue(rawContent)
+          .then((resolved) => {
+            if (!resolved || resolved === rawContent) return;
+            if (articleRef.current?.id !== articleId) return;
+            const target = contentRef.current;
+            if (!target || !target.isConnected || userEdited) return;
+            target.innerHTML = resolved;
+          })
+          .catch((err) => {
+            console.warn('[Editor] 正文媒体还原失败', err);
+          })
+          .finally(() => {
+            el.removeEventListener('input', markEdited);
+          });
       }
     }
   }, [isOpen]);
@@ -102,20 +129,33 @@ export function useEditorState({ isOpen, article, categories, contentRef, onSave
       isPublished: targetPublishState !== undefined ? targetPublishState : formData.isPublished
     };
 
-    // 大文档解析放空闲时段，避免点击保存时长时间阻塞主线程；单次保存语义不变
-    const doSave = () => {
+    // 双存储：保存时把解析结果一并持久化，阅读打开时直接命中 blocks，
+    // 避免每次打开都全量解析正文；封面/封底或空正文不附加。
+    const buildBlocks = () => (finalContent.trim() ? htmlToBlocks(finalContent) : undefined);
+    // 大文档解析放空闲时段，避免点击保存时长时间阻塞主线程
+    const runIdle = (cb: () => void) => {
+      const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+      if (typeof ric === 'function') ric(cb, { timeout: 500 });
+      else setTimeout(cb, 0);
+    };
+    const saveWithBlocks = () => {
       try {
-        // 双存储：保存时把解析结果一并持久化，阅读打开时直接命中 blocks，
-        // 避免每次打开都全量解析正文；封面/封底或空正文不附加。
-        const blocks = finalContent.trim() ? htmlToBlocks(finalContent) : undefined;
-        onSave({ ...snapshot, blocks });
+        onSave({ ...snapshot, blocks: buildBlocks() });
       } catch {
         onSave(snapshot);
       }
     };
-    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-    if (typeof ric === 'function') ric(doSave, { timeout: 500 });
-    else setTimeout(doSave, 0);
+
+    // 新文章必须一次性创建（两次 onSave 会建出两篇），沿用空闲时段单次保存
+    if (!snapshot.id) {
+      runIdle(saveWithBlocks);
+      return;
+    }
+    // 已有文章：正文立即落盘（不等空闲时段，关页/崩溃不丢正文），blocks 解析结果随后补写。
+    // ⚠️ 第一阶段必须显式清空 blocks：否则 updateArticle 的浅合并会保留**旧 blocks**，
+    // 而阅读态只要 blocks 非空就直接用它（不看 content）⇒「保存后关页」会显示旧正文。
+    onSave({ ...snapshot, blocks: undefined });
+    runIdle(saveWithBlocks);
   }, [formData, title, tempPdf, contentRef, onSave]);
 
   return {

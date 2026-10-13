@@ -5,6 +5,7 @@ export function isSpecialCategory(category: string | undefined): boolean {
 export const CONSTANTS = {
   DB_NAME: "SWS_DATABASE_REACT",
   DB_STORE: "journal_store",
+  DB_MEDIA_STORE: "media_store",
   KEY: "SWS_JOURNAL_DATA",
   DEFAULT_CATS: ["工法", "智能制造", "设计"],
   IMAGES: {

@@ -231,7 +231,8 @@ const AppContent: React.FC = () => {
 
   const handleSaveArticle = useCallback(async (updated: Partial<Article>) => {
     if (updated.id) {
-      updateArticle(updated.id, updated);
+      // 显式保存跳过防抖立即落盘（blocks 补写会再触发一次，幂等）
+      updateArticle(updated.id, updated, { immediate: true });
       setIsEditorOpen(false);
     } else {
       const newArt = await createArticle(updated);

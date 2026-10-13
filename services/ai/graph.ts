@@ -5,6 +5,7 @@
  */
 
 import { extractAbstractFromPdf } from '../../src/services/pdf/index';
+import { resolveArticlesMediaData } from '../mediaStore';
 import {
     callDeepSeekAPI,
     robustJsonParse,
@@ -248,6 +249,8 @@ function generateFallbackLinks(currentData: KnowledgeGraphData): KnowledgeLink[]
 
 export async function buildSuperContextForGraph(articles: ArticleContextInput[]): Promise<string> {
     console.log(`[aiService] 开始为 ${articles.length} 篇文章组装超级上下文...`);
+    // P0-A：AI 上下文需要真实内容（正文纯文本 + PDF 解析），媒体引用先还原为 data URL
+    articles = await resolveArticlesMediaData(articles);
 
     const allTexts: string[] = [];
     const pdfTasks: { index: number; title: string; data: string }[] = [];

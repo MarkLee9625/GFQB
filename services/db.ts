@@ -1,5 +1,7 @@
 import type { Article } from '../src/types';
 import { CONSTANTS } from '../src/constants';
+import { extractArticleMedia, type ExtractedMedia, type MediaRecord } from '../src/utils/mediaRefs';
+import { toast } from '../src/utils/toast';
 
 // 数据库连接状态
 enum DBConnectionState {
@@ -56,12 +58,16 @@ export class DBService {
 
       this.connectionState = DBConnectionState.CONNECTING;
 
-      const request = indexedDB.open(CONSTANTS.DB_NAME, 3);
+      // v4：新增 media_store（P0-A 媒体资产拆表：文章只存 sws-media:// 引用）
+      const request = indexedDB.open(CONSTANTS.DB_NAME, 4);
 
       request.onupgradeneeded = (e: IDBVersionChangeEvent) => {
         const db = (e.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains(CONSTANTS.DB_STORE)) {
           db.createObjectStore(CONSTANTS.DB_STORE);
+        }
+        if (!db.objectStoreNames.contains(CONSTANTS.DB_MEDIA_STORE)) {
+          db.createObjectStore(CONSTANTS.DB_MEDIA_STORE);
         }
       };
 
@@ -77,6 +83,14 @@ export class DBService {
 
         this.db.onclose = () => {
           console.warn('数据库连接关闭');
+          this.connectionState = DBConnectionState.DISCONNECTED;
+          this.initPromise = null;
+        };
+
+        // 其他标签页请求升级 DB 版本时主动让位：否则对方会撞 onblocked 直接失败
+        this.db.onversionchange = () => {
+          console.warn('数据库版本已变更，关闭当前连接（请刷新页面）');
+          this.db?.close();
           this.connectionState = DBConnectionState.DISCONNECTED;
           this.initPromise = null;
         };
@@ -199,12 +213,14 @@ export class DBService {
         return reject(new Error("数据库未初始化"));
       }
 
-      const tx = this.db.transaction(CONSTANTS.DB_STORE, "readwrite");
-      const request = tx.objectStore(CONSTANTS.DB_STORE).clear();
+      // 同时清空媒体库，避免残留孤儿媒体占用空间
+      const tx = this.db.transaction([CONSTANTS.DB_STORE, CONSTANTS.DB_MEDIA_STORE], "readwrite");
+      tx.objectStore(CONSTANTS.DB_STORE).clear();
+      tx.objectStore(CONSTANTS.DB_MEDIA_STORE).clear();
 
-      request.onsuccess = () => resolve(true);
-      request.onerror = (e: Event) => {
-        const error = (e.target as IDBRequest).error;
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = (e: Event) => {
+        const error = (e.target as IDBTransaction).error;
         reject(new Error(`清除失败: ${error?.message || '未知错误'}`));
       };
     });
@@ -236,9 +252,131 @@ export class DBService {
     });
   }
 
-  // 保存单篇文章
+  // 保存单篇文章（P0-A：内联媒体先入 media_store，文章本体只落引用）
   async saveArticle(article: Article): Promise<void> {
-    await this.save(`article-${article.id}`, article);
+    const [slim] = await this.extractAndStoreMedia([article]);
+    await this.save(`article-${slim.id}`, slim);
+  }
+
+  /**
+   * 抽取文章内联媒体并入库（写侧唯一的媒体落库入口）。
+   * 顺序保证：媒体先落库、再写文章，引用永不悬空。
+   */
+  private async extractAndStoreMedia(articles: Article[]): Promise<Article[]> {
+    const slimArticles: Article[] = [];
+    const pending = new Map<string, ExtractedMedia>();
+
+    for (const article of articles) {
+      const result = extractArticleMedia(article as unknown as Record<string, unknown>);
+      slimArticles.push(result.article as unknown as Article);
+      for (const item of result.media) {
+        if (!pending.has(item.hash)) pending.set(item.hash, item);
+      }
+    }
+
+    if (pending.size > 0) {
+      await this.putMediaIfAbsent(Array.from(pending.values()));
+    }
+    return slimArticles;
+  }
+
+  // ---- 媒体库（media_store） ----
+
+  /**
+   * 幂等写入媒体：同 hash 已存在则跳过。
+   * 内容不一致时保留原记录并告警（不改写，保证引用可复现）——128 位采样哈希下真实碰撞概率可忽略。
+   */
+  async putMediaIfAbsent(items: ExtractedMedia[]): Promise<void> {
+    if (items.length === 0) return;
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error("数据库初始化失败");
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(CONSTANTS.DB_MEDIA_STORE, "readwrite");
+      const store = tx.objectStore(CONSTANTS.DB_MEDIA_STORE);
+
+      for (const item of items) {
+        const request = store.get(item.hash);
+        request.onsuccess = () => {
+          const existing = request.result as MediaRecord | undefined;
+          if (existing) {
+            if (existing.dataUrl !== item.dataUrl) {
+              // 128 位采样哈希下真实碰撞可忽略；真撞上时保留原记录（引用可复现），
+              // 但要可见告警——静默显示错图且不可恢复是最坏结果（生产构建会 drop console）
+              console.warn(`[DB] 媒体哈希碰撞（保留原记录）hash=${item.hash}`);
+              toast.warning('检测到媒体哈希碰撞：已保留原记录，若发现图片异常请联系开发者');
+            }
+            return;
+          }
+          const record: MediaRecord = { ...item, refCount: 1, createdAt: Date.now() };
+          store.put(record, record.hash);
+        };
+      }
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(new Error("媒体写入失败"));
+      tx.onabort = () => reject(new Error("媒体写入中止"));
+    });
+  }
+
+  async getMedia(hash: string): Promise<MediaRecord | null> {
+    if (!this.db) await this.init();
+    if (!this.db) return null;
+    return new Promise((resolve) => {
+      const tx = this.db!.transaction(CONSTANTS.DB_MEDIA_STORE, "readonly");
+      const request = tx.objectStore(CONSTANTS.DB_MEDIA_STORE).get(hash);
+      request.onsuccess = () => resolve((request.result as MediaRecord | undefined) ?? null);
+      request.onerror = () => resolve(null);
+    });
+  }
+
+  async getAllMedia(): Promise<MediaRecord[]> {
+    if (!this.db) await this.init();
+    if (!this.db) return [];
+    return new Promise((resolve) => {
+      const tx = this.db!.transaction(CONSTANTS.DB_MEDIA_STORE, "readonly");
+      const request = tx.objectStore(CONSTANTS.DB_MEDIA_STORE).getAll();
+      request.onsuccess = () => resolve((request.result as MediaRecord[]) ?? []);
+      request.onerror = () => resolve([]);
+    });
+  }
+
+  /** 只读媒体库 key（不含 dataUrl payload）：用于悬空引用检查等轻量场景 */
+  async getMediaKeys(): Promise<string[]> {
+    if (!this.db) await this.init();
+    if (!this.db) return [];
+    return new Promise((resolve) => {
+      const tx = this.db!.transaction(CONSTANTS.DB_MEDIA_STORE, "readonly");
+      const request = tx.objectStore(CONSTANTS.DB_MEDIA_STORE).getAllKeys();
+      request.onsuccess = () => resolve(((request.result as IDBValidKey[]) ?? []).map(String));
+      request.onerror = () => resolve([]);
+    });
+  }
+
+  async putMediaRecords(records: MediaRecord[]): Promise<void> {
+    if (records.length === 0) return;
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error("数据库初始化失败");
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(CONSTANTS.DB_MEDIA_STORE, "readwrite");
+      const store = tx.objectStore(CONSTANTS.DB_MEDIA_STORE);
+      for (const record of records) store.put(record, record.hash);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(new Error("媒体引用计数写入失败"));
+    });
+  }
+
+  async deleteMedia(hashes: string[]): Promise<void> {
+    if (hashes.length === 0) return;
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error("数据库初始化失败");
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(CONSTANTS.DB_MEDIA_STORE, "readwrite");
+      const store = tx.objectStore(CONSTANTS.DB_MEDIA_STORE);
+      for (const hash of hashes) store.delete(hash);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(new Error("媒体删除失败"));
+    });
   }
 
   // 删除单篇文章
@@ -258,10 +396,11 @@ export class DBService {
   async bulkPutArticles(articles: Article[]): Promise<void> {
     if (!this.db) await this.init();
     if (!this.db) throw new Error("数据库初始化失败");
+    const slimArticles = await this.extractAndStoreMedia(articles);
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(CONSTANTS.DB_STORE, "readwrite");
       const store = tx.objectStore(CONSTANTS.DB_STORE);
-      for (const article of articles) {
+      for (const article of slimArticles) {
         store.put(article, `article-${article.id}`);
       }
       tx.oncomplete = () => resolve();
@@ -273,6 +412,7 @@ export class DBService {
   async clearAndBulkSaveArticles(articles: Article[]): Promise<void> {
     if (!this.db) await this.init();
     if (!this.db) throw new Error("数据库初始化失败");
+    const slimArticles = await this.extractAndStoreMedia(articles);
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(CONSTANTS.DB_STORE, "readwrite");
       const store = tx.objectStore(CONSTANTS.DB_STORE);
@@ -287,8 +427,8 @@ export class DBService {
           }
           cursor.continue();
         } else {
-          // 2. 批量写入新文章
-          for (const article of articles) {
+          // 2. 批量写入新文章（媒体已先行入库）
+          for (const article of slimArticles) {
             store.put(article, `article-${article.id}`);
           }
         }

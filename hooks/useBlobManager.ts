@@ -1,5 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { base64ToBlob } from '../src/utils/fileHelpers';
+import { MEDIA_REF_SCHEME } from '../src/utils/mediaRefs';
+import { getMediaDataUrl } from '../services/mediaStore';
 
 /**
  * 全局共享的 Blob URL 缓存和清理队列
@@ -243,6 +245,12 @@ export function useBlobManager() {
   // 异步创建或获取缓存的Blob URL（Worker 解码，不阻塞主线程）
   const getBlobUrlAsync = useCallback((dataUrl: string | null | undefined): Promise<string | null> => {
     if (!dataUrl) return Promise.resolve(null);
+    // P0-A 媒体引用：回源 media_store 取 data URL，再走既有 Worker 解码链路
+    // （缓存分两层：mediaStore 的 data URL LRU + decodeToBlobUrl 的 blob URL 缓存）
+    if (dataUrl.startsWith(MEDIA_REF_SCHEME)) {
+      return getMediaDataUrl(dataUrl.slice(MEDIA_REF_SCHEME.length))
+        .then((resolved) => (resolved ? decodeToBlobUrl(resolved) : null));
+    }
     // 如果不是 data URL，直接返回
     if (!dataUrl.startsWith('data:')) {
       return Promise.resolve(dataUrl);

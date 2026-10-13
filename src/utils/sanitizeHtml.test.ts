@@ -17,4 +17,21 @@ describe('sanitizeHtml', () => {
     const second = sanitizeHtml(html);
     expect(second).toBe(first);
   });
+
+  it('P0-A：媒体引用 sws-media:// 的 src 不被剥离', () => {
+    const html = '<p>x</p><img src="sws-media://0123456789abcdef">';
+    const result = sanitizeHtml(html);
+    expect(result).toContain('sws-media://0123456789abcdef');
+  });
+
+  it('P0-A：视频/音频（rawHtml 媒体容器）的引用 src 同样不被剥离', () => {
+    const html = '<div class="media-container"><video controls src="sws-media://0123456789abcdef"></video></div>';
+    expect(sanitizeHtml(html)).toContain('sws-media://0123456789abcdef');
+  });
+
+  it('危险 scheme 仍被拒绝；相对路径与 data 图片照常放行', () => {
+    expect(sanitizeHtml('<a href="javascript:alert(1)">x</a>')).not.toContain('javascript:');
+    expect(sanitizeHtml('<img src="/local/a.png">')).toContain('/local/a.png');
+    expect(sanitizeHtml('<img src="data:image/webp;base64,AAAA">')).toContain('data:image/webp');
+  });
 });

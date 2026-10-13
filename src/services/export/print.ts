@@ -7,6 +7,7 @@ import { base64ToFile, decodePdfBytes } from './utils/file';
 import { ExportOptions, ExportMetadata } from './reader';
 import { sortArticlesByPriority } from '../../utils/articleSort';
 import { escapeHtml, escapeAttr, getPlainText } from '../../utils/stringUtils';
+import { resolveArticlesMediaData } from '../../../services/mediaStore';
 
 /** 正文判定阈值：去标签实体后超过此字数才算有实质正文（过滤空段落/残留符号） */
 export const PRINT_BODY_TEXT_THRESHOLD = 10;
@@ -246,6 +247,9 @@ export async function generatePrintableHTML(
     metadata: ExportMetadata = {},
     onProgress?: (done: number, total: number) => void
 ): Promise<string> {
+    // P0-A 防御性还原：调用方（useExportManager）通常已还原，此处兜底保证产物自包含；
+    // 无引用时零开销（collectArticleMediaHashes 直接返回空，不触碰 IndexedDB）
+    articles = await resolveArticlesMediaData(articles);
     const sortedArticles = sortArticlesByPriority(articles);
 
     const alternateDesign = options.useAlternateDesign ?? false;

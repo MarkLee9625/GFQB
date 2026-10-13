@@ -4,6 +4,7 @@ import { usePanZoom } from '../../../hooks/usePanZoom';
 import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
 import { fileToDataURL, compressImage } from '../../../src/utils/fileHelpers';
 import { toast } from '../../../src/utils/toast';
+import { resolveMediaValue } from '../../../services/mediaStore';
 
 type ImageType = 'cover' | 'back';
 
@@ -48,12 +49,34 @@ export function useImageEditor({
     debounceDelay: 150,
   });
 
-  const imageUrl = article[imageField];
+  const rawImageUrl = article[imageField];
+  // P0-A：封面/封底以 sws-media:// 引用存储，渲染与自动适配前需还原为 data URL
+  const [imageUrl, setImageUrl] = useState<string | undefined>(rawImageUrl ?? undefined);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const lastAutoFitRef = useRef<{ scale: number; posX: number; posY: number } | null>(null);
   const [isImageSelected, setIsImageSelected] = useState(false);
   const [toolbarPos, setToolbarPos] = useState<{ top: number; left: number } | null>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const raw = rawImageUrl ?? undefined;
+    if (!raw) {
+      setImageUrl(undefined);
+      return;
+    }
+    if (!raw.includes('sws-media://')) {
+      setImageUrl(raw);
+      return;
+    }
+    let cancelled = false;
+    void resolveMediaValue(raw)
+      .then((resolved) => { if (!cancelled) setImageUrl(resolved ?? undefined); })
+      .catch((err) => {
+        console.warn('[ImageEditor] 封面/封底媒体还原失败', err);
+        if (!cancelled) setImageUrl(undefined);
+      });
+    return () => { cancelled = true; };
+  }, [rawImageUrl]);
 
   useEffect(() => {
     if (!isImageSelected) {
