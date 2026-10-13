@@ -87,6 +87,44 @@ if (process.env.NODE_ENV === 'production') {
   console.log('\x1b[36m%s\x1b[0m', '📡 API 路由已注册');
 }
 
+// 代理鉴权（/api/* 端点共用）：生产模式同源回环免检，其余一律校验 x-sws-proxy-secret 头。
+// 不能只信任 Origin 头（客户端可任意伪造），必须同时校验请求来源为本机回环地址；
+// 局域网/IP 访问一律走 secret 校验。校验失败时已直接响应 403，调用方只需 return。
+function authenticateProxyRequest(req, res) {
+  const remoteAddr = req.socket?.remoteAddress || req.ip || '';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isLoopback =
+    remoteAddr === '127.0.0.1' || remoteAddr === '::1' ||
+    remoteAddr === '::ffff:127.0.0.1';
+  const allowedOrigins = [
+    `http://localhost:${PORT}`,
+    `http://127.0.0.1:${PORT}`,
+    `http://[::1]:${PORT}`,
+  ];
+  const isSameOrigin = typeof req.headers.origin === 'string' && allowedOrigins.includes(req.headers.origin);
+
+  if (isProduction && isLoopback && isSameOrigin) return { ok: true, remoteAddr };
+
+  const proxySecret = process.env.PROXY_SECRET;
+  if (!proxySecret) {
+    console.warn('⚠️  PROXY_SECRET 未配置，代理接口拒绝所有请求');
+    res.status(403).json({
+      error: 'Forbidden',
+      message: '代理服务未正确配置',
+    });
+    return { ok: false, remoteAddr };
+  }
+  if (req.headers['x-sws-proxy-secret'] !== proxySecret) {
+    console.warn('🚨 非法代理接口访问尝试：缺少或错误的 x-sws-proxy-secret 头部');
+    res.status(403).json({
+      error: 'Forbidden',
+      message: '无权访问此 API 接口',
+    });
+    return { ok: false, remoteAddr };
+  }
+  return { ok: true, remoteAddr };
+}
+
 // 健康检查端点
 app.get('/api/health', (req, res) => {
   res.json({
@@ -101,43 +139,12 @@ app.get('/api/health', (req, res) => {
 // DeepSeek API 代理端点
 app.post('/api/deepseek/generate', async (req, res) => {
   try {
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    // 生产模式同源跳过校验：不能只信任 Origin 头（客户端可任意伪造），
-    // 必须同时校验请求来源为本机回环地址。局域网/IP 访问一律走 secret 校验
-    const remoteAddr = req.socket?.remoteAddress || req.ip || '';
-    const isLoopback =
-      remoteAddr === '127.0.0.1' || remoteAddr === '::1' ||
-      remoteAddr === '::ffff:127.0.0.1';
-    const allowedOrigins = [
-      `http://localhost:${PORT}`,
-      `http://127.0.0.1:${PORT}`,
-      `http://[::1]:${PORT}`,
-    ];
-    const isSameOrigin = typeof req.headers.origin === 'string' && allowedOrigins.includes(req.headers.origin);
-
-    if (!(isProduction && isLoopback && isSameOrigin)) {
-      const proxySecret = process.env.PROXY_SECRET;
-      if (!proxySecret) {
-        console.warn('⚠️  PROXY_SECRET 未配置，代理接口拒绝所有请求');
-        return res.status(403).json({
-          error: 'Forbidden',
-          message: '代理服务未正确配置',
-        });
-      }
-      const requestSecret = req.headers['x-sws-proxy-secret'];
-
-      if (requestSecret !== proxySecret) {
-        console.warn('🚨 非法代理接口访问尝试：缺少或错误的 x-sws-proxy-secret 头部');
-        return res.status(403).json({
-          error: 'Forbidden',
-          message: '无权访问此 API 接口',
-        });
-      }
-    }
+    // 鉴权：生产同源回环免检，否则校验 proxy-secret（共用逻辑见 authenticateProxyRequest）
+    const auth = authenticateProxyRequest(req, res);
+    if (!auth.ok) return;
 
     // 限流（鉴权之后、上游之前）：同一 IP 每分钟最多 60 次，防止误刷/脚本耗尽上游配额
-    const clientIp = req.ip || remoteAddr || 'unknown';
+    const clientIp = req.ip || auth.remoteAddr || 'unknown';
     const limit = checkRateLimit(clientIp);
     res.setHeader('X-RateLimit-Limit', String(RATE_LIMIT_MAX_REQUESTS));
     res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
@@ -215,6 +222,75 @@ app.post('/api/deepseek/generate', async (req, res) => {
   }
 });
 
+// 论文检索代理端点：arXiv API（export.arxiv.org 无 CORS 头，必须服务端拉取）
+// 目前仅支持 source=arxiv（OpenAlex 由前端直连，见 src/services/fetchers/paperFetcher.ts）
+app.get('/api/papers/search', async (req, res) => {
+  const auth = authenticateProxyRequest(req, res);
+  if (!auth.ok) return;
+
+  const clientIp = req.ip || auth.remoteAddr || 'unknown';
+  const limit = checkRateLimit(clientIp);
+  if (limit.limited) {
+    res.setHeader('Retry-After', '60');
+    return res.status(429).json({
+      error: 'Too Many Requests',
+      message: '请求过于频繁，请稍后重试',
+    });
+  }
+
+  const source = String(req.query.source || '');
+  if (source !== 'arxiv') {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: '仅支持 source=arxiv',
+    });
+  }
+  const query = String(req.query.q || '').trim().slice(0, 300);
+  if (!query) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: '缺少检索词 q',
+    });
+  }
+  const startN = Math.max(0, parseInt(String(req.query.start), 10) || 0);
+  const maxN = Math.min(50, Math.max(1, parseInt(String(req.query.maxResults), 10) || 20));
+
+  const arxivUrl = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=${startN}&max_results=${maxN}&sortBy=relevance`;
+
+  const controller = new AbortController();
+  const upstreamTimeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const upstream = await fetch(arxivUrl, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'sws-gongfa-bff/1.0 (paper-search proxy)' },
+    });
+    if (!upstream.ok) {
+      console.error(`❌ arXiv 上游错误: HTTP ${upstream.status}`);
+      return res.status(502).json({
+        error: 'Bad Gateway',
+        message: `arXiv HTTP ${upstream.status}`,
+      });
+    }
+    const xml = await upstream.text();
+    res.json({ ok: true, xml });
+  } catch (upstreamError) {
+    if (upstreamError.name === 'AbortError' || controller.signal.aborted) {
+      console.error('🔥 arXiv 请求超时 (>20s)');
+      return res.status(504).json({
+        error: 'Gateway Timeout',
+        message: 'arXiv 请求超时，请稍后重试',
+      });
+    }
+    console.error('🔥 arXiv 代理错误:', upstreamError);
+    res.status(502).json({
+      error: 'Bad Gateway',
+      message: upstreamError.message || 'arXiv 请求失败',
+    });
+  } finally {
+    clearTimeout(upstreamTimeout);
+  }
+});
+
 // 生产环境：兜底路由（支持前端 History 路由）
 if (process.env.NODE_ENV === 'production') {
   app.get('/*splat', (req, res) => {
@@ -229,6 +305,7 @@ app.listen(PORT, () => {
   console.log('\x1b[36m%s\x1b[0m', `📍 本地地址: http://localhost:${PORT}`);
   console.log('\x1b[36m%s\x1b[0m', `📡 健康检查: http://localhost:${PORT}/api/health`);
   console.log('\x1b[36m%s\x1b[0m', `🤖 DeepSeek 代理: http://localhost:${PORT}/api/deepseek/generate`);
+  console.log('\x1b[36m%s\x1b[0m', `📄 论文检索代理: http://localhost:${PORT}/api/papers/search`);
   console.log('\x1b[33m%s\x1b[0m', `🌍 环境模式: ${process.env.NODE_ENV || 'development'}`);
   
   if (process.env.NODE_ENV === 'production') {

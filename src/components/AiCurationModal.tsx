@@ -1,9 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { batchEvaluateArticles, translateAndFormatAcademic } from '../../services/aiService';
 import type { UniversalArticleMeta } from '../types';
-type SourceType = 'wechat' | 'rss' | 'patent' | 'aip';
+type SourceType = 'wechat' | 'rss' | 'patent' | 'aip' | 'paper';
 import { fetchRssFeed, RSS_PRESETS } from '../services/fetchers/rssFetcher';
-import { fetchPatents, PATENT_KEYWORDS } from '../services/fetchers/patentFetcher';
+import {
+  searchPapers,
+  dedupePapers,
+  PAPER_KEYWORDS,
+  type PaperSort,
+  type PaperYearRange,
+} from '../services/fetchers/paperFetcher';
 import { toast } from '../utils/toast';
 
 interface AiCurationModalProps {
@@ -20,7 +26,14 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
   const [progressText, setProgressText] = useState('');
   const [adoptedIds, setAdoptedIds] = useState<Set<string>>(new Set());
   const [selectedRssUrl, setSelectedRssUrl] = useState(RSS_PRESETS[0].url);
-  const [patentKeyword, setPatentKeyword] = useState(PATENT_KEYWORDS[0].value);
+  // 论文检索参数（预设词下拉 + 始终可编辑的关键词输入框）
+  const [paperPreset, setPaperPreset] = useState(PAPER_KEYWORDS[0].value);
+  const [paperCustom, setPaperCustom] = useState(false);
+  const [paperKeyword, setPaperKeyword] = useState(PAPER_KEYWORDS[0].value);
+  const [paperYearRange, setPaperYearRange] = useState<PaperYearRange>('all');
+  const [paperSort, setPaperSort] = useState<PaperSort>('relevance');
+  /** OpenAlex 游标分页：null 表示没有更多页 */
+  const [paperCursor, setPaperCursor] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -145,8 +158,8 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
       return;
     }
 
-    // 如果是学术文献（底层类型为了兼容依然是 'patent'），触发深度编译
-    if (article.sourceType === 'patent') {
+    // 学术文献触发深度编译（'paper' 为新检索源；'patent' 为旧数据兼容）
+    if (article.sourceType === 'patent' || article.sourceType === 'paper') {
 
       try {
         const translatedContent = await translateAndFormatAcademic(article);
@@ -183,17 +196,55 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
      }
    };
 
-  const handleFetchPatents = async () => {
-     setIsProcessing(true);
-     try {
-       const newArticles = await fetchPatents(patentKeyword);
-       setArticles(prev => [...prev, ...newArticles]);
-     } catch (error: unknown) {
-       toast.error(error instanceof Error ? error.message : '未知错误');
-     } finally {
-       setIsProcessing(false);
-     }
-   };
+  // 论文检索：OpenAlex 直连优先，BFF/arXiv 兜底（多引擎见 paperFetcher.ts）
+  const handleSearchPapers = async () => {
+    const keyword = paperKeyword.trim();
+    if (!keyword) {
+      toast.warning('请输入英文检索关键词');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const result = await searchPapers({ keyword, yearRange: paperYearRange, sort: paperSort });
+      const fresh = dedupePapers(result.articles, articles);
+      setArticles(prev => [...prev, ...fresh]);
+      setPaperCursor(result.nextCursor);
+
+      if (fresh.length > 0) {
+        toast.success(`检索到 ${fresh.length} 篇论文${fresh.length < result.articles.length ? '（重复已过滤）' : ''}`);
+      } else if (result.articles.length > 0) {
+        toast.warning('结果均已在库中（重复条目已过滤）');
+      } else {
+        toast.warning('未检索到匹配论文，试试更换关键词或放宽年份');
+      }
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : '论文检索失败');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 加载更多：仅 OpenAlex 支持游标续页（paperCursor 为 null 时不显示按钮）
+  const handleLoadMorePapers = async () => {
+    if (!paperCursor) return;
+    setIsProcessing(true);
+    try {
+      const result = await searchPapers({
+        keyword: paperKeyword.trim(),
+        yearRange: paperYearRange,
+        sort: paperSort,
+        cursor: paperCursor,
+      });
+      const fresh = dedupePapers(result.articles, articles);
+      setArticles(prev => [...prev, ...fresh]);
+      setPaperCursor(result.nextCursor);
+      if (fresh.length === 0) toast.info('没有更多新论文了');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : '加载更多失败');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -208,8 +259,8 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
               <span className="text-2xl">🤖</span> AI 智能选题总编室
             </h2>
             
-            {/* 动态控制面板：根据当前激活的 Tab 显示不同操作 */}
-            <div className="flex items-center gap-3 ml-4">
+            {/* 动态控制面板：根据当前激活的 Tab 显示不同操作（控件较多，允许换行） */}
+            <div className="flex flex-wrap items-center gap-3 ml-4">
               {activeSource === 'wechat' && (
                 <>
                   <input type="file" accept=".md" multiple ref={fileInputRef} onChange={handleFileUpload} className="hidden" id="md-upload" />
@@ -240,33 +291,74 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
                 </>
               )}
 
-              {activeSource === 'patent' && (
+              {activeSource === 'paper' && (
                 <>
                   <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden">
                     <select 
-                      value={patentKeyword}
-                      onChange={(e) => setPatentKeyword(e.target.value)}
+                      value={paperCustom ? '__custom' : paperPreset}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom') {
+                          setPaperCustom(true);
+                          setPaperKeyword('');
+                        } else {
+                          setPaperCustom(false);
+                          setPaperPreset(e.target.value);
+                          setPaperKeyword(e.target.value);
+                        }
+                      }}
                       className="px-3 py-2 text-sm text-gray-700 bg-gray-50 border-r border-gray-300 focus:outline-none"
                     >
-                      {PATENT_KEYWORDS.map((kw, idx) => (
+                      {PAPER_KEYWORDS.map((kw, idx) => (
                         <option key={idx} value={kw.value}>{kw.label}</option>
                       ))}
+                      <option value="__custom">自定义关键词</option>
                     </select>
                     <input 
                       type="text" 
-                      placeholder="或输入自定义英文关键词..." 
-                      className="w-48 px-3 py-2 text-sm focus:outline-none"
-                      value={!PATENT_KEYWORDS.find(k => k.value === patentKeyword) ? patentKeyword : ''}
-                      onChange={(e) => setPatentKeyword(e.target.value)}
+                      placeholder="英文检索词，可自由改写..." 
+                      className="w-44 px-3 py-2 text-sm focus:outline-none"
+                      value={paperKeyword}
+                      onChange={(e) => {
+                        setPaperKeyword(e.target.value);
+                        if (!paperCustom && e.target.value !== paperPreset) setPaperCustom(true);
+                      }}
                     />
                   </div>
+                  <select 
+                    value={paperYearRange}
+                    onChange={(e) => setPaperYearRange(e.target.value as PaperYearRange)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">不限年份</option>
+                    <option value="1">近 1 年</option>
+                    <option value="3">近 3 年</option>
+                    <option value="5">近 5 年</option>
+                  </select>
+                  <select 
+                    value={paperSort}
+                    onChange={(e) => setPaperSort(e.target.value as PaperSort)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="relevance">相关度排序</option>
+                    <option value="cited">被引最多</option>
+                    <option value="recent">最新发表</option>
+                  </select>
                   <button 
-                    onClick={handleFetchPatents}
+                    onClick={handleSearchPapers}
                     disabled={isProcessing}
                     className="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-bold shadow-sm hover:bg-amber-500 hover:text-white transition-colors disabled:opacity-50"
                   >
                     {isProcessing ? '⏳ 检索中...' : '🎓 检索前沿文献'}
                   </button>
+                  {paperCursor && (
+                    <button 
+                      onClick={handleLoadMorePapers}
+                      disabled={isProcessing}
+                      className="px-3 py-2 bg-white text-gray-600 border border-gray-300 rounded-lg text-sm font-bold shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      ⬇️ 加载更多
+                    </button>
+                  )}
                 </>
               )}
               
@@ -301,7 +393,7 @@ export default function AiCurationModal({ isOpen, onClose, onAdopt }: AiCuration
             { id: 'wechat', icon: '📁', label: '微信/MD导入' },
             // 战略聚焦：暂时隐藏 RSS 和 AiP，深挖学术文献
             // { id: 'rss', icon: '🌐', label: '全球 RSS 资讯' },
-            { id: 'patent', icon: '🎓', label: '前沿学术文献' },
+            { id: 'paper', icon: '🎓', label: '前沿学术文献' },
             // { id: 'aip', icon: '🛡️', label: '船级社 AiP' }
           ].map(tab => (
             <button
