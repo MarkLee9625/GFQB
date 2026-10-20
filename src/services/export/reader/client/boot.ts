@@ -7,6 +7,14 @@
 
 export function getClientBootCode(): string {
     return `
+    function b64ToUtf8(b64) {
+        var bin = atob(b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        if (typeof TextDecoder !== 'undefined') return new TextDecoder().decode(bytes);
+        return decodeURIComponent(escape(bin));
+    }
+
     function decompressInWorker(method, updateProgress) {
         return new Promise(function(resolve, reject) {
             var workerCode = [
@@ -74,8 +82,8 @@ export function getClientBootCode(): string {
             updateProgress(0, '正在加载数据...');
             var method = window.__SWS_COMPRESSION_METHOD__ || 'none';
             if (method === 'none') {
-                window.__SWS_DATA_ARTICLES__ = JSON.parse(decodeURIComponent(escape(atob(window.__SWS_DATA_ARTICLES_B64__))));
-                window.__SWS_DATA_CONFIG__ = JSON.parse(decodeURIComponent(escape(atob(window.__SWS_DATA_CONFIG_B64__))));
+                window.__SWS_DATA_ARTICLES__ = JSON.parse(b64ToUtf8(window.__SWS_DATA_ARTICLES_B64__));
+                window.__SWS_DATA_CONFIG__ = JSON.parse(b64ToUtf8(window.__SWS_DATA_CONFIG_B64__));
             } else if (typeof Worker !== 'undefined' && typeof DecompressionStream !== 'undefined') {
                 var result = await decompressInWorker(method, updateProgress);
                 window.__SWS_DATA_ARTICLES__ = result.articles;
@@ -96,8 +104,8 @@ export function getClientBootCode(): string {
                     var cd2 = await decompressDirect(window.__SWS_DATA_CONFIG_B64__, window.__SWS_COMPRESSION_METHOD__, function(){});
                     window.__SWS_DATA_CONFIG__ = JSON.parse(cd2);
                 } else {
-                    window.__SWS_DATA_ARTICLES__ = JSON.parse(decodeURIComponent(escape(atob(window.__SWS_DATA_ARTICLES_B64__))));
-                    window.__SWS_DATA_CONFIG__ = JSON.parse(decodeURIComponent(escape(atob(window.__SWS_DATA_CONFIG_B64__))));
+                    window.__SWS_DATA_ARTICLES__ = JSON.parse(b64ToUtf8(window.__SWS_DATA_ARTICLES_B64__));
+                    window.__SWS_DATA_CONFIG__ = JSON.parse(b64ToUtf8(window.__SWS_DATA_CONFIG_B64__));
                 }
             } catch(fe) {
                 console.error('[Reader] 降级也失败:', fe);

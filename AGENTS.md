@@ -12,11 +12,13 @@
 
 后续开发按 **`docs/开发方案-性能优化与功能增强.md`** 执行：8 张任务卡（P0-A 媒体拆表、P0-B 保存 flush、P1-A 回收站+备份、P1-B 状态域拆分、P2-A 撤销栈、P2-B 图谱 ?raw 改造、P2-C 小件包、P3 随卡测试），每卡含现状证据/设计/步骤/验收/风险。**开工前先读该文档**；完成后在此节标注进度并回填文档附录 B 性能基线。
 
+阅读包优化按 **`docs/开发方案-阅读包体积与打开速度优化.md`**（R 系列）执行。**2026-10-20 落地**：打印空白页根治（A1 台架/A2 双约束/A3 分页清理/A4 真数据回归）+ R0 基线/R-D0 去重/R1-a/R1-b/R2 守卫/R3 告警/R4/R4-auto（v2 布局说明见 `docs/阅读包v2布局说明.md`；发布须 `npm run build` 后用生产服务导出，dev 导出为 v1 骨架）。
+
 ## 暂停开发事项（2026-09-05 用户决议）
 
 - **AI 选题评审暂停开发**：`batchEvaluateArticles`（`services/ai/review.ts`）及配套入口（`AiCurationModal` 评审链路）暂时用不到，现有代码保持原样可用，不删除、不增强。
 - 连带搁置：已识别的“评审批量无上限→按 10 篇分批”改造，在评审解冻前不实施。
-- 同日决议：卷首语（`generateForeword`）推理强度保持默认 `max`，不降档。
+- 同日决议：卷首语（`generateForeword`）推理强度保持默认 `max`，不降档。—— **2026-10-19 用户改判：全局默认思考强度改为 `high`（模型仍 `deepseek-flash`），且所有调用（含元数据/扩写/标题/评审/学术编译等轻任务）统一 `high`，不再有传 `low` 的调用点；本条作废**。
 
 ## 文件编辑约定（重要）
 
@@ -54,6 +56,7 @@ npm run typecheck    # tsc --noEmit
 npm run start        # 生产模式 (NODE_ENV=production node server.js)
 npm run test:watch   # vitest 监听模式
 npm run test:server  # BFF 回归测试 (node --test server.test.mjs)
+npm run verify:print / :issue3 / :v2e2e / :vtranscode  # 打印台架 / 真数据回归 / v2端到端 / 转码真机门
 npm run test:file <path>  # bash scripts/test-file.sh <path>（单文件测试）
 npm run test:coverage     # 仅 fileHelpers.ts + pasteCleaner.ts
 npm run clean             # 清理构建产物（dist/ + public 下 PDF.js 资源）

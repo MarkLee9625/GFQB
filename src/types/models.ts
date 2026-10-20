@@ -19,6 +19,8 @@ export interface Article {
   posX?: number;
   posY?: number;
   pdfData?: string | null;
+  /** v2 外壳标记：是否有 PDF 附件（阅读器侧边栏角标用，不进库） */
+  hasPdf?: boolean;
   abstract?: string | null;
   tags?: string[];
   isPublished?: boolean;

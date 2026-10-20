@@ -45,6 +45,13 @@ export function getPrintableSkeleton(options: {
             min-height: auto;
             overflow: visible;
         }
+        /* 屏幕预览：PDF 页图按页宽显示（打印下另有 @media print 双约束）。
+           此前无此规则，1224px 自然宽在 210mm 容器里被 overflow:hidden 裁掉。 */
+        .pdf-full-page img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
         
 
         @media print {
@@ -154,9 +161,12 @@ export function getPrintableSkeleton(options: {
             }
 
             /* 4. Page-specific height and spacing rules */
+            /* A3：底 padding 置 0 —— 正文恰好排满整页时，5mm 底 padding 无处可去会被
+               碎片化到下一页形成纯空白页（2026第3期 p15，复现确认：前篇 footer/end-mark
+               顶着页底结束 → 空白 p15 → 下篇另起 p16）。顶 padding 保留首屏呼吸感。 */
             .print-page-wrapper.article-wrapper,
             .print-page-wrapper.toc-page {
-                padding: 5mm 20mm !important;
+                padding: 5mm 20mm 0 !important;
                 height: auto !important;
                 min-height: 0 !important;
             }
@@ -172,7 +182,12 @@ export function getPrintableSkeleton(options: {
                 height: auto !important;
             }
 
-            /* 6. PDF full-page image: contain 保纵横比，打印下高度自适应防溢出 */
+            /* 6. PDF full-page image（A2 双约束）：实测 5 种源 PDF 长宽比
+               （1.357~1.415）在 width:100% 下图高达 285~297mm，超过可打印高度
+               285mm（@page 底边距 12mm），被 Chrome 撕成“内容页+残片页”
+               （2026第3期 36 页，残片 1224x24）。高约束 280mm 与正文图
+               （processMediaForPrint）同口径，留 5mm 安全余量；宽不足时居中，
+               两侧留白（保真优先于铺满）。另加 break-inside:avoid 兜底。 */
             .print-page-wrapper.pdf-full-page {
                 padding: 0 !important;
                 margin: 0 !important;
@@ -184,13 +199,17 @@ export function getPrintableSkeleton(options: {
                 background: #fff !important;
                 page-break-before: always !important;
                 break-before: page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
             }
             .pdf-full-page img {
                 display: block !important;
-                width: 100% !important;
+                width: auto !important;
+                max-width: 100% !important;
                 height: auto !important;
+                max-height: 280mm !important;
                 object-fit: contain !important;
-                margin: 0 !important;
+                margin: 0 auto !important;
                 padding: 0 !important;
                 border: none !important;
             }
@@ -292,7 +311,8 @@ export function getPrintableSkeleton(options: {
             </div>
             <div class="print-toolbar-desc">
                 📋 <strong>导出为PDF</strong>：点击右侧按钮在打印对话框中选择"另存为PDF"或"Microsoft Print to PDF"<br/>
-                🖨️ <strong>直接打印</strong>：选择物理打印机并调整纸张设置为A4
+                🖨️ <strong>直接打印</strong>：选择物理打印机并调整纸张设置为A4<br/>
+                ⚙️ <strong>边距请选"默认"</strong>：自定义过大边距会压缩可打印区域，可能重新出现空白页
             </div>
         </div>
         <div class="print-btn-group">

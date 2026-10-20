@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { isValidReaderTemplate } from './reader';
+import { stripRedundantBlocks } from './v2format';
+import type { Article } from '../../types/models';
 
 const VALID_TEMPLATE = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -39,5 +41,46 @@ describe('isValidReaderTemplate', () => {
   it('拒绝不完整内容', () => {
     expect(isValidReaderTemplate('<html><head></head>')).toBe(false);
     expect(isValidReaderTemplate('')).toBe(false);
+  });
+});
+
+describe('stripRedundantBlocks（R-D0）', () => {
+  const vid = 'data:video/mp4;base64,' + 'A'.repeat(100);
+  const mk = (partial: Partial<Article> & { id: number }): Article =>
+    ({ title: `t${partial.id}`, category: '工法', content: '', ...partial }) as Article;
+
+  it('有 content 即剥离 blocks（阅读器可无损重算）', () => {
+    const a = mk({
+      id: 1,
+      content: `<p>正文</p><video src="${vid}"></video>`,
+      blocks: [{ id: 'blk-1', type: 'rawHtml', html: `<video src="${vid}"></video>` }] as never,
+    });
+    const { slim, stripped, kept } = stripRedundantBlocks([a]);
+    expect(stripped).toBe(1);
+    expect(kept).toBe(0);
+    expect(slim[0].blocks).toBeUndefined();
+    expect(slim[0].content).toContain('正文');
+    // 原数组不被改动
+    expect(a.blocks).toHaveLength(1);
+  });
+
+  it('空 content 但有 blocks 时保留（无法重算）', () => {
+    const a = mk({
+      id: 2,
+      content: '   ',
+      blocks: [{ id: 'blk-2', type: 'paragraph', content: '孤块' }] as never,
+    });
+    const { slim, stripped, kept } = stripRedundantBlocks([a]);
+    expect(stripped).toBe(0);
+    expect(kept).toBe(1);
+    expect(slim[0].blocks).toHaveLength(1);
+  });
+
+  it('无 blocks 的文章原样通过', () => {
+    const a = mk({ id: 3, content: '<p>纯文本</p>' });
+    const { slim, stripped, kept } = stripRedundantBlocks([a]);
+    expect(stripped).toBe(0);
+    expect(kept).toBe(0);
+    expect(slim[0]).toBe(a);
   });
 });

@@ -42,7 +42,7 @@ export async function generateArticleMeta(content: string): Promise<AIResult> {
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt },
             ],
-            reasoningEffort: 'low',
+            reasoningEffort: 'high',
         });
         const result = robustJsonParse<AIResult>(rawText);
         const title = String(result.title ?? '').trim();
@@ -84,7 +84,7 @@ export async function scaleText(text: string, mode: 'expand' | 'shrink'): Promis
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userPrompt },
             ],
-            reasoningEffort: 'low',
+            reasoningEffort: 'high',
         });
         return cleanPlainTextResponse(rawText);
     } catch (error) {
@@ -110,7 +110,7 @@ export async function generateTitleOnly(content: string): Promise<string> {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
         ],
-        reasoningEffort: 'low',
+        reasoningEffort: 'high',
     });
     const title = cleanPlainTextResponse(rawText).trim().replace(/^["']|["']$/g, '');
     if (!title) {

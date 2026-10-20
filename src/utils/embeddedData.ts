@@ -7,6 +7,8 @@
  * Worker 或 DecompressionStream 不可用时回退主线程解压。
  */
 import { decodeB64Utf8 } from './encoding';
+import { restoreV2Article, type ArticleShell } from '../services/export/v2format';
+import type { Article } from '../types';
 
 export type EmbeddedCompressionMethod = 'none' | 'gzip' | 'deflate';
 
@@ -147,3 +149,108 @@ export async function parseEmbeddedData<T>(
   const text = await decompressDirect(b64, m);
   return JSON.parse(text) as T;
 }
+
+// ---------------------------------------------------------------------------
+// v2 布局 loader（R1-b/R3）：meta 秒开骨架 → body 按篇懒解码 → 媒体指针回填。
+// v1 老文件无 v2 标记，调用方（reader.tsx）按 readV2Store 是否为 null 分流。
+// ---------------------------------------------------------------------------
+
+export interface V2Store {
+  method: EmbeddedCompressionMethod;
+  bodiesB64: string[];
+  media: string[];
+}
+
+export interface V2Manifest extends V2Store {
+  metaB64: string;
+}
+
+/** v2 存在性检查：标记 + 三段缺一即 null（走 v1 老路径） */
+export function readV2Store(): V2Manifest | null {
+  const w = typeof window !== 'undefined' ? window : (globalThis as unknown as Window);
+  if (w?.__SWS_FORMAT__ !== 'v2') return null;
+  const metaB64 = w?.__SWS_V2_META_B64__;
+  const bodiesB64 = w?.__SWS_V2_BODIES_B64__;
+  const media = w?.__SWS_V2_MEDIA__;
+  if (typeof metaB64 !== 'string' || !Array.isArray(bodiesB64) || !Array.isArray(media)) return null;
+  const m = w?.__SWS_V2_METHOD__ ?? w?.__SWS_COMPRESSION_METHOD__;
+  return { metaB64, bodiesB64, media, method: m === 'gzip' || m === 'deflate' ? m : 'none' };
+}
+
+/** 解码 meta（KB 级，主线程直接解即可） */
+export async function parseV2Meta(metaB64: string, method: EmbeddedCompressionMethod): Promise<ArticleShell[]> {
+  const text = method === 'none' ? decodeB64Utf8(metaB64) : await decompressDirect(metaB64, method);
+  const shells = JSON.parse(text) as ArticleShell[];
+  if (!Array.isArray(shells)) throw new Error('v2 meta 损坏');
+  return shells;
+}
+
+/** body b64 超此长度走 Worker 解压（大篇主线程解压会冻结翻页） */
+export const V2_WORKER_THRESHOLD = 256 * 1024;
+
+async function gunzipText(b64: string, method: 'gzip' | 'deflate'): Promise<string> {
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('当前浏览器不支持 DecompressionStream，无法解压阅读版数据');
+  }
+  if (b64.length > V2_WORKER_THRESHOLD && typeof Worker !== 'undefined') {
+    try {
+      return await decompressInWorker(b64, method);
+    } catch (workerErr) {
+      console.warn('[embeddedData] Worker 解压失败，回退主线程解压', workerErr);
+    }
+  }
+  return decompressDirect(b64, method);
+}
+
+export interface V2BodyLoader {
+  loadBody: (idx: number) => Promise<Article>;
+  cachedCount: () => number;
+  /** 索引干净完成（无失败）后释放媒体表；失败重试前不得调用 */
+  releaseMedia: () => void;
+}
+
+/**
+ * 按篇 loader：缓存 + 在途去重（翻页与后台索引并发时同篇只解一次）。
+ * @param shells 外壳数组（与 bodies 下标对齐；解码后断言 id 一致，防未来错位）
+ * 内存：单篇缓存成功即清空其 b64（失败保留供重试）；媒体表由 releaseMedia 在
+ * 索引干净完成时整体释放（失败篇重试前保留）。
+ */
+export function createV2BodyLoader(store: V2Store, shells: ArticleShell[]): V2BodyLoader {
+  const cache = new Map<number, Article>();
+  const inflight = new Map<number, Promise<Article>>();
+
+  async function loadBody(idx: number): Promise<Article> {
+    const hit = cache.get(idx);
+    if (hit) return hit;
+    const running = inflight.get(idx);
+    if (running) return running;
+    const p = (async () => {
+      try {
+        const b64 = store.bodiesB64[idx];
+        if (typeof b64 !== 'string' || b64 === '') throw new Error(`v2 body 缺失: ${idx}`);
+        const text = store.method === 'none' ? decodeB64Utf8(b64) : await gunzipText(b64, store.method);
+        const article = restoreV2Article(text, store.media);
+        const expectedId = shells[idx]?.id;
+        if (expectedId === undefined || article.id !== expectedId) {
+          throw new Error(`[v2] 下标错位: bodies[${idx}].id=${article.id} ≠ shells[${idx}].id=${expectedId}`);
+        }
+        cache.set(idx, article);
+        store.bodiesB64[idx] = '';
+        return article;
+      } finally {
+        inflight.delete(idx);
+      }
+    })();
+    inflight.set(idx, p);
+    return p;
+  }
+
+  return {
+    loadBody,
+    cachedCount: () => cache.size,
+    releaseMedia: () => {
+      store.media.length = 0;
+    },
+  };
+}
+

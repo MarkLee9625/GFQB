@@ -6,7 +6,7 @@ import { createImageHtml } from '../../../src/utils/encoding';
 import { escapeHtml } from '../../../src/utils/stringUtils';
 import { extractAbstractFromPdf } from '../../../src/services/pdf';
 import { calculateAutoFitPosition } from '../../../src/utils/imageMath';
-import { toast } from '../../../src/utils/toast';
+import { dismissToast, toast } from '../../../src/utils/toast';
 import { isSpecialCategory } from '../../../src/constants';
 
 interface UseFileUploadOptions {
@@ -108,7 +108,10 @@ export function useFileUpload({
       return;
     }
 
-    if (!contentRef.current) return;
+    if (!contentRef.current) {
+      e.target.value = '';
+      return;
+    }
     setIsProcessing(true);
     try {
         if (type === 'img') {
@@ -165,7 +168,55 @@ export function useFileUpload({
           // 默认作为附件挂载（不再提供转图片选项）
           setTempPdf({ name: file.name, data: base64 });
         } else {
-          const src = await fileToDataURL(file);
+          // R4-auto：视频入库自动转 720p。两层回退缺一不可：
+          // ① 转码模块 import 失败（分包 404 / file:// CORS）→ 直接原片入库，不中断上传；
+          // ② 管线内失败 → videoFileToDataURL 内部已保原片。
+          let src: string;
+          if (type === 'video') {
+            try {
+              const { videoFileToDataURL } = await import('../../../src/services/video/transcode');
+              let progressToastId: number | null = null;
+              let lastMilestone = -1;
+              const closeProgress = () => {
+                if (progressToastId !== null) {
+                  dismissToast(progressToastId);
+                  progressToastId = null;
+                }
+              };
+              src = await videoFileToDataURL(
+                file,
+                (ev) => {
+                  if (ev.kind === 'start') {
+                    progressToastId = toast.info('视频转码中（720p），请稍候…', 0);
+                  } else if (ev.kind === 'transcoded') {
+                    closeProgress();
+                    toast.success(`视频已压缩至 720p（${ev.origMB}MB → ${ev.newMB}MB）`);
+                  } else {
+                    closeProgress();
+                    toast.info(`视频保留原片（${ev.reason}）`);
+                  }
+                },
+                (p) => {
+                  // 里程碑式进度（25% 一跳），避免 toast 刷屏
+                  if (progressToastId === null || p.total <= 0) return;
+                  const pct = Math.floor((p.done / p.total) * 100);
+                  const milestone = Math.floor(pct / 25);
+                  if (milestone > lastMilestone) {
+                    lastMilestone = milestone;
+                    dismissToast(progressToastId);
+                    progressToastId = toast.info(`视频转码中 ${Math.min(99, milestone * 25)}%…`, 0);
+                  }
+                }
+              );
+              closeProgress();
+            } catch (err) {
+              console.warn('[Upload] 转码模块加载失败，保留原片:', err);
+              toast.info('转码模块加载失败，已保留原片');
+              src = await fileToDataURL(file);
+            }
+          } else {
+            src = await fileToDataURL(file);
+          }
 
           const tag = type === 'video' ?
             `<div class="media-container" contenteditable="false"><video controls src="${src}" style="max-width:100%; max-height:500px; border-radius:4px; background:#000;"></video></div><p><br/></p>` :

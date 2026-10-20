@@ -84,6 +84,31 @@ export interface CompressionResult {
     method: 'gzip' | 'deflate' | 'none';
 }
 
+/** R2 守卫阈值：单张 PNG 超过此二进制体积即告警（照片类 PNG 应走 WebP） */
+export const PNG_GUARD_THRESHOLD_BYTES = 500 * 1024;
+
+/**
+ * R2 守卫：统计 JSON 内超阈 PNG data URI 的处数与二进制体积。
+ * 纯函数，可单测；调用方（导出 Worker）在主线程外执行，正则一次扫描。
+ */
+export function countLargePngs(json: string, thresholdBytes = PNG_GUARD_THRESHOLD_BYTES): {
+    count: number;
+    binBytes: number;
+} {
+    const re = /data:image\/png;base64,([A-Za-z0-9+/=]+)/g;
+    let m: RegExpExecArray | null;
+    let count = 0;
+    let binBytes = 0;
+    const minB64Len = Math.ceil((thresholdBytes * 4) / 3);
+    while ((m = re.exec(json)) !== null) {
+        if (m[1].length >= minB64Len) {
+            count += 1;
+            binBytes += (m[1].length * 3) >> 2;
+        }
+    }
+    return { count, binBytes };
+}
+
 export async function compressData(data: string, format: 'gzip' | 'deflate' = 'gzip'): Promise<CompressionResult> {
     if (supportsCompressionStream()) {
         console.log('[压缩] 使用原生 CompressionStream API');

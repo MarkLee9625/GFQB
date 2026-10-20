@@ -28,6 +28,11 @@ dist-ssr
 .trae/
 *shellIntegration*
 
+# 打印/阅读验证台架临时产物
+scripts/print-verify/.tmp/
+scripts/read-verify/.tmp/
+scripts/read-verify/*/.tmp/
+
 # 环境配置隔离
 .env
 .env.local

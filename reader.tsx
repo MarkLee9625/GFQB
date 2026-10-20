@@ -3,7 +3,14 @@ import { createRoot } from 'react-dom/client';
 import './src/reader.css';
 import type { Article } from './src/types';
 import { sortArticlesByPriority } from './src/utils/articleSort';
-import { parseEmbeddedData } from './src/utils/embeddedData';
+import {
+  createV2BodyLoader,
+  parseEmbeddedData,
+  parseV2Meta,
+  readV2Store,
+  type V2BodyLoader,
+} from './src/utils/embeddedData';
+import type { ArticleShell } from './src/services/export/v2format';
 import { ArticleRenderer } from './components/renderers';
 import { isSpecialCategory } from './src/constants';
 
@@ -39,19 +46,123 @@ const ReaderApp: React.FC = () => {
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // v2：正文就绪集合（外壳 content:'' 与纯 PDF 空正文无法区分，必须显式跟踪）
+  const [readyIds, setReadyIds] = useState<Set<number>>(new Set());
+  // v2：索引失败集合（失败篇正文恒为空，必须常驻提示，否则"搜不全"无感知）
+  const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
+  const [indexing, setIndexing] = useState(false);
+  const [isV2, setIsV2] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentIndexRef = useRef(0);
   currentIndexRef.current = currentIndex;
   const articlesRef = useRef(articles);
   articlesRef.current = articles;
+  const loaderRef = useRef<V2BodyLoader | null>(null);
+  const shellsRef = useRef<ArticleShell[]>([]);
 
-  // 数据加载：文章与配置均按 __SWS_COMPRESSION_METHOD__ 解压（Worker 优先）
+  // v2：解码成功合并（就绪集 +=，失败集 -=；翻页与后台索引共用）
+  const mergeBody = useCallback((article: Article) => {
+    setArticles((prev) => prev.map((a) => (a.id === article.id ? article : a)));
+    setReadyIds((prev) => {
+      if (prev.has(article.id)) return prev;
+      const next = new Set(prev);
+      next.add(article.id);
+      return next;
+    });
+    setFailedIds((prev) => {
+      if (!prev.has(article.id)) return prev;
+      const next = new Set(prev);
+      next.delete(article.id);
+      return next;
+    });
+  }, []);
+
+  // v2：按需解码某篇（翻页/后台索引并发时 loader 内去重，同篇只解一次）
+  const ensureBody = useCallback(
+    (idx: number) => {
+      const loader = loaderRef.current;
+      const shell = shellsRef.current[idx];
+      if (!loader || !shell) return;
+      loader
+        .loadBody(idx)
+        .then(mergeBody)
+        .catch((e) => {
+          console.error('[Reader] 正文解码失败', shell.title, e);
+          setFailedIds((prev) => {
+            if (prev.has(shell.id)) return prev;
+            const next = new Set(prev);
+            next.add(shell.id);
+            return next;
+          });
+        });
+    },
+    [mergeBody]
+  );
+
+  // v2：一键重试全部失败篇（副作用在 updater 之外，见 P0-B 教训）
+  const retryFailed = useCallback(() => {
+    const shells = shellsRef.current;
+    failedIds.forEach((id) => {
+      const idx = shells.findIndex((s) => s.id === id);
+      if (idx >= 0) ensureBody(idx);
+    });
+  }, [ensureBody, failedIds]);
+
+  // 数据加载：v2（meta 秒开骨架 → 首篇优先 → 后台索引）/ v1（整包解码，老路径原样）
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const win = window;
+        const applyConfig = (config: ReaderConfig | null) => {
+          if (!config || cancelled) return;
+          if (config.logo) setLogo(config.logo);
+          if (config.sidebarMeta) setSidebarMeta(config.sidebarMeta);
+          if (config.alternateDesign) setAlternateDesign(config.alternateDesign);
+        };
+        const v2 = readV2Store();
+        if (v2) {
+          const shells = await parseV2Meta(v2.metaB64, v2.method);
+          const config = await parseEmbeddedData<ReaderConfig>(win.__SWS_DATA_CONFIG_B64__, v2.method);
+          if (cancelled) return;
+          if (shells.length === 0) {
+            throw new Error('未找到文章数据，请重新导出阅读版');
+          }
+          // meta/body 下标与导出排序一致（权威顺序，不二次排序以免错位）
+          shellsRef.current = shells;
+          setArticles(shells.map((s) => ({ ...s, content: '' }) as Article));
+          setCurrentIndex(0);
+          setIsV2(true);
+          applyConfig(config);
+          setLoading(false);
+          const loader = createV2BodyLoader(v2, shells);
+          loaderRef.current = loader;
+          setIndexing(true);
+          try {
+            // 首篇优先（await，保证释放决策计入它；窗格 effect 并发调 ensureBody(0)
+            // 会命中同一在途 Promise，不重复解），再后台顺序索引其余
+            const failed: number[] = [];
+            for (let i = 0; i < shells.length && !cancelled; i++) {
+              try {
+                const article = await loader.loadBody(i);
+                if (cancelled) return;
+                mergeBody(article);
+              } catch (e) {
+                console.error('[Reader] 后台索引跳过', shells[i]?.title, e);
+                if (shells[i]) failed.push(shells[i].id);
+              }
+            }
+            if (failed.length > 0 && !cancelled) {
+              setFailedIds((prev) => new Set([...prev, ...failed]));
+            }
+            // 索引干净完成（本轮零失败）即释放媒体表；有失败则保留供重试
+            if (failed.length === 0 && !cancelled) loader.releaseMedia();
+          } finally {
+            if (!cancelled) setIndexing(false);
+          }
+          return;
+        }
         const method = win.__SWS_COMPRESSION_METHOD__;
         const data = await parseEmbeddedData<Article[]>(win.__SWS_DATA_ARTICLES_B64__, method);
         const config = await parseEmbeddedData<ReaderConfig>(win.__SWS_DATA_CONFIG_B64__, method);
@@ -61,11 +172,7 @@ const ReaderApp: React.FC = () => {
         }
         setArticles(sortArticlesByPriority(data));
         setCurrentIndex(0);
-        if (config) {
-          if (config.logo) setLogo(config.logo);
-          if (config.sidebarMeta) setSidebarMeta(config.sidebarMeta);
-          if (config.alternateDesign) setAlternateDesign(config.alternateDesign);
-        }
+        applyConfig(config);
       } catch (e) {
         console.error('[Reader] 数据加载失败', e);
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -76,7 +183,16 @@ const ReaderApp: React.FC = () => {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // v2：当前篇未就绪时按需解码（正文窗显示加载态而非空文）；
+  // 已失败的不自动重试（否则每次后台成功都触发一次无效重试），走正文窗重试按钮
+  useEffect(() => {
+    if (!isV2 || !loaderRef.current) return;
+    const cur = articles[currentIndex];
+    if (cur && !readyIds.has(cur.id) && !failedIds.has(cur.id)) ensureBody(currentIndex);
+  }, [isV2, currentIndex, articles, readyIds, failedIds, ensureBody]);
 
   // 静态加载骨架（reader.html #app-boot）在 React 挂载后移除；
   // createRoot 首次 render 会清空容器，此处兜底防止任何残留
@@ -232,6 +348,17 @@ const ReaderApp: React.FC = () => {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
+          {isV2 && indexing && (
+            <div className="text-[11px] text-gray-400 mt-2">全文索引加载中（{readyIds.size}/{articles.length}）…</div>
+          )}
+          {isV2 && !indexing && failedIds.size > 0 && (
+            <div className="text-[11px] text-red-500 mt-2">
+              {failedIds.size} 篇索引失败，正文检索不全
+              <button onClick={retryFailed} className="ml-2 underline cursor-pointer">
+                重试
+              </button>
+            </div>
+          )}
         </div>
         <ul className="flex-1 overflow-y-auto px-[15px] m-0 list-none">
           {filtered.map(article => {
@@ -246,7 +373,7 @@ const ReaderApp: React.FC = () => {
                 }`}
               >
                 <div className={`text-[14px] font-semibold mb-1 leading-[1.4] ${active ? 'text-brand-blue' : 'text-gray-700'}`}>
-                  {article.pdfData && (
+                  {(article.pdfData || article.hasPdf) && (
                     <span className="bg-red-100 text-red-500 text-[9px] px-1 rounded font-bold mr-1">PDF</span>
                   )}
                   {article.title}
@@ -297,7 +424,28 @@ const ReaderApp: React.FC = () => {
         <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-none min-h-0">
           <div className="max-w-[980px] mx-auto p-4 md:p-6 lg:p-8">
             {current ? (
-              <ArticleRenderer article={current} mode="read" logo={logo} useAlternateDesign={alternateDesign} />
+              !isV2 || readyIds.has(current.id) ? (
+                <ArticleRenderer article={current} mode="read" logo={logo} useAlternateDesign={alternateDesign} />
+              ) : failedIds.has(current.id) ? (
+                <div className="flex items-center justify-center mt-[200px]">
+                  <div className="text-center">
+                    <div className="text-red-500 text-sm font-bold mb-2">正文加载失败</div>
+                    <button
+                      onClick={() => ensureBody(currentIndex)}
+                      className="px-4 py-1.5 text-xs font-bold text-brand-blue border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50"
+                    >
+                      重试
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center mt-[200px]">
+                  <div className="text-center">
+                    <div className="w-8 h-8 border-4 border-gray-200 border-t-brand-blue rounded-full animate-spin mx-auto mb-3"></div>
+                    <div className="text-gray-400 text-sm">正文加载中…</div>
+                  </div>
+                </div>
+              )
             ) : (
               <div className="text-center text-gray-300 mt-[200px]">请选择左侧文档</div>
             )}

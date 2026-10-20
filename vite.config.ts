@@ -54,6 +54,9 @@ export default defineConfig(({ mode }) => {
               if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor';
               if (id.includes('pdfjs-dist') || id.includes('fflate') || id.includes('file-saver')) return 'pdf-vendor';
               if (id.includes('/d3')) return 'graph-vendor';
+              // R4-auto：转码依赖必须独立懒 chunk —— 并入 eager vendor 会随首屏加载（~300KB），
+              // 且只有视频上传链路引用它。改动后用生产构建验证 chunk 图。
+              if (id.includes('mp4box') || id.includes('mp4-muxer')) return 'transcode-vendor';
               return 'vendor';
             }
           },

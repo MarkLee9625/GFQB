@@ -5,6 +5,8 @@ import { saveAs } from 'file-saver';
 import { sortArticlesByPriority } from '../../utils/articleSort';
 import { escapeHtml } from '../../utils/stringUtils';
 import { resolveArticlesMediaData } from '../../../services/mediaStore';
+import { toast } from '../../utils/toast';
+import { stripRedundantBlocks } from './v2format';
 
 export interface ExportOptions {
     useAlternateDesign?: boolean;
@@ -18,20 +20,38 @@ export interface ExportMetadata {
     date?: string;
 }
 
+export type ReaderExportFormat = 'v1' | 'v2';
+
 interface WorkerRequest {
     type: 'START_EXPORT';
     articlesBlob: Blob;
-    options: ExportOptions;
+    options: ExportOptions & { format?: ReaderExportFormat };
     metadata: ExportMetadata;
     companyInfo: typeof CONSTANTS.COMPANY_INFO;
 }
 
-interface WorkerResponse {
+interface WorkerResponseBase {
     type: 'EXPORT_COMPLETE';
-    articlesB64: string;
+    format: ReaderExportFormat;
     configB64: string;
     compressionMethod: string;
+    /** R2 守卫：超阈 PNG 处数/体积（旧 Worker 无此字段，缺省 0） */
+    pngLargeCount?: number;
+    pngLargeBytes?: number;
 }
+
+interface WorkerResponseV1 extends WorkerResponseBase {
+    format: 'v1';
+    articlesB64: string;
+}
+
+interface WorkerResponseV2 extends WorkerResponseBase {
+    format: 'v2';
+    /** Worker 内拼好的完整注入脚本（主线程只做模板替换，不碰 100MB 数组） */
+    injectionScript: string;
+}
+
+type WorkerResponse = WorkerResponseV1 | WorkerResponseV2;
 
 interface WorkerProgress {
     type: 'EXPORT_PROGRESS';
@@ -90,28 +110,11 @@ async function loadReaderTemplate(): Promise<string | null> {
 }
 
 /**
- * 将压缩数据注入阅读版模板。
- * 优先替换 <!--SWS_READER_DATA--> 锚点；兜底使用最后一个 </body>。
+ * 将注入脚本打进模板：优先 <!--SWS_READER_DATA--> 锚点；兜底最后一个 </body>。
  * 必须使用函数式替换：替换串中若出现 $& / $' 等序列，String.replace 会按
  * 特殊模式展开，导致模板被复制进脚本中间并截断（历史踩坑，见 post-build.js）。
  */
-function injectDataIntoReader(
-    template: string,
-    articlesB64: string,
-    configB64: string,
-    compressionMethod: string
-): string {
-    const safeArticlesB64 = articlesB64.replace(/<\//g, '<\\/');
-    const safeConfigB64 = configB64.replace(/<\//g, '<\\/');
-
-    const injectionScript = `
-    <script>
-    window.__SWS_DATA_ARTICLES_B64__ = "${safeArticlesB64}";
-    window.__SWS_DATA_CONFIG_B64__ = "${safeConfigB64}";
-    window.__SWS_COMPRESSION_METHOD__ = "${compressionMethod}";
-    </script>
-    `;
-
+function injectScriptIntoReader(template: string, injectionScript: string): string {
     if (template.includes('<!--SWS_READER_DATA-->')) {
         return template.replace('<!--SWS_READER_DATA-->', () => injectionScript);
     }
@@ -120,6 +123,30 @@ function injectDataIntoReader(
         return template.slice(0, lastBodyIdx) + injectionScript + template.slice(lastBodyIdx);
     }
     return template + injectionScript;
+}
+
+const escapeForScript = (s: string): string => s.replace(/<\//g, '<\\/');
+
+/** v1 注入（整包；仅降级骨架路径使用，生产模板已走 v2） */
+function injectDataIntoReader(
+    template: string,
+    articlesB64: string,
+    configB64: string,
+    compressionMethod: string
+): string {
+    const injectionScript = `
+    <script>
+    window.__SWS_DATA_ARTICLES_B64__ = "${escapeForScript(articlesB64)}";
+    window.__SWS_DATA_CONFIG_B64__ = "${escapeForScript(configB64)}";
+    window.__SWS_COMPRESSION_METHOD__ = "${compressionMethod}";
+    </script>
+    `;
+    return injectScriptIntoReader(template, injectionScript);
+}
+
+/** v2 注入脚本打进模板（脚本由 Worker 拼好，见 v2format.buildV2InjectionScript） */
+function injectV2DataIntoReader(template: string, injectionScript: string): string {
+    return injectScriptIntoReader(template, injectionScript);
 }
 
 /**
@@ -181,13 +208,15 @@ function injectD3IfNeeded(template: string, d3Source: string | null): string {
 }
 
 /**
- * 生成本地文章 JSON Blob（保留 blocks/pdfData/封面封底全部字段）。
- * 仅在主线程做一次序列化，随后交给 Worker 压缩；
- * 不再结构化克隆整个对象图，避免同步深拷贝几十 MB 大字符串。
+ * 生成本地文章 JSON Blob（经 R-D0 去重后序列化，随后交给 Worker 压缩）。
+ * 仅在主线程做一次序列化，不再结构化克隆整个对象图，
+ * 避免同步深拷贝几十 MB 大字符串。
  * 序列化后立即释放 JSON 字符串引用（Blob 已持有副本），降低内存峰值。
  */
 function serializeArticles(articles: Article[]): Blob {
-    const json = JSON.stringify(articles);
+    const { slim, stripped, kept } = stripRedundantBlocks(articles);
+    console.log(`[Export] R-D0 blocks去重: 剥离${stripped}篇/保留${kept}篇`);
+    const json = JSON.stringify(slim);
     const blob = new Blob([json], { type: 'application/json' });
     return blob;
 }
@@ -221,7 +250,10 @@ export async function generateReaderHTML(
     const blob = serializeArticles(sortedArticles);
     const needsD3 = articlesContainKnowledgeGraph(sortedArticles);
     const d3Source = needsD3 ? await fetchD3Source() : null;
-    console.log('[Export] 文章序列化完成，准备 Web Worker 导出流程...');
+    // v2 选型前置：模板存在 → v2（索引+分块）；缺失 → v1（降级骨架只读 v1，老链路保留演练）
+    const readerTemplate = await loadReaderTemplate();
+    const format: ReaderExportFormat = readerTemplate ? 'v2' : 'v1';
+    console.log(`[Export] 文章序列化完成，导出格式=${format}，准备 Web Worker 导出流程...`);
 
     return new Promise((resolve, reject) => {
         // 安全超时：5 分钟后自动拒绝，防止 Promise 挂死
@@ -255,28 +287,42 @@ export async function generateReaderHTML(
 
             if (data.type === 'EXPORT_COMPLETE') {
                 clearTimeout(timeoutId);
-                const { articlesB64, configB64, compressionMethod } = data;
+                const { configB64, compressionMethod } = data;
+
+                // R2 守卫：大 PNG 告警（照片类 PNG 应走 WebP；gzip 救不了它）
+                if ((data.pngLargeCount ?? 0) > 0) {
+                    const mb = ((data.pngLargeBytes ?? 0) / 1024 / 1024).toFixed(1);
+                    console.warn(`[Export] R2 守卫：检出 ${data.pngLargeCount} 处超 500KB 的 PNG（共 ${mb}MB）`);
+                    toast.warning(`检出 ${data.pngLargeCount} 处大 PNG（${mb}MB），建议转 WebP 后重导`);
+                }
+                // R3 兜底：落到 none 必须响亮（生产构建 drop console，故同时 toast）
+                if (compressionMethod === 'none') {
+                    console.warn('[Export] R3 兜底：压缩未生效（none），包体积含双重 base64 膨胀');
+                    toast.warning('导出压缩未生效，包体积偏大（已回退未压缩模式）');
+                }
 
                 console.log('[Export] Worker 返回数据，准备生成 HTML...');
 
-                (async () => {
-                    try {
-                        const readerTemplate = await loadReaderTemplate();
-                        const htmlContent = readerTemplate
-                            ? (() => {
-                                let html = injectDataIntoReader(readerTemplate, articlesB64, configB64, compressionMethod);
-                                html = injectD3IfNeeded(html, d3Source);
-                                return html;
-                              })()
-                            : buildReaderHTML(articlesB64, configB64, compressionMethod, sortedArticles, options, metadata);
-
-                        worker.terminate();
-                        resolve(htmlContent);
-                    } catch (err) {
-                        worker.terminate();
-                        reject(err instanceof Error ? err : new Error(String(err)));
+                try {
+                    let htmlContent: string;
+                    if (data.format === 'v2' && readerTemplate) {
+                        htmlContent = injectV2DataIntoReader(readerTemplate, data.injectionScript);
+                        htmlContent = injectD3IfNeeded(htmlContent, d3Source);
+                    } else if (data.format === 'v1' && readerTemplate) {
+                        // 防御：模板存在却收到 v1（理论不可达，旧 Worker 残留时）
+                        htmlContent = injectDataIntoReader(readerTemplate, data.articlesB64, configB64, compressionMethod);
+                        htmlContent = injectD3IfNeeded(htmlContent, d3Source);
+                    } else if (data.format === 'v1') {
+                        htmlContent = buildReaderHTML(data.articlesB64, configB64, compressionMethod, sortedArticles, options, metadata);
+                    } else {
+                        throw new Error('降级骨架不支持 v2 数据（模板缺失但 Worker 返回 v2）');
                     }
-                })();
+                    worker.terminate();
+                    resolve(htmlContent);
+                } catch (err) {
+                    worker.terminate();
+                    reject(err instanceof Error ? err : new Error(String(err)));
+                }
             }
         };
 
@@ -294,7 +340,7 @@ export async function generateReaderHTML(
         const request: WorkerRequest = {
             type: 'START_EXPORT',
             articlesBlob: blob,
-            options,
+            options: { ...options, format },
             metadata,
             companyInfo: CONSTANTS.COMPANY_INFO
         };

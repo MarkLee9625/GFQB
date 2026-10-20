@@ -32,8 +32,12 @@ interface CallOptions {
     temperature?: number;
     timeoutMs?: number;
     retries?: number;
-    /** 推理强度分级：简单任务（标题/扩写/翻译）传 'low' 控制推理 token 成本 */
-    reasoningEffort?: 'low' | 'medium' | 'max';
+    /**
+     * 思考强度（官方 reasoning_effort 取值 low | high | max；medium 由上游映射为 high）。
+     * 全局统一 'high'：2026-10-19 用户决议，所有调用（含标题/扩写/翻译等轻任务）不再降档；
+     * 'low' 保留在联合类型中，供将来确需关思考控成本的任务使用。
+     */
+    reasoningEffort?: 'low' | 'medium' | 'high' | 'max';
 }
 
 export async function callDeepSeekAPI(options: CallOptions): Promise<string> {
@@ -44,7 +48,7 @@ export async function callDeepSeekAPI(options: CallOptions): Promise<string> {
         temperature,
         timeoutMs = API_TIMEOUT_MS,
         retries = MAX_RETRIES,
-        reasoningEffort = 'max',
+        reasoningEffort = 'high',
     } = options;
 
     let lastError: Error | null = null;
@@ -82,7 +86,7 @@ export async function callDeepSeekAPI(options: CallOptions): Promise<string> {
             if (temperature !== undefined) body.temperature = temperature;
             body.reasoning_effort = reasoningEffort;
             // DeepSeek V4 思考模式：须为请求体顶层 thinking 字段（extra_body 仅为 OpenAI SDK 概念，
-            // 原始 fetch 直连时会被上游忽略）。轻任务（reasoningEffort='low'）关闭思考以控制推理成本。
+            // 原始 fetch 直连时会被上游忽略）。仅当显式传 'low' 时关闭思考（当前调用方全部使用 high）。
             if (reasoningEffort !== 'low') {
                 body.thinking = { type: 'enabled' };
             }

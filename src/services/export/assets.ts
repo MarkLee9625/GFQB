@@ -121,7 +121,10 @@ export const MAGAZINE_STYLES = `
 export const PRINT_STYLES = `
 /* --- 打印专用样式 (A4 专业期刊排版 - V5) --- */
 @media print {
-    @page { margin: 0; size: A4 portrait; }
+    /* A3：与 printableSkeleton 的 @page 统一（此前两处打架，靠源码顺序兜底）。
+       底边距 12mm 给浏览器原生页脚留空；可打印高度 = 297-12 = 285mm，
+       下方所有打印定高都按 285mm 对齐。 */
+    @page { size: 210mm 297mm; margin: 0 0 12mm 0; }
     
     /* 1. 核心修复：禁用所有动画，防止摘要(summary-card)因fadeIn定格在opacity:0而隐身 */
     *, *:before, *:after {
@@ -211,8 +214,11 @@ export const PRINT_STYLES = `
         break-after: auto !important;
     }
     .print-page-wrapper:not(.article-wrapper):not(.pdf-full-page):not(.toc-page) {
-        min-height: 100vh !important;
-        height: 100vh !important;
+        /* A3：100vh 在打印下按整页 297mm 解析，超出可打印高度 285mm 会挤出残片页
+           （2026第3期 p156 即封底溢出）。定高改 285mm，内容不足不补白页
+           （break-after 与下篇 break-before 相邻 collapse，不产生空页）。 */
+        min-height: 285mm !important;
+        height: auto !important;
         page-break-after: always !important;
         break-after: always !important;
     }
@@ -307,11 +313,12 @@ export const PRINT_STYLES = `
     }
     
     /* --- 封面/封底 (全屏无边距) --- */
+    /* A3：内根须显式定高（子层全绝对定位，auto 会塌掉背景），100vh→285mm 与可打印高度对齐 */
     .cover-root, .magazine-cover, .magazine-back-cover, .normal-back-root {
         width: 100% !important;
-        height: 100vh !important;
-        min-height: 100vh !important;
-        max-height: 100vh !important;
+        height: 285mm !important;
+        min-height: 285mm !important;
+        max-height: 285mm !important;
         margin: 0 !important;
         padding: 0 !important;
         border: none !important;

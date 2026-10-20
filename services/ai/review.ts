@@ -50,7 +50,7 @@ export async function batchEvaluateArticles(
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: `请评审以下文章：\n${inputData}` },
             ],
-            reasoningEffort: 'low',
+            reasoningEffort: 'high',
         });
 
         let content = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
@@ -125,7 +125,7 @@ export async function translateAndFormatAcademic(article: { title: string, conte
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: `【论文标题】\n${article.title}\n\n【原始信息】\n${contentText}` },
             ],
-            reasoningEffort: 'low',
+            reasoningEffort: 'high',
         });
 
         const cleanedText = cleanPlainTextResponse(rawText);
